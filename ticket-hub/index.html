@@ -291,6 +291,7 @@ kbd{font-family:var(--mono);font-size:11px;border:1px solid var(--line2);border-
 .cashrow .bars{display:flex;flex-direction:column;gap:3px}
 .cashrow .bars i{display:block;height:8px;border-radius:0 4px 4px 0;min-width:2px}
 @media (max-width:700px){.cashrow{grid-template-columns:4em minmax(0,1fr)}.cashrow .amt{display:none}}
+@media (max-width:900px){#stmt-grid{grid-template-columns:1fr !important}}
 
 /* ---------- logo watermark (emblem redrawn as vector, transparent) ---------- */
 .wmark{position:fixed;top:0;bottom:0;left:248px;right:0;z-index:15;display:grid;place-items:center;pointer-events:none;opacity:.05;color:var(--navy)}
@@ -455,7 +456,7 @@ const thisMonth=()=>new Date(Date.now()+4*3600000).toISOString().slice(0,7);
 let pui={type:'Parts Needed',dmOnly:true,month:thisMonth(),del:null};
 let modal=null, nform={};
 let rui={month:null};
-let bankAccounts={}, bankTx={}, invoices={}, partnerTx={}, fui={tab:'overview',acct:'all',q:'',month:'all',inv:null,invQ:'',invStatus:'all',form:null,imp:null,del:null,limit:100};
+let bankAccounts={}, bankTx={}, invoices={}, partnerTx={}, finSettings={}, statements={}, fui={tab:'overview',acct:'all',q:'',month:'all',inv:null,invQ:'',invStatus:'all',form:null,imp:null,del:null,limit:100};
 let pinDoc, signErr='', signBusy=false, lastAct=Date.now(), signStep='pin', pendKeep=false, pendSecret='';
 const UNLOCK_KEY='zi-signin', FAIL_KEY='zi-signin-fails', SESSION_MS=8*3600000, IDLE_MS=30*60000;
 const stores2=()=>{ const out=[]; try{ out.push(sessionStorage); }catch(e){} try{ out.push(localStorage); }catch(e){} return out; };
@@ -1078,21 +1079,21 @@ function finTotals(){
   return {cash:r2(cash),recv:r2(recv),rev:r2(rev),exp:r2(exp),profit:r2(rev-exp),vatQ:q,vat:r2(outV-inV),uncat:tx.filter(t=>!t.category||t.category==='Uncategorised').length};
 }
 function financeView(){
-  const T=finTotals(), tabs=[['overview','Overview'],['invoices','Invoices'],['bank','Bank'],['recon','Reconciliation'],['vat','VAT'],['partners','Partner capital'],['controls','Controls']];
-  const body={overview:finOverview,invoices:finInvoices,bank:finBank,recon:finRecon,vat:finVat,partners:finPartners,controls:finControls}[fui.tab]();
+  const T=finTotals(), tabs=[['overview','Overview'],['invoices','Invoices'],['bank','Bank'],['statements','Statements'],['recon','Reconciliation'],['vat','VAT'],['partners','Partner capital'],['controls','Controls']];
+  const body={overview:finOverview,invoices:finInvoices,bank:finBank,statements:finStatements,recon:finRecon,vat:finVat,partners:finPartners,controls:finControls}[fui.tab]();
   return `<div class="page"><div class="phead"><div><h1>Finance</h1><div class="sub">Ziar Imaar Technical Services · invoices, bank, VAT and partner capital · admins only</div></div>
     <div class="actions">${downloadsApi?'<button class="btn" data-act="finxls">'+svg('doc',16)+'Export finance (.xlsx)</button>':''}</div></div>
     <nav class="ftabs" aria-label="Finance sections">${tabs.map(([k,l])=>`<button data-ftab="${k}" aria-pressed="${fui.tab===k}">${l}${k==='controls'?'':''}</button>`).join('')}</nav>${body}</div>`;
 }
 function finOverview(){
-  const T=finTotals(); const kpi=(l,v,sub,cls='')=>`<div class="card kpi ${cls}"><span class="lbl">${l}</span><b style="font-size:22px">${v}</b><span class="sub">${sub}</span></div>`;
+  const T=finTotals(); const lastSt=Object.values(statements).sort((a,b)=>b.month.localeCompare(a.month))[0]; const stNote=lastSt?`<div class="notice" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap"><b>Statement ready: ${esc(mlab(lastSt.month))}</b><span class="sub">closing balance due ${esc(money(lastSt.closing))} · prepared ${esc(dmhm(lastSt.generatedAt))}</span>${canPdf()?`<button class="btn" data-stmtpdf="${lastSt.month}">${svg('doc',14)}Download PDF</button>`:''}<button class="linkbtn" data-ftab="statements">All statements →</button></div>`:''; const kpi=(l,v,sub,cls='')=>`<div class="card kpi ${cls}"><span class="lbl">${l}</span><b style="font-size:22px">${v}</b><span class="sub">${sub}</span></div>`;
   const tx=Object.values(bankTx); const months=[...new Set(tx.map(t=>(t.date||'').slice(0,7)).filter(Boolean))].sort().slice(-8);
   const rows=months.map(m=>{ const xs=tx.filter(t=>(t.date||'').startsWith(m)&&t.category!=='Transfer between accounts'); return {m,inn:xs.filter(t=>+t.amount>0).reduce((a,t)=>a+(+t.amount),0),out:-xs.filter(t=>+t.amount<0).reduce((a,t)=>a+(+t.amount),0)}; });
   const mx=Math.max(1,...rows.flatMap(r=>[r.inn,r.out]));
   const cats={}; tx.filter(t=>+t.amount<0&&!NON_PL.includes(t.category)).forEach(t=>{ const k=t.category||'Uncategorised'; cats[k]=(cats[k]||0)-(+t.amount); });
   const catRows=Object.entries(cats).map(([label,n])=>({label,n:Math.round(n)})).sort((a,b)=>b.n-a.n).slice(0,8);
   const empty=!Object.keys(bankAccounts).length&&!Object.keys(invoices).length;
-  return `${empty?'<div class="notice">No finance data yet. Start with <b>Invoices → Create from tickets</b> (uses the Z invoice numbers already on your tickets), then add your bank accounts and import statements under <b>Bank</b>. When you send the main workbook, its figures are loaded here.</div>':''}
+  return `${stNote}${empty?'<div class="notice">No finance data yet. Start with <b>Invoices → Create from tickets</b> (uses the Z invoice numbers already on your tickets), then add your bank accounts and import statements under <b>Bank</b>. When you send the main workbook, its figures are loaded here.</div>':''}
     <div class="kpis">${kpi('Cash at bank',money(T.cash),Object.keys(bankAccounts).length+' accounts · book balance','hero')}${kpi('Receivables',money(T.recv),'issued invoices not yet paid')}${kpi('Revenue '+new Date().getFullYear(),money(T.rev),'net of VAT, issued invoices')}${kpi('Expenses '+new Date().getFullYear(),money(T.exp),'bank payments, net of VAT')}${kpi('Profit '+new Date().getFullYear(),money(T.profit),'revenue minus expenses',T.profit<0?'alert':'')}${kpi('VAT due '+T.vatQ.slice(5),money(T.vat),'output minus input VAT')}</div>
     <div class="dgrid">
       <div class="card"><div class="card-h"><div><h3>Cash in and out</h3><div class="sub">Bank receipts and payments per month, transfers excluded</div></div><div class="legend"><span><i style="background:var(--s-completed)"></i>In</span><span><i style="background:var(--bar)"></i>Out</span></div></div><div class="card-b">${rows.length?rows.map(r=>`<div class="cashrow" data-tip="${esc(mlab(r.m))}: in ${esc(money(r.inn))} · out ${esc(money(r.out))}"><span class="sub">${esc(mlab(r.m))}</span><span class="bars"><i style="width:${(r.inn/mx*100).toFixed(1)}%;background:var(--s-completed)"></i><i style="width:${(r.out/mx*100).toFixed(1)}%;background:var(--bar)"></i></span><span class="amt in">${esc(money(r.inn))}</span><span class="amt">${esc(money(-r.out))}</span></div>`).join(''):'<div class="empty">Import a bank statement to see cash movements.</div>'}</div></div>
@@ -1252,9 +1253,123 @@ async function finExport(){
   add('Invoices',Object.values(invoices).map(i=>({'Invoice no.':i.invoiceNo,Customer:i.customer,Date:i.date,'Due date':i.dueDate,Net:+i.net||0,VAT:+i.vat||0,Gross:invGross(i),Paid:invPaid(i),Status:invoiceState(i).label,Tickets:ticketsForInv(i).map(t=>'#'+t.id).join(' '),Notes:i.notes||''})));
   add('Bank transactions',Object.values(bankTx).sort((a,b)=>(a.date||'').localeCompare(b.date||'')).map(t=>({Account:(bankAccounts[t.account]||{}).name,Date:t.date,Description:t.desc,Reference:t.ref,'Money in':+t.amount>0?+t.amount:'','Money out':+t.amount<0?-t.amount:'',Category:t.category||'Uncategorised','Input VAT':+t.vat||'',Invoice:t.invoiceNo||''})));
   add('Bank accounts',Object.values(bankAccounts).map(a=>({Account:a.name,Bank:a.bank,'Last 4':a.last4,Opening:+a.opening||0,'Opening date':a.openingDate,'Book balance':acctBal(a),'Statement balance':a.stmtClosing,'Statement date':a.stmtDate})));
+  add('Statements',Object.values(statements).sort((a,b)=>a.month.localeCompare(b.month)).map(x=>({Month:x.month,Customer:x.customer,Opening:x.opening,Invoiced:r2(x.lines.filter(l=>l.type==='Invoice').reduce((a,l)=>a+l.debit,0)),Received:r2(x.lines.reduce((a,l)=>a+l.credit,0)),'Closing due':x.closing,Income:x.pl.income,Expenses:x.pl.expenses,Profit:x.pl.profit,'Output VAT':x.vat.output,'Input VAT':x.vat.input,Generated:x.generatedAt,Automatic:x.auto?'Yes':'No'})));
   add('Partner capital',Object.values(partnerTx).map(t=>({Date:t.date,Partner:t.partner,Type:t.type,Amount:+t.amount||0,Note:t.note||''})));
   const data=XLSX.write(wb,{bookType:'xlsx',type:'array'});
   try{ await downloadsApi.save({filename:'ziar-imaar-finance-'+dayKey(new Date().toISOString())+'.xlsx',data:new Blob([data],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'})}); toast('Finance workbook saved'); logAction('Exported finance workbook'); }catch(err){ if(!(err&&err.code==='declined')) toast('Could not save the workbook.'); }
+}
+
+/* ---------- finance automation: invoices from tickets and monthly statements ---------- */
+const FS=()=>Object.assign({autoInvoice:true,rate:0,terms:30,customer:'Kohler UAE',stmtDay:1,autoStatement:true},finSettings.main||{});
+const addDays=(d,n)=>{ const x=new Date(d+'T00:00:00Z'); x.setUTCDate(x.getUTCDate()+(+n||0)); return x.toISOString().slice(0,10); };
+const monthEnd=m=>m+'-'+String(new Date(Date.UTC(+m.slice(0,4),+m.slice(5,7),0)).getUTCDate()).padStart(2,'0');
+const nextMonth=m=>{ const y=+m.slice(0,4), mo=+m.slice(5,7); return mo===12?(y+1)+'-01':y+'-'+String(mo+1).padStart(2,'0'); };
+const todayDxb=()=>dayKey(new Date().toISOString());
+/* the month whose statement is due: last month once today has reached the statement day */
+function dueStatementMonths(){
+  const s=FS(), t=todayDxb(); const cur=t.slice(0,7); let last=cur; { const y=+cur.slice(0,4), mo=+cur.slice(5,7); last=mo===1?(y-1)+'-12':y+'-'+String(mo-1).padStart(2,'0'); }
+  if(+t.slice(8,10)<(+s.stmtDay||1)){ const y=+last.slice(0,4), mo=+last.slice(5,7); last=mo===1?(y-1)+'-12':y+'-'+String(mo-1).padStart(2,'0'); }
+  const dates=[...Object.values(invoices).map(i=>i.date),...Object.values(bankTx).map(x=>x.date),...Object.values(visits).map(v=>(v.scheduled||'').slice(0,10))].filter(Boolean).sort();
+  if(!dates.length) return [];
+  let m=dates[0].slice(0,7); const out=[]; while(m<=last){ out.push(m); m=nextMonth(m); } return out.slice(-12);
+}
+function buildStatement(m){
+  const s=FS(), start=m+'-01', end=monthEnd(m);
+  const inv=Object.values(invoices).filter(i=>!['draft','void'].includes(i.status)&&i.date);
+  const rec=Object.values(bankTx).filter(t=>t.invoiceNo&&+t.amount>0&&t.date);
+  const before=inv.filter(i=>i.date<start).reduce((a,i)=>a+invGross(i)-(+i.paidOther||0),0)-rec.filter(t=>t.date<start).reduce((a,t)=>a+(+t.amount),0);
+  const lines=[...inv.filter(i=>i.date>=start&&i.date<=end).map(i=>({date:i.date,type:'Invoice',ref:i.invoiceNo,desc:ticketsForInv(i).length+' service ticket(s)',debit:invGross(i),credit:(+i.paidOther||0)})),
+    ...rec.filter(t=>t.date>=start&&t.date<=end).map(t=>({date:t.date,type:'Payment',ref:t.invoiceNo,desc:t.desc||'',debit:0,credit:r2(t.amount)}))].sort((a,b)=>a.date.localeCompare(b.date)||(a.type==='Invoice'?-1:1));
+  let bal=r2(before); lines.forEach(l=>{ bal=r2(bal+l.debit-l.credit); l.balance=bal; });
+  const aging={current:0,d30:0,d60:0,d90:0,over90:0}, open=[];
+  inv.filter(i=>i.date<=end).forEach(i=>{ const paid=rec.filter(t=>t.date<=end&&invKey(t.invoiceNo)===invKey(i.invoiceNo)).reduce((a,t)=>a+(+t.amount),0)+(+i.paidOther||0); const o=r2(invGross(i)-paid); if(o<=0.005) return;
+    const due=i.dueDate||addDays(i.date,s.terms); const late=Math.floor((new Date(end+'T00:00:00Z')-new Date(due+'T00:00:00Z'))/864e5);
+    aging[late<=0?'current':late<=30?'d30':late<=60?'d60':late<=90?'d90':'over90']+=o; open.push({ref:i.invoiceNo,date:i.date,due,outstanding:o,late:Math.max(0,late)}); });
+  Object.keys(aging).forEach(k=>aging[k]=r2(aging[k]));
+  const tx=Object.values(bankTx).filter(t=>t.date>=start&&t.date<=end);
+  const cats={}; tx.filter(t=>+t.amount<0&&!NON_PL.includes(t.category)).forEach(t=>{ const c=t.category||'Uncategorised'; cats[c]=r2((cats[c]||0)-(+t.amount)-(+t.vat||0)); });
+  const income=r2(inv.filter(i=>i.date>=start&&i.date<=end).reduce((a,i)=>a+(+i.net||0),0)), expenses=r2(Object.values(cats).reduce((a,b)=>a+b,0));
+  const vs=Object.values(visits).filter(v=>(v.scheduled||'').slice(0,10)>=start&&(v.scheduled||'').slice(0,10)<=end);
+  return {month:m,start,end,customer:s.customer,opening:r2(before),closing:bal,lines,aging,open:open.sort((a,b)=>a.date.localeCompare(b.date)),
+    pl:{income,expenses,profit:r2(income-expenses),cats},
+    cash:{in:r2(tx.filter(t=>+t.amount>0&&t.category!=='Transfer between accounts').reduce((a,t)=>a+(+t.amount),0)),out:r2(-tx.filter(t=>+t.amount<0&&t.category!=='Transfer between accounts').reduce((a,t)=>a+(+t.amount),0))},
+    banks:Object.values(bankAccounts).map(a=>({name:a.name,balance:acctBal(a,end)})),
+    vat:{output:r2(inv.filter(i=>i.date>=start&&i.date<=end).reduce((a,i)=>a+(+i.vat||0),0)),input:r2(tx.reduce((a,t)=>a+(+t.vat||0),0))},
+    service:{visits:vs.length,completed:vs.filter(v=>v.status==='completed').length,invoiced:vs.filter(v=>v.billingRef).length},
+    uncategorised:tx.filter(t=>!t.category||t.category==='Uncategorised').length,
+    generatedAt:new Date().toISOString()};
+}
+let finAutoBusy=false, finAutoT=null; const finSeen=new Set();
+const finReady=()=>db&&!demo&&loaded&&access()==='admin'&&signedIn()&&['bankAccounts','bankTx','invoices','partnerTx','finSettings','statements'].every(c=>finSeen.has(c));
+function scheduleFinAuto(){ clearTimeout(finAutoT); finAutoT=setTimeout(finAuto,1500); }
+async function finAuto(force){
+  if(finAutoBusy||!finReady()) return; finAutoBusy=true; const s=FS(); let made=0, upd=0, upd2=0, stm=[];
+  try{
+    if(s.autoInvoice){
+      const g={}; Object.values(visits).forEach(v=>{ if(!v.billingRef||v.status==='cancelled') return; const k=invKey(v.billingRef); const x=g[k]||(g[k]={invoiceNo:v.billingRef.trim(),date:'',n:0}); x.n++; const d=(v.finished||v.scheduled||'').slice(0,10); if(d>x.date) x.date=d; });
+      for(const [k,x] of Object.entries(g)){
+        const ex=Object.values(invoices).find(i=>invKey(i.invoiceNo)===k);
+        const net=s.rate>0?r2(x.n*s.rate):0;
+        if(!ex){ await saveDoc('invoices','inv-'+k.replace(/[^A-Z0-9]/g,''),{invoiceNo:x.invoiceNo,customer:s.customer,date:x.date,dueDate:x.date?addDays(x.date,s.terms):'',net,vat:r2(net*VAT_RATE),status:'issued',paidOther:0,tickets:x.n,amountAuto:true,auto:true,notes:'Raised automatically from '+x.n+' service ticket(s)'+(net?'':' — enter the amount'),at:new Date().toISOString()},invoices); made++; continue; }
+        const isAuto=ex.amountAuto||(!(+ex.net)&&/^Created from service tickets/.test(ex.notes||''));
+        if(isAuto&&ex.status==='issued'&&s.rate>0&&(r2(ex.net)!==net||ex.tickets!==x.n||!ex.dueDate)){
+          const d=Object.assign({},ex,{net,vat:r2(net*VAT_RATE),tickets:x.n,amountAuto:true,dueDate:ex.dueDate||(ex.date?addDays(ex.date,s.terms):''),notes:'Raised automatically from '+x.n+' service ticket(s)'}); delete d.id; await saveDoc('invoices',ex.id,d,invoices); upd++; }
+      }
+    }
+    if(s.autoStatement||force){ for(const m of dueStatementMonths()){ const b=buildStatement(m), ex=statements[m], sig=x=>JSON.stringify([x.opening,x.closing,x.lines,x.aging,x.pl,x.cash,x.banks,x.vat,x.service,x.uncategorised]); if(ex&&sig(ex)===sig(b)) continue; await saveDoc('statements',m,Object.assign(b,{auto:true,firstAt:(ex&&(ex.firstAt||ex.generatedAt))||b.generatedAt}),statements); if(!ex) stm.push(m); else upd2++; }  }
+    if(made||upd) logAction('Automatic invoicing',{detail:made+' new, '+upd+' updated'});
+    if(upd2) logAction('Monthly statements updated',{detail:upd2+' statement(s) changed by new figures'});
+    if(stm.length){ logAction('Monthly statements generated',{detail:stm.map(mlab).join(', ')}); toast('Statement ready: '+mlab(stm[stm.length-1])); }
+    else if(made) toast(made+' invoice'+(made>1?'s':'')+' raised from tickets');
+  } finally { finAutoBusy=false; }
+}
+function finStatements(){
+  const s=FS(), list=Object.values(statements).sort((a,b)=>b.month.localeCompare(a.month)), due=dueStatementMonths(), t=todayDxb();
+  const nm=nextMonth(t.slice(0,7)), nextDate=(+t.slice(8,10)<(+s.stmtDay||1)?t.slice(0,7):nm)+'-'+String(s.stmtDay||1).padStart(2,'0');
+  const missing=due.filter(m=>!statements[m]);
+  return `<div class="grid2" style="display:grid;grid-template-columns:minmax(0,2fr) minmax(0,1fr);gap:16px;align-items:start" id="stmt-grid">
+  <div class="card"><div class="card-h"><h3>Monthly statements</h3><span class="sub">${s.autoStatement?'Next automatic statement '+esc(nextDate.split('-').reverse().join('/'))+' (Dubai)':'Automatic statements are off'}</span></div>
+   ${missing.length?`<div class="notice" style="margin:0 16px 12px">${missing.length} statement${missing.length>1?'s are':' is'} due (${esc(missing.map(mlab).join(', '))}). <button class="linkbtn" data-act="stmtgen">Generate now</button></div>`:''}
+   ${list.length?`<div class="tblwrap"><table class="tbl"><thead><tr><th>Month</th><th class="amt">Opening</th><th class="amt">Invoiced</th><th class="amt">Received</th><th class="amt">Closing due</th><th class="amt">Profit</th><th>Generated</th><th></th></tr></thead><tbody>${list.map(x=>{ const inv=x.lines.filter(l=>l.type==='Invoice').reduce((a,l)=>a+l.debit,0), rc=x.lines.reduce((a,l)=>a+l.credit,0);
+     return `<tr><td style="white-space:nowrap"><b>${esc(mlab(x.month))}</b>${x.auto?' <span class="pill plain" style="font-size:11px">auto</span>':''}</td><td class="amt">${esc(money(x.opening))}</td><td class="amt">${esc(money(inv))}</td><td class="amt">${esc(money(rc))}</td><td class="amt"><b>${esc(money(x.closing))}</b></td><td class="amt">${esc(money(x.pl.profit))}</td><td class="num">${esc(dmhm(x.generatedAt))}</td>
+     <td style="white-space:nowrap">${canPdf()?`<button class="btn" data-stmtpdf="${x.month}">${svg('doc',14)}PDF</button> `:''}<button class="linkbtn" data-stmtre="${x.month}">Refresh</button></td></tr>`; }).join('')}</tbody></table></div>`
+   :`<div class="card-b sub">No statements yet. ${due.length?'':'They appear once the hub has invoices, bank lines or tickets from a finished month.'}</div>`}
+   <div class="card-b sub" style="font-size:12.5px">Each statement holds the customer statement of account (opening balance, invoices, payments, closing balance and ageing) and the month's finance summary (profit, cash in and out, bank balances, VAT and service activity). Statements update themselves when invoices, payments or bank lines for that month change.</div></div>
+  <form id="fsetform" class="card"><div class="card-h"><h3>Automation</h3></div><div class="card-b" style="display:grid;gap:12px">
+   <label class="chk"><input type="checkbox" name="autoInvoice" ${s.autoInvoice?'checked':''}> Raise invoices automatically from tickets with a Z invoice number</label>
+   <label>Charge per ticket, net of VAT (AED)<input class="field" name="rate" type="number" min="0" step="0.01" value="${s.rate||''}" placeholder="0 = enter amounts yourself"></label>
+   <label>Payment terms (days)<input class="field" name="terms" type="number" min="0" max="180" value="${s.terms}"></label>
+   <label>Customer on automatic invoices<input class="field" name="customer" value="${esc(s.customer)}"></label>
+   <label class="chk"><input type="checkbox" name="autoStatement" ${s.autoStatement?'checked':''}> Prepare the monthly statement automatically</label>
+   <label>Statement day each month<input class="field" name="stmtDay" type="number" min="1" max="28" value="${s.stmtDay}"></label>
+   <div class="sub" style="font-size:12px">The hub prepares these the first time an administrator opens it on or after the statement day. Invoices you edit by hand are never changed.</div>
+   <button class="btn primary" type="submit">Save automation</button></div></form></div>`;
+}
+async function statementPdf(m){
+  const x=statements[m]; if(!x||!canPdf()) return;
+  const {jsPDF}=window.jspdf; const doc=new jsPDF({unit:'pt',format:'a4'}); const W=595.28,H=841.89,M=42; let y; const ink=[13,27,62], muted=[103,114,140];
+  const fd=d=>d?d.split('-').reverse().join('/'):'—', amt=n=>(n<0?'-':'')+Math.abs(r2(n)).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});
+  const header=()=>{ doc.setFillColor(10,31,77); doc.rect(0,0,W,84,'F'); doc.setFillColor(201,151,47); doc.rect(0,84,W,3,'F'); doc.setTextColor(255,255,255); doc.setFont('helvetica','bold'); doc.setFontSize(19); doc.text('ZIAR  IMAAR',M,40); doc.setFont('helvetica','normal'); doc.setFontSize(7.5); doc.setTextColor(201,211,234); doc.text('T E C H N I C A L   S E R V I C E S   L . L . C .',M,55); doc.setFontSize(10); doc.setTextColor(241,210,127); doc.text('Monthly statement',W-M,38,{align:'right'}); doc.setFontSize(9); doc.setTextColor(255,255,255); doc.text(mlab(m)+'  ·  '+fd(x.start)+' – '+fd(x.end),W-M,54,{align:'right'}); y=116; };
+  const h2=t=>{ if(y>H-120){ doc.addPage(); header(); } doc.setFont('helvetica','bold'); doc.setFontSize(12.5); doc.setTextColor(...ink); doc.text(t,M,y); y+=8; doc.setDrawColor(201,151,47); doc.setLineWidth(1); doc.line(M,y,M+40,y); y+=16; };
+  const row=(cells,bold)=>{ if(y>H-60){ doc.addPage(); header(); } doc.setFont('helvetica',bold?'bold':'normal'); doc.setFontSize(8.8); doc.setTextColor(...ink); cells.forEach(([t,xx,al])=>doc.text(doc.splitTextToSize(String(t),al==='right'?110:200)[0]||'',xx,y,al?{align:al}:undefined)); y+=14; };
+  const kv=(k,v,b)=>row([[k,M],[v,W-M,'right']],b);
+  header();
+  h2('Statement of account · '+x.customer);
+  const C=[M,M+62,M+120,M+200]; const R=[W-M-150,W-M-75,W-M];
+  doc.setFont('helvetica','bold'); doc.setFontSize(7.5); doc.setTextColor(...muted); [['DATE',C[0]],['TYPE',C[1]],['REFERENCE',C[2]],['DETAILS',C[3]]].forEach(([t,xx])=>doc.text(t,xx,y)); [['CHARGES',R[0]],['PAYMENTS',R[1]],['BALANCE',R[2]]].forEach(([t,xx])=>doc.text(t,xx,y,{align:'right'})); y+=14;
+  row([[fd(x.start),C[0]],['Opening balance',C[1]],['',C[2]],['',C[3]],['',R[0],'right'],['',R[1],'right'],[amt(x.opening),R[2],'right']],true);
+  x.lines.forEach(l=>row([[fd(l.date),C[0]],[l.type,C[1]],[l.ref||'',C[2]],[l.desc||'',C[3]],[l.debit?amt(l.debit):'',R[0],'right'],[l.credit?amt(l.credit):'',R[1],'right'],[amt(l.balance),R[2],'right']]));
+  doc.setDrawColor(227,231,239); doc.line(M,y-8,W-M,y-8); row([[fd(x.end),C[0]],['Closing balance due (AED)',C[1]],['',C[2]],['',C[3]],['',R[0],'right'],['',R[1],'right'],[amt(x.closing),R[2],'right']],true); y+=6;
+  const A=[['Current',x.aging.current],['1–30 days',x.aging.d30],['31–60 days',x.aging.d60],['61–90 days',x.aging.d90],['Over 90 days',x.aging.over90]]; const cw=(W-2*M)/5;
+  A.forEach(([l,v],i)=>{ doc.setFont('helvetica','normal'); doc.setFontSize(7.5); doc.setTextColor(...muted); doc.text(l.toUpperCase(),M+i*cw,y); doc.setFont('helvetica','bold'); doc.setFontSize(11); doc.setTextColor(...ink); doc.text(amt(v),M+i*cw,y+15); }); y+=36;
+  h2('Finance summary');
+  kv('Income invoiced (net of VAT)',amt(x.pl.income)); Object.entries(x.pl.cats).sort((a,b)=>b[1]-a[1]).forEach(([c,v])=>kv('   '+c,'('+amt(v)+')')); kv('Expenses (net of VAT)','('+amt(x.pl.expenses)+')'); kv('Profit for the month',amt(x.pl.profit),true); y+=6;
+  kv('Cash received',amt(x.cash.in)); kv('Cash paid out',amt(x.cash.out)); x.banks.forEach(b=>kv('Bank balance at '+fd(x.end)+' · '+b.name,amt(b.balance))); y+=6;
+  kv('Output VAT on invoices',amt(x.vat.output)); kv('Input VAT on payments',amt(x.vat.input)); kv('Net VAT for the month',amt(x.vat.output-x.vat.input),true); y+=6;
+  kv('Service visits scheduled',String(x.service.visits)); kv('Visits completed',String(x.service.completed)); kv('Visits with an invoice number',String(x.service.invoiced));
+  if(x.uncategorised) kv('Bank lines still uncategorised',String(x.uncategorised));
+  const pages=doc.getNumberOfPages(); for(let i=1;i<=pages;i++){ doc.setPage(i); doc.setFont('helvetica','normal'); doc.setFontSize(8); doc.setTextColor(...muted); doc.text('Prepared '+dmhm(x.generatedAt)+(x.auto?' (automatic)':'')+' · Ziar Imaar Technical Services L.L.C. · management figures, not audited',M,H-28); doc.text('Page '+i+' of '+pages,W-M,H-28,{align:'right'}); }
+  try{ await downloadsApi.save({filename:'ziar-imaar-statement-'+m+'.pdf',data:doc.output('blob')}); toast('Statement saved'); logAction('Downloaded monthly statement',{detail:mlab(m)}); }catch(err){ if(!(err&&err.code==='declined')) toast('Could not save the statement.'); }
 }
 
 /* ---------- inventory ---------- */
@@ -1582,6 +1697,8 @@ document.addEventListener('submit',async e=>{
     const aid=(fui.form&&fui.form.id)||newId('a'); logAction(fui.form&&fui.form.id?'Updated bank account':'Added bank account',{detail:d.name}); fui.form=null; await saveDoc('bankAccounts',aid,d,bankAccounts); toast('Account saved'); return; }
   if(id==='ftxform'){ const amt=r2(g('amount'))*(g('dir')==='out'?-1:1); const d={account:g('account'),date:g('date'),desc:g('desc'),ref:g('ref'),amount:amt,category:g('category'),vat:0,invoiceNo:'',source:'Entered by hand',at:new Date().toISOString()};
     logAction('Added bank transaction',{detail:d.date+' '+money(amt)}); fui.form=null; await saveDoc('bankTx',newId('t'),d,bankTx); toast('Transaction added'); return; }
+  if(id==='fsetform'){ const el=e.target.elements; const d={autoInvoice:el.autoInvoice.checked,rate:Math.max(0,r2(el.rate.value)),terms:Math.min(180,Math.max(0,parseInt(el.terms.value,10)||0)),customer:(el.customer.value||'').trim()||'Kohler UAE',autoStatement:el.autoStatement.checked,stmtDay:Math.min(28,Math.max(1,parseInt(el.stmtDay.value,10)||1)),at:new Date().toISOString()};
+    await saveDoc('finSettings','main',d,finSettings); logAction('Updated finance automation',{detail:(d.autoInvoice?'auto invoices on':'auto invoices off')+' · '+money(d.rate)+' per ticket · statements day '+d.stmtDay}); toast('Automation saved'); scheduleFinAuto(); return; }
   if(id==='fptxform'){ const d={partner:g('partner'),type:g('type'),date:g('date'),amount:r2(g('amount')),note:g('note'),at:new Date().toISOString()};
     logAction('Recorded partner movement',{detail:d.partner+' · '+d.type+' '+money(d.amount)}); await saveDoc('partnerTx',newId('p'),d,partnerTx); e.target.reset(); toast('Partner movement recorded'); return; }
   if(id==='iform'){ const d={partNo:g('partNo'),description:g('description'),location:g('location'),stock:Math.max(0,Number(g('stock'))||0),min:Math.max(0,Number(g('min'))||0),unitValue:Number(g('unitValue'))||0,supplier:g('supplier'),at:new Date().toISOString()};
@@ -1642,6 +1759,9 @@ document.addEventListener('click',async e=>{
   if(ds.act==='closefin'){ fui.form=null; render(); return; }
   if(ds.act==='finmore'){ fui.limit+=100; render(); return; }
   if(ds.act==='finxls'){ await finExport(); return; }
+  if(ds.act==='stmtgen'){ await finAuto(true); render(); return; }
+  if(ds.stmtpdf){ await statementPdf(ds.stmtpdf); return; }
+  if(ds.stmtre){ const m=ds.stmtre; await saveDoc('statements',m,Object.assign(buildStatement(m),{auto:false}),statements); logAction('Refreshed monthly statement',{detail:mlab(m)}); toast('Statement refreshed: '+mlab(m)); return; }
   if(ds.act==='impcancel'){ fui.imp=null; render(); return; }
   if(ds.act==='impgo'){ const im=fui.imp; if(!im||!im.rows) return; const key=t=>t.date+'|'+r2(t.amount)+'|'+t.desc.toLowerCase().slice(0,40); const add=im.rows.filter(t=>!im.have.has(key(t))); fui.imp={busy:true}; render(); let n=0; for(const t of add){ const inc=t.amount>0; await saveDoc('bankTx',newId('t'),Object.assign({account:im.acct,category:'Uncategorised',vat:0,invoiceNo:'',source:im.name,at:new Date().toISOString()},t),bankTx); n++; }
     logAction('Imported bank statement',{detail:im.name+' · '+n+' transactions into '+((bankAccounts[im.acct]||{}).name||'')}); fui.imp=null; render(); toast(n+' transactions imported'); return; }
@@ -1762,15 +1882,15 @@ function goDemo(){ if(loaded) return; demo=true; loaded=true; visits=demoData();
   if(!db) return;
   const sub=(col,store)=>db.collection(col).onSnapshot(snap=>{ for(const k in store) delete store[k]; snap.docs.forEach(d=>{ const x=d.data(); if(x) store[d.id]=Object.assign({id:d.id},x); }); if(['parts','assets','tickets','finance'].includes(route)) safeRender(); resolveNames(); },()=>{});
   sub('parts',parts); sub('stock',stock); sub('assets',assetReg); sub('inventory',inventory);
-  const fsub=(col,store)=>db.collection(col).onSnapshot(snap=>{ for(const k in store) delete store[k]; snap.docs.forEach(d=>{ const x=d.data(); if(x) store[d.id]=Object.assign({id:d.id},x); }); if(route==='finance'||route==='dashboard') safeRender(); },()=>{});
-  fsub('bankAccounts',bankAccounts); fsub('bankTx',bankTx); fsub('invoices',invoices); fsub('partnerTx',partnerTx);
+  const fsub=(col,store)=>db.collection(col).onSnapshot(snap=>{ for(const k in store) delete store[k]; snap.docs.forEach(d=>{ const x=d.data(); if(x) store[d.id]=Object.assign({id:d.id},x); }); finSeen.add(col); scheduleFinAuto(); if(route==='finance'||route==='dashboard') safeRender(); },()=>{});
+  fsub('bankAccounts',bankAccounts); fsub('bankTx',bankTx); fsub('invoices',invoices); fsub('partnerTx',partnerTx); fsub('finSettings',finSettings); fsub('statements',statements);
   db.collection('roles').onSnapshot(snap=>{ roles={}; snap.docs.forEach(d=>{ const x=d.data(); if(x) roles[d.id]=x; }); rolesLoaded=true; render(); resolveNames(); },()=>{ rolesLoaded=true; render(); });
   db.collection('requests').onSnapshot(snap=>{ requests={}; snap.docs.forEach(d=>{ const x=d.data(); if(x) requests[d.id]=x; }); if(route==='admin'||access()==='none') safeRender(); resolveNames(); },()=>{});
   db.collection('audit').onSnapshot(snap=>{ audit=snap.docs.flatMap(d=>(((d.data()||{}).entries)||[]).map(x=>Object.assign({by:d.id},x))).sort((a,b)=>(b.at||'').localeCompare(a.at||'')).slice(0,300); if(route==='admin') safeRender(); resolveNames(); },()=>{});
   db.collection('visits').onSnapshot(snap=>{
     clearTimeout(fallback); if(demo) return;
     const next={}; snap.docs.forEach(d=>{ const x=d.data(); if(x){ const v=Object.assign({id:d.id,history:[],parts:[],evidence:[]},x); if(!STATUS[v.status]) v.status=(v.history[v.history.length-1]||{}).status||'new'; next[d.id]=v; } });
-    visits=next; loaded=true; safeRender(); resolveNames();
+    visits=next; loaded=true; safeRender(); resolveNames(); scheduleFinAuto();
   },()=>{ clearTimeout(fallback); db=null; goDemo(); toast('Could not reach the shared store, showing demo data.'); });
 })();
 })();
