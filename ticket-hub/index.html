@@ -272,6 +272,26 @@ kbd{font-family:var(--mono);font-size:11px;border:1px solid var(--line2);border-
 .linkbtn{color:var(--navy3);font-size:12.5px;font-weight:600;white-space:nowrap}
 .linkbtn.danger{color:var(--bad)}
 
+/* ---------- sign-in ---------- */
+.locked .side,.locked .topbar,.locked .tabbar{display:none!important}
+.locked .shell{grid-template-columns:1fr}
+.signin{min-height:100vh;min-height:100dvh;display:grid;grid-template-columns:minmax(0,1.1fr) minmax(0,1fr)}
+.signin .brandpane{background:var(--navy);color:#fff;padding:48px max(32px,env(safe-area-inset-left,0px));display:flex;flex-direction:column;justify-content:space-between;position:relative;overflow:hidden}
+.signin .brandpane::after{content:"";position:absolute;right:-120px;bottom:-120px;width:420px;height:420px;border:2px solid rgba(201,151,47,.35);border-radius:50%}
+.signin .brandpane::before{content:"";position:absolute;right:-40px;bottom:-40px;width:260px;height:260px;border:2px solid rgba(201,151,47,.2);border-radius:50%}
+.bigwm b{font-family:var(--display);font-weight:700;font-size:40px;letter-spacing:.08em;display:flex;align-items:center;gap:14px;line-height:1}
+.bigwm b i{display:inline-block;width:42px;height:3px;background:var(--gold);border-radius:2px}
+.bigwm small{display:block;font-family:var(--display);font-weight:500;font-size:12px;letter-spacing:.42em;color:var(--navyInk);margin-top:12px}
+.signin .formpane{display:grid;place-items:center;padding:32px max(20px,env(safe-area-inset-right,0px)) 32px max(20px,env(safe-area-inset-left,0px));background:var(--bg)}
+.signcard{width:min(400px,100%);display:flex;flex-direction:column;gap:16px}
+.signcard h1{font-size:26px}
+.who2{display:flex;align-items:center;gap:12px;padding:12px;border:1px solid var(--line);border-radius:12px;background:var(--surface)}
+.who2 .avatar{width:40px;height:40px;font-size:14px;background:var(--navy);color:#fff}
+.pin{font-size:24px;letter-spacing:.5em;text-align:center;font-variant-numeric:tabular-nums;height:54px}
+.check{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--ink2)}
+.check input{width:16px;height:16px;accent-color:var(--navy)}
+@media (max-width:900px){.signin{grid-template-columns:1fr;grid-template-rows:auto 1fr}.signin .brandpane{padding:28px 20px 32px;padding-top:calc(28px + env(safe-area-inset-top,0px))}.bigwm b{font-size:28px}.signin .brandpane .hide-sm{display:none}}
+
 /* ---------- access & admin ---------- */
 .gate{min-height:70vh;display:grid;place-items:center;padding:24px}
 .gate .card{max-width:440px;width:100%;padding:28px;text-align:center;display:flex;flex-direction:column;gap:12px;align-items:center}
@@ -335,10 +355,10 @@ kbd{font-family:var(--mono);font-size:11px;border:1px solid var(--line2);border-
     <div class="client"><b>Kohler UAE</b>Service ticket hub</div>
     <button class="newbtn" data-act="newvisit" type="button"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>New visit</button>
     <nav class="nav" id="nav"></nav>
-    <div class="sidefoot"><div id="me" class="me"></div><span id="mode" class="mode wait">Connecting…</span></div>
+    <div class="sidefoot"><div id="me" class="me"></div><div class="row" style="gap:8px"><span id="mode" class="mode wait">Connecting…</span><button id="signout" class="linkbtn" data-act="signout" style="color:var(--navyInk)" hidden>Sign out</button></div></div>
   </aside>
   <div class="main">
-    <header class="topbar"><div class="wm" aria-label="Ziar Imaar Technical Services"><b>ZIAR <i></i> IMAAR</b><small>TECHNICAL SERVICES</small></div><button class="btn gold" data-act="newvisit" type="button" style="height:34px">+ New</button></header>
+    <header class="topbar"><div class="wm" aria-label="Ziar Imaar Technical Services"><b>ZIAR <i></i> IMAAR</b><small>TECHNICAL SERVICES</small></div><div style="display:flex;gap:8px;align-items:center"><button class="btn gold" data-act="newvisit" type="button" style="height:34px">+ New</button><button id="signout2" class="btn" data-act="signout" type="button" style="height:34px;background:transparent;color:#fff;border-color:rgba(255,255,255,.3)" hidden>Sign out</button></div></header>
     <main id="app"></main>
   </div>
 </div>
@@ -389,6 +409,11 @@ const thisMonth=()=>new Date(Date.now()+4*3600000).toISOString().slice(0,7);
 let pui={type:'Parts Needed',dmOnly:true,month:thisMonth(),del:null};
 let modal=null, nform={};
 let rui={month:null};
+let pinDoc, signErr='', signBusy=false, lastAct=Date.now();
+const UNLOCK_KEY='zi-signin', FAIL_KEY='zi-signin-fails', SESSION_MS=8*3600000, IDLE_MS=30*60000;
+const stores2=()=>{ const out=[]; try{ out.push(sessionStorage); }catch(e){} try{ out.push(localStorage); }catch(e){} return out; };
+function readUnlock(){ for(const st of stores2()){ try{ const u=JSON.parse(st.getItem(UNLOCK_KEY)||'null'); if(u&&u.until>Date.now()) return u; }catch(e){} } return null; }
+let unlock=readUnlock();
 let inventory={}, iui={form:null,del:null};
 let assetReg={}, aui={q:'',open:null,form:null,del:null}, listInit=false;
 let roles={}, requests={}, audit=[], rolesLoaded=false, canEditLvl=null, adminTab='users', psearch={q:'',res:[]}, requested=false;
@@ -429,6 +454,49 @@ const isDM=v=>(v&&v.site||'').trim().toLowerCase()==='dubai mall';
 const siteOf=v=>v.site||'Site not recorded';
 const chip=v=>`<span class="chip ${v.status}">${STATUS[v.status]}</span>`;
 function toast(msg){ const t=document.getElementById('toast'); t.textContent=msg; t.hidden=false; clearTimeout(toast.t); toast.t=setTimeout(()=>t.hidden=true,2800); }
+
+/* ---------- sign-in (personal PIN on top of the claude.ai account) ---------- */
+// The PIN is stored only as a salted PBKDF2-SHA256 hash in pins/<user id>: each person reads and writes their own, admins can reset it.
+const b64=a=>btoa(String.fromCharCode(...new Uint8Array(a)));
+const unb64=s=>Uint8Array.from(atob(s),c=>c.charCodeAt(0));
+async function pinHash(pin,salt,iter){ const key=await crypto.subtle.importKey('raw',new TextEncoder().encode(pin),'PBKDF2',false,['deriveBits']); return b64(await crypto.subtle.deriveBits({name:'PBKDF2',salt:unb64(salt),iterations:iter,hash:'SHA-256'},key,256)); }
+const signedIn=()=>!!(unlock&&unlock.id===me.id&&unlock.until>Date.now());
+const needsSignIn=()=>!!(db&&!demo&&me.id&&!['loading','none'].includes(access())&&!signedIn());
+function fails(){ try{ const f=JSON.parse(localStorage.getItem(FAIL_KEY)||'null'); return f&&f.id===me.id?f:{id:me.id,count:0,until:0}; }catch(e){ return {id:me.id,count:0,until:0}; } }
+function setFails(f){ try{ localStorage.setItem(FAIL_KEY,JSON.stringify(f)); }catch(e){} }
+async function loadPin(){ try{ const sn=await db.doc('pins/'+me.id).get(); pinDoc=sn.exists?sn.data():null; }catch(e){ pinDoc=null; } render(); }
+function startSession(keep){ unlock={id:me.id,until:Date.now()+SESSION_MS}; lastAct=Date.now(); for(const st of stores2()){ try{ st.removeItem(UNLOCK_KEY); }catch(e){} } try{ (keep?localStorage:sessionStorage).setItem(UNLOCK_KEY,JSON.stringify(unlock)); }catch(e){} }
+function signOut(reason){ if(signedIn()) logAction('Signed out',reason?{detail:reason}:{}); unlock=null; for(const st of stores2()){ try{ st.removeItem(UNLOCK_KEY); }catch(e){} } signErr=reason||''; pinDoc=undefined; modal=null; render(); }
+function signinHtml(){
+  if(pinDoc===undefined&&!loadPin.busy){ loadPin.busy=true; loadPin().finally(()=>{ loadPin.busy=false; }); }
+  const f=fails(), lockedFor=f.until>Date.now()?Math.ceil((f.until-Date.now())/60000):0;
+  const creating=pinDoc===null;
+  const a=access();
+  const who=`<div class="who2"><span class="avatar">${esc(initials(me.name||'?'))}</span><div style="min-width:0"><div style="font-weight:600">${esc(me.name||'Your account')}</div><div class="sub">${ROLE_NAME[a]?ROLE_NAME[a]+' · ':''}Signed in to Claude</div></div></div>`;
+  let form;
+  if(pinDoc===undefined) form='<div class="sub"><span class="spin"></span> Checking your sign-in…</div>';
+  else if(lockedFor) form=`<div class="banner bad"><div><b>Too many wrong PINs</b>Sign-in is paused on this device for ${lockedFor} more minute${lockedFor>1?'s':''}. Ask an administrator to reset your PIN if you have forgotten it.</div></div>`;
+  else if(creating) form=`<form id="pincreate" style="display:flex;flex-direction:column;gap:12px">
+      <label class="flabel">Create a 6-digit PIN<input class="field pin" id="pin1" type="password" inputmode="numeric" autocomplete="new-password" maxlength="8" pattern="[0-9]{6,8}" required></label>
+      <label class="flabel">Enter it again<input class="field pin" id="pin2" type="password" inputmode="numeric" autocomplete="new-password" maxlength="8" required></label>
+      <label class="check"><input type="checkbox" id="keep"> Keep me signed in on this device for 8 hours</label>
+      <div class="err" role="alert">${esc(signErr)}</div>
+      <button class="btn primary lg" type="submit" ${signBusy?'disabled':''}>${signBusy?'<span class="spin"></span>':''}Create PIN and sign in</button>
+      <div class="sub">Use 6 to 8 digits that others cannot guess. Do not share it.</div></form>`;
+  else form=`<form id="pinlogin" style="display:flex;flex-direction:column;gap:12px">
+      <label class="flabel">PIN<input class="field pin" id="pin" type="password" inputmode="numeric" autocomplete="current-password" maxlength="8" required autofocus></label>
+      <label class="check"><input type="checkbox" id="keep"> Keep me signed in on this device for 8 hours</label>
+      <div class="err" role="alert">${esc(signErr)}${f.count&&!signErr?esc(f.count+' wrong attempt'+(f.count>1?'s':'')+'. '+(5-f.count)+' left before a 15-minute pause.'):''}</div>
+      <button class="btn primary lg" type="submit" ${signBusy?'disabled':''}>${signBusy?'<span class="spin"></span>':''}Sign in</button>
+      <div class="sub">Forgot your PIN? Ask an administrator to reset it, then create a new one here.</div></form>`;
+  return `<div class="signin">
+    <div class="brandpane"><div class="bigwm" aria-label="Ziar Imaar Technical Services"><b>ZIAR <i></i> IMAAR</b><small>TECHNICAL SERVICES L.L.C.</small></div>
+      <div class="hide-sm" style="position:relative;z-index:1;max-width:420px"><div style="font-family:var(--display);font-size:22px;font-weight:600;line-height:1.3">Kohler UAE service ticket hub</div><div style="color:var(--navyInk);margin-top:8px">Visits, reviews, parts and reports for the Kohler UAE service contract, in one place for the office and the field.</div></div>
+      <div class="sub hide-sm" style="color:var(--navyInk);position:relative;z-index:1">Ziar Imaar Technical Services L.L.C.</div></div>
+    <div class="formpane"><div class="signcard"><div><h1>${creating?'Set up your sign-in':'Sign in'}</h1><div class="sub" style="margin-top:4px">${creating?'Create a personal PIN to protect this hub on shared and lost devices.':'Enter your personal PIN to open the hub.'}</div></div>${who}${form}
+      <div class="sub" style="border-top:1px solid var(--line);padding-top:12px">Not you? Switch to your own Claude account, then open this page again.</div></div></div>
+  </div>`;
+}
 
 /* ---------- access ---------- */
 // Admin = the owner or anyone with Editor access (the store enforces role and audit permissions); Office and Technician are assigned by an admin.
@@ -533,6 +601,7 @@ function navHtml(){
   const m=document.getElementById('mode'); m.textContent=!loaded?'Connecting…':demo?'Demo mode · changes stay in this tab':'Live · shared with your team'; m.className='mode'+(!loaded?' wait':demo?' demo':'');
   const a=access(); document.getElementById('me').innerHTML=me.name||ROLE_NAME[a]?`<span class="avatar">${esc(initials(me.name||'?'))}</span><span style="display:flex;flex-direction:column;min-width:0"><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(me.name||'Signed in')}</span>${ROLE_NAME[a]?`<span class="rolebadge" style="align-self:flex-start;margin-top:3px">${ROLE_NAME[a]}</span>`:''}</span>`:'';
   document.querySelectorAll('[data-act=newvisit]').forEach(b=>b.hidden=!isOffice());
+  document.getElementById('signout').hidden=document.getElementById('signout2').hidden=!signedIn();
 }
 
 /* ---------- dashboard ---------- */
@@ -988,8 +1057,8 @@ function adminView(){
   let body='';
   if(adminTab==='users') body=`<div class="pgrid">
     <div class="card"><div class="card-h"><h3>People with access</h3><span class="sub">${assigned.length} assigned</span></div>
-      <div class="banner gold" style="margin:12px 16px 4px;border-radius:9px"><div><b>Admins</b>The owner and anyone given Editor access from the Share menu are admins automatically.</div></div>
-      <div>${assigned.length?assigned.map(([id,r])=>personRow(id,[`<div class="sub">Assigned ${esc(dm(r.at))}${r.by?' by '+esc(nameOf(r.by)):''}</div>${r.role==='technician'?`<input class="field" data-tphone="${esc(id)}" value="${esc(r.phone||'')}" placeholder="WhatsApp number, e.g. 050 123 4567" style="margin-top:6px;max-width:260px;padding:6px 10px" inputmode="tel">`:''}`,`<span style="display:flex;gap:8px;align-items:center"><select class="field" data-setrole="${esc(id)}" style="margin:0;width:auto;padding:6px 30px 6px 10px">${['office','technician','viewer'].map(x=>`<option value="${x}" ${r.role===x?'selected':''}>${ROLE_NAME[x]}</option>`).join('')}</select><button class="linkbtn danger" data-unrole="${esc(id)}">Remove</button></span>`])).join(''):'<div class="empty">No Office, Technician or Viewer users yet. Add people on the right, or approve access requests.</div>'}</div></div>
+      <div class="banner gold" style="margin:12px 16px 4px;border-radius:9px"><div style="flex:1"><b>Admins</b>The owner and anyone given Editor access from the Share menu are admins automatically. Every person signs in with their own PIN; Reset PIN makes them create a new one at their next sign-in.</div><button class="btn" style="height:32px" data-resetpin="${esc(me.id||'')}">Reset my PIN</button></div>
+      <div>${assigned.length?assigned.map(([id,r])=>personRow(id,[`<div class="sub">Assigned ${esc(dm(r.at))}${r.by?' by '+esc(nameOf(r.by)):''}</div>${r.role==='technician'?`<input class="field" data-tphone="${esc(id)}" value="${esc(r.phone||'')}" placeholder="WhatsApp number, e.g. 050 123 4567" style="margin-top:6px;max-width:260px;padding:6px 10px" inputmode="tel">`:''}`,`<span style="display:flex;gap:8px;align-items:center"><select class="field" data-setrole="${esc(id)}" style="margin:0;width:auto;padding:6px 30px 6px 10px">${['office','technician','viewer'].map(x=>`<option value="${x}" ${r.role===x?'selected':''}>${ROLE_NAME[x]}</option>`).join('')}</select><button class="linkbtn" data-resetpin="${esc(id)}">Reset PIN</button><button class="linkbtn danger" data-unrole="${esc(id)}">Remove</button></span>`])).join(''):'<div class="empty">No Office, Technician or Viewer users yet. Add people on the right, or approve access requests.</div>'}</div></div>
     <div style="display:flex;flex-direction:column;gap:16px">
       <div class="card"><div class="card-h"><h3>Add a person</h3><span class="sub">From your organization</span></div><div class="card-b">
         <label class="search" style="max-width:none">${svg('search',16)}<input id="p-q" class="field" type="search" placeholder="Search by name" value="${esc(psearch.q)}" autocomplete="off" aria-label="Search people"></label>
@@ -1105,7 +1174,9 @@ function render(){
   navHtml();
   const a=access();
   if(a==='loading'){ $app.innerHTML='<div class="gate"><div class="card"><span class="spin" style="color:var(--navy)"></span><div class="sub">Checking your access…</div></div></div>'; return; }
-  if(a==='none'){ $app.innerHTML=gateHtml(); document.getElementById('modal').innerHTML=''; return; }
+  if(a==='none'){ document.body.classList.remove('locked'); $app.innerHTML=gateHtml(); document.getElementById('modal').innerHTML=''; return; }
+  if(needsSignIn()){ document.body.classList.add('locked'); $app.innerHTML=signinHtml(); document.getElementById('modal').innerHTML=''; const pf=document.getElementById('pin')||document.getElementById('pin1'); if(pf&&!typing()) pf.focus(); return; }
+  document.body.classList.remove('locked');
   if(!listInit){ listInit=true; if(a==='technician') list.status='mine'; }
   if(!can(route)){ route=PERMS[a][0]; try{ history.replaceState(null,'','#'+(route==='tickets'&&sel?'t'+sel:route)); }catch(e){} }
   $app.innerHTML=route==='tickets'?ticketsView():route==='review'?reviewView():route==='parts'?partsView():route==='admin'?adminView():route==='assets'?assetsView():route==='reports'?reportsView():dashView();
@@ -1184,6 +1255,24 @@ document.addEventListener('submit',async e=>{
     const v={id:vid,ref:refFor(vid),site:g('site'),region:g('region')||'Dubai',contact:g('contact'),address:g('address'),product:g('product'),model:g('model'),category:g('category'),type:g('type')||'Inspection',priority:g('priority')||'Normal',issue:g('issue'),scheduled:sched.toISOString(),rate:Number(g('rate'))||0,assignedTo:g('assignedTo'),
       status:'new',prepared:false,contactedAt:null,arrived:null,finished:null,findings:'',work:'',nextAction:'',outcome:'',returnVisit:'No',technician:'',internalNotes:'',parts:[],evidence:[],billingRef:'',history:[hist('new')]};
     modal=null; nform={}; list.status='open'; route='tickets'; sel=vid; mode='view'; await save(v); logAction('Created visit',{ticket:vid}); go('tickets',vid); toast('Visit #'+vid+' created'); return; }
+  if(id==='pincreate'||id==='pinlogin'){
+    if(signBusy) return; const keep=!!(document.getElementById('keep')||{}).checked;
+    if(id==='pincreate'){ const a1=document.getElementById('pin1').value, a2=document.getElementById('pin2').value;
+      if(!/^\d{6,8}$/.test(a1)){ signErr='Use 6 to 8 digits.'; render(); return; }
+      if(/^(\d)\1+$/.test(a1)||'0123456789'.includes(a1)||'9876543210'.includes(a1)){ signErr='That PIN is too easy to guess. Avoid repeated or sequential digits.'; render(); return; }
+      if(a1!==a2){ signErr='The two PINs do not match.'; render(); return; }
+      signBusy=true; render();
+      try{ const salt=b64(crypto.getRandomValues(new Uint8Array(16))), iter=150000; const hash=await pinHash(a1,salt,iter); await db.doc('pins/'+me.id).set({salt,hash,iter,alg:'PBKDF2-SHA256',at:new Date().toISOString()}); pinDoc={salt,hash,iter}; signErr=''; setFails({id:me.id,count:0,until:0}); startSession(keep); logAction('Created PIN and signed in'); }
+      catch(e){ signErr='Could not save your PIN. Check your connection and try again.'; }
+      signBusy=false; render(); return; }
+    const f=fails(); if(f.until>Date.now()){ render(); return; }
+    const pin=document.getElementById('pin').value; if(!pin) return;
+    signBusy=true; render();
+    try{ const h=await pinHash(pin,pinDoc.salt,pinDoc.iter||150000);
+      if(h===pinDoc.hash){ setFails({id:me.id,count:0,until:0}); signErr=''; startSession(keep); logAction('Signed in'); }
+      else{ f.count++; if(f.count>=5){ f.until=Date.now()+15*60000; f.count=0; logAction('Sign-in paused after 5 wrong PINs'); } else logAction('Failed sign-in'); setFails(f); signErr=f.until>Date.now()?'':'Wrong PIN.'; }
+    }catch(e){ signErr='Could not check your PIN. Try again.'; }
+    signBusy=false; render(); return; }
   if(id==='iform'){ const d={partNo:g('partNo'),description:g('description'),location:g('location'),stock:Math.max(0,Number(g('stock'))||0),min:Math.max(0,Number(g('min'))||0),unitValue:Number(g('unitValue'))||0,supplier:g('supplier'),at:new Date().toISOString()};
     const iid=(iui.form&&iui.form.id)||newId('i'); logAction(iui.form&&iui.form.id?'Updated inventory part':'Added inventory part',{detail:d.partNo+' '+d.description+' · stock '+d.stock}); iui.form=null; await saveDoc('inventory',iid,d,inventory); toast('Part saved'); return; }
   if(id==='aform'){ const d={site:g('site'),location:g('location'),product:g('product'),model:g('model'),serial:g('serial'),category:g('category'),installed:g('installed'),warranty:g('warranty'),notes:g('notes'),at:new Date().toISOString()}; if(me.id) d.by=me.id;
@@ -1230,6 +1319,7 @@ document.addEventListener('click',async e=>{
   if(ds.areg!==undefined){ const tr=b.closest('tr'); const cells=tr.querySelectorAll('td'); aui.form={product:cells[0].querySelector('b').textContent,model:cells[0].querySelector('.mono').textContent,site:cells[1].textContent==='—'?'':cells[1].textContent}; const v=Object.values(visits).find(x=>x.model===aui.form.model&&akey(x.site,x.model)===akey(aui.form.site,aui.form.model)); if(v&&v.category) aui.form.category=v.category; render(); window.scrollTo(0,0); return; }
   if(ds.atab){ adminTab=ds.atab; render(); return; }
   if(ds.grant){ if(ds.nm) names[ds.grant]=ds.nm; await setRole(ds.grant,ds.r,ds.nm); return; }
+  if(ds.resetpin){ try{ await db.doc('pins/'+ds.resetpin).delete(); logAction('Reset PIN',{detail:ds.resetpin===me.id?'Own PIN':nameOf(ds.resetpin)||'Person'}); if(ds.resetpin===me.id){ toast('Your PIN was reset. Create a new one now.'); signOut(); } else toast('PIN reset. '+(nameOf(ds.resetpin)||'They')+' will create a new one at next sign-in.'); }catch(e){ toast('Only admins can reset PINs.'); } return; }
   if(ds.unrole){ await setRole(ds.unrole,null); return; }
   if(ds.dismiss){ try{ await db.doc('requests/'+ds.dismiss).delete(); }catch(e){ toast('Could not dismiss the request.'); } return; }
   if(ds.act==='reqaccess'){ if(!db||!me.id) return; try{ await db.doc('requests/'+me.id).set({at:new Date().toISOString()}); requested=true; render(); }catch(e){ toast('Could not send the request. Try again.'); } return; }
@@ -1274,6 +1364,7 @@ document.addEventListener('click',async e=>{
     mode='view'; draft=null; await save(n,{savevisit:'Updated visit report',saveparts:'Updated parts used',savebilling:'Updated Z invoice no.'}[act]); toast('Saved'); return;
   }
   if(act==='submit'&&v){ if(!canSubmit(v)||!canEditTicket(v)) return; const n=clone(v); n.status='review'; n.history=[...(n.history||[]),hist('review')]; await save(n,'Submitted for review'); toast('Submitted for review'); return; }
+  if(act==='signout'){ signOut(); return; }
   if(act==='unconfirm'){ rev.confirm=null; render(); return; }
   if(act==='savedetails'){ const ov=visits[rev.id]; if(!ov||!rev.edit) return; const n=clone(ov); n.billingRef=rev.edit.inv.trim(); n.internalNotes=rev.edit.int.trim(); await save(n,'Updated office details'); toast('Details saved for #'+n.id); return; }
   if(act==='rpdf'){ await reportPdf(); return; }
@@ -1302,6 +1393,10 @@ $app.addEventListener('mousemove',e=>{ const el=e.target.closest('[data-tip]'); 
 $app.addEventListener('mouseleave',()=>tipEl.hidden=true);
 $app.addEventListener('focusin',e=>{ const el=e.target.closest('[data-tip]'); if(el){ const r=el.getBoundingClientRect(); showTip(el,r.left+r.width/2,r.top); } });
 $app.addEventListener('focusout',()=>tipEl.hidden=true);
+
+/* ---------- session timeout ---------- */
+['pointerdown','keydown','scroll'].forEach(ev=>document.addEventListener(ev,()=>{ lastAct=Date.now(); },{passive:true}));
+setInterval(()=>{ if(!unlock||!me.id) return; if(unlock.until<=Date.now()) signOut('Your 8-hour session ended. Sign in again.'); else if(Date.now()-lastAct>IDLE_MS) signOut('Signed out after 30 minutes without activity.'); },30000);
 
 /* ---------- boot ---------- */
 if(!fromHash()){ let saved=null; try{ saved=localStorage.getItem('zi-route'); }catch(e){} if(ROUTES.some(r=>r[0]===saved)) route=saved; }
