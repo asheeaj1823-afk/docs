@@ -324,7 +324,8 @@ kbd{font-family:var(--mono);font-size:11px;border:1px solid var(--line2);border-
   .step:nth-child(-n+2){border-bottom:1px solid var(--line)}
   .formfoot{bottom:calc(58px + env(safe-area-inset-bottom,0px))}
 }
-@media (max-width:560px){.kpis{grid-template-columns:repeat(2,minmax(0,1fr))}.charts{grid-template-columns:1fr}.fgrid{grid-template-columns:1fr}.span2{grid-column:auto}.info{grid-template-columns:1fr}.info .wide{grid-column:auto}.phead h1{font-size:22px}.stamps{grid-template-columns:1fr 1fr}}
+.onetab .page{padding-bottom:calc(32px + env(safe-area-inset-bottom,0px))!important}.onetab .formfoot{bottom:0!important}
+@media (max-width:560px){.kpis{grid-template-columns:repeat(2,minmax(0,1fr))}.charts{grid-template-columns:1fr}.fgrid{grid-template-columns:1fr}.span2{grid-column:auto}.info{grid-template-columns:1fr 1fr}.info>div{padding:10px 12px}.phead h1{font-size:22px}.stamps{grid-template-columns:1fr 1fr}}
 @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
 </style>
 
@@ -358,6 +359,7 @@ const ICON={
   tickets:'<path d="M4 5h16v4a2 2 0 0 0 0 4v4H4v-4a2 2 0 0 0 0-4z"/><path d="M9 9h6M9 13h4"/>',
   review:'<path d="M4 4h16v12H4z"/><path d="M8 10l3 3 5-5"/><path d="M8 20h8"/>',
   parts:'<path d="M3 7l9-4 9 4-9 4-9-4z"/><path d="M3 7v10l9 4 9-4V7"/><path d="M12 11v10"/>',
+  assets:'<rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 7h8M8 11h8M8 15h5"/>',
   admin:'<path d="M12 3l8 3v6c0 4.5-3.4 8.3-8 9-4.6-.7-8-4.5-8-9V6z"/><path d="M9 12l2 2 4-4"/>',
   search:'<circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/>',
   back:'<path d="M15 18l-6-6 6-6"/>',
@@ -367,9 +369,10 @@ const ICON={
   x:'<path d="M6 6l12 12M18 6L6 18"/>'
 };
 const svg=(k,s=18)=>`<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICON[k]}</svg>`;
-const ROUTES=[['dashboard','Dashboard'],['tickets','Tickets'],['review','Review queue'],['parts','Parts & stock'],['admin','Administration']];
-const ROLE_NAME={admin:'Admin',office:'Office',technician:'Technician'};
-const PERMS={admin:['dashboard','tickets','review','parts','admin'],office:['dashboard','tickets','review','parts'],technician:['tickets']};
+const ROUTES=[['dashboard','Dashboard'],['tickets','Tickets'],['review','Review queue'],['parts','Parts & stock'],['assets','Assets'],['admin','Administration']];
+const ROLE_NAME={admin:'Admin',office:'Office',technician:'Technician',viewer:'Viewer'};
+const PERMS={admin:['dashboard','tickets','review','parts','assets','admin'],office:['dashboard','tickets','review','parts','assets'],technician:['tickets'],viewer:['dashboard','tickets']};
+const ESC_TO=['','Technician','Office supervisor','Administrator'];
 
 let visits={}, parts={}, stock={};
 let db=null, assets=null, userApi=null, sampleApi=null, downloadsApi=null;
@@ -383,6 +386,8 @@ let rev={id:null,note:'',edit:null,confirm:null,drafting:false};
 const thisMonth=()=>new Date(Date.now()+4*3600000).toISOString().slice(0,7);
 let pui={type:'Parts Needed',dmOnly:true,month:thisMonth(),del:null};
 let modal=null, nform={};
+let inventory={}, iui={form:null,del:null};
+let assetReg={}, aui={q:'',open:null,form:null,del:null}, listInit=false;
 let roles={}, requests={}, audit=[], rolesLoaded=false, canEditLvl=null, adminTab='users', psearch={q:'',res:[]}, requested=false;
 const $app=document.getElementById('app');
 
@@ -428,6 +433,8 @@ function access(){
 }
 const can=r=>{ const a=access(); return !!(PERMS[a]&&PERMS[a].includes(r)); };
 const isOffice=()=>['admin','office'].includes(access());
+// who may change a ticket: office and admins any ticket, technicians only tickets assigned to them, viewers none
+const canEditTicket=v=>{ const a=access(); return a==='admin'||a==='office'||(a==='technician'&&!!me.id&&v.assignedTo===me.id); };
 // each person appends to their own audit record (audit/<their id>); the store lets nobody else, the owner included, change it, and only admins read others' records
 let auditChain=Promise.resolve();
 function logAction(action,data={}){
@@ -444,11 +451,18 @@ function sla(v){
   if(v.status==='cancelled'||!v.scheduled||((v.status==='completed'||v.status==='review')&&!v.arrived)) return {cls:'sla-ok',label:'—',late:false};
   if(v.arrived){ const late=new Date(v.arrived)>target; return {cls:late?'sla-late':'sla-ok',label:late?'SLA missed':'SLA met',late}; }
   const left=(target-Date.now())/3600000;
-  if(left<0) return {cls:'sla-late',label:'Overdue '+dur(-left*60),late:true};
+  if(left<0) return {cls:'sla-late',label:'Overdue '+dur(-left*60),late:true,lateH:-left};
   if(left<6) return {cls:'sla-risk',label:'Due in '+dur(left*60),late:false};
   return {cls:'sla-ok',label:'Due '+dm(target.toISOString()),late:false};
 }
-const slaChip=v=>{ const s=sla(v); return s.label==='—'?'':`<span class="chip ${s.cls}">${esc(s.label)}</span>`; };
+// escalation: L1 overdue up to 24 h (technician), L2 24–72 h (office supervisor), L3 over 72 h (administrator)
+function escal(v){ if(!editable(v)) return null; const s=sla(v); if(!s.late) return null; const L=s.lateH>72?3:s.lateH>24?2:1; return {L,to:ESC_TO[L],label:'L'+L+' · '+s.label}; }
+const techIds=()=>Object.entries(roles).filter(([,r])=>r.role==='technician').map(([id])=>id).sort((a,b)=>(nameOf(a)||'').localeCompare(nameOf(b)||''));
+const assigneeName=v=>v.assignedTo?(nameOf(v.assignedTo)||'Technician'):'';
+const slaChip=v=>{ const e=escal(v); if(e) return `<span class="chip sla-late">${esc(e.label)}</span>`; 
+  const _s=0;
+  return slaChip0(v); };
+const slaChip0=v=>{ const s=sla(v); return s.label==='—'?'':`<span class="chip ${s.cls}">${esc(s.label)}</span>`; };
 function checks(v){
   return [
     {f:'Work performed',ok:!!(v.work||'').trim(),val:(v.work||'').trim()?'Recorded':'—',req:true},
@@ -507,7 +521,8 @@ function navHtml(){
   const R2=ROUTES.filter(r=>can(r[0]));
   document.getElementById('nav').innerHTML=R2.map(([k,l])=>`<button data-route="${k}" ${route===k?'aria-current="page"':''}>${svg(k)}<span>${l}</span>${k==='review'&&n?`<span class="badge">${n}</span>`:''}</button>`).join('');
   document.getElementById('tabbar').style.gridTemplateColumns=`repeat(${Math.max(1,R2.length)},1fr)`;
-  document.getElementById('tabbar').innerHTML=R2.map(([k,l])=>`<button data-route="${k}" ${route===k?'aria-current="page"':''}>${svg(k,20)}<span>${k==='parts'?'Parts':k==='review'?'Review':k==='admin'?'Admin':l}</span>${k==='review'&&n?`<span class="badge">${n}</span>`:''}</button>`).join('');
+  document.getElementById('tabbar').hidden=R2.length<2; document.body.classList.toggle('onetab',R2.length<2);
+  document.getElementById('tabbar').innerHTML=R2.map(([k,l])=>`<button data-route="${k}" ${route===k?'aria-current="page"':''}>${svg(k,20)}<span>${k==='parts'?'Parts':k==='review'?'Review':k==='admin'?'Admin':k==='dashboard'?'Home':l}</span>${k==='review'&&n?`<span class="badge">${n}</span>`:''}</button>`).join('');
   const m=document.getElementById('mode'); m.textContent=!loaded?'Connecting…':demo?'Demo mode · changes stay in this tab':'Live · shared with your team'; m.className='mode'+(!loaded?' wait':demo?' demo':'');
   const a=access(); document.getElementById('me').innerHTML=me.name||ROLE_NAME[a]?`<span class="avatar">${esc(initials(me.name||'?'))}</span><span style="display:flex;flex-direction:column;min-width:0"><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(me.name||'Signed in')}</span>${ROLE_NAME[a]?`<span class="rolebadge" style="align-self:flex-start;margin-top:3px">${ROLE_NAME[a]}</span>`:''}</span>`:'';
   document.querySelectorAll('[data-act=newvisit]').forEach(b=>b.hidden=!isOffice());
@@ -539,15 +554,17 @@ function dashView(){
   const attended=all.filter(v=>v.arrived), slaMet=attended.length?Math.round(100*attended.filter(v=>!sla(v).late).length/attended.length):null;
   const corder=['new','recheck','completed','review','cancelled'];
   const kpi=(l,v,s,cls='')=>`<div class="card kpi ${cls}"><span class="lbl">${l}</span><b>${v}</b><span class="sub">${s}</span></div>`;
+  const esc3=[1,2,3].map(L=>late.filter(v=>(escal(v)||{}).L===L).length);
+  late.sort((a,b)=>(sla(b).lateH||0)-(sla(a).lateH||0));
   const attn=[...late,...reviewQueue(),...all.filter(v=>v.status==='recheck'),...all.filter(v=>v.status==='new')].filter((v,i,a)=>a.indexOf(v)===i).slice(0,8);
-  const why=v=>sla(v).late?`<span class="chip sla-late">${esc(sla(v).label)}</span>`:v.status==='review'?`<span class="chip review">${esc(flagSummary(v))}</span>`:chip(v);
+  const why=v=>escal(v)?`<span class="chip sla-late">${esc(escal(v).label)}</span>`:v.status==='review'?`<span class="chip review">${esc(flagSummary(v))}</span>`:chip(v);
   return `<div class="page">
     <div class="phead"><div><h1>Operations</h1><div class="sub">Kohler UAE service desk · ${all.length} tickets · ${dmy(new Date().toISOString())}</div></div>
       <div class="actions">${downloadsApi?'<button class="btn" data-act="csv">'+svg('doc',16)+'Export CSV</button>':''}<button class="btn primary" data-route="tickets">Open tickets</button></div></div>
     <div class="kpis">
       ${kpi('Open visits',open,c('recheck')+' returned for recheck','hero')}
       ${kpi('Waiting review',c('review'),'in the office queue')}
-      ${kpi('SLA overdue',late.length,late.length?'need attention now':'all on time',late.length?'alert':'')}
+      ${kpi('Escalated',late.length,late.length?`L1 ${esc3[0]} · L2 ${esc3[1]} · L3 ${esc3[2]}`:'all visits on time',late.length?'alert':'')}
       ${kpi('SLA met',slaMet==null?'—':slaMet+'%',attended.length+' visits timed')}
       ${kpi('Resolved',res==null?'—':res+'%','of '+withOut.length+' with an outcome')}
       ${kpi('Avg time on site',dur(avg),times.length+' timed visits')}
@@ -559,39 +576,42 @@ function dashView(){
     </div></div>
     <div class="dgrid">
       ${monthChart(all)}
-      <div class="card"><div class="card-h"><h3>Needs attention</h3><button class="linkbtn" data-route="review">Review queue →</button></div>
+      <div class="card"><div class="card-h"><h3>Needs attention</h3>${can('review')?'<button class="linkbtn" data-route="review">Review queue →</button>':''}</div>
+        ${can('parts')&&Object.values(inventory).some(i=>invState(i).cls!=='completed')?`<button class="banner bad" data-route="parts" style="margin:12px 16px 0;width:calc(100% - 32px);text-align:left"><div><b>${Object.values(inventory).filter(i=>invState(i).cls!=='completed').length} inventory parts low or out of stock</b>Open Parts &amp; stock to reorder.</div></button>`:''}
         <div class="attn">${attn.length?attn.map(v=>`<button data-open="${esc(v.id)}"><span class="idn">#${esc(v.id)}</span><span style="min-width:0"><span style="display:block;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(siteOf(v))}</span><span class="sub">${esc(v.product||'')} · ${esc(dm(v.scheduled))}</span></span>${why(v)}</button>`).join(''):'<div class="empty">Nothing needs attention right now.</div>'}</div></div>
     </div>
     <div class="charts">
       <div class="card"><div class="card-h"><div><h3>Tickets by emirate</h3><div class="sub">All ${all.length} tickets</div></div></div><div class="card-b">${hbars(counts(all,v=>v.region||'Not recorded'))}</div></div>
       <div class="card"><div class="card-h"><div><h3>Busiest sites</h3><div class="sub">Top 6 by ticket count</div></div></div><div class="card-b">${hbars(counts(all,v=>(v.site||'').split('|')[0].trim(),6))}</div></div>
       <div class="card"><div class="card-h"><div><h3>Products serviced</h3><div class="sub">Top 6 products</div></div></div><div class="card-b">${hbars(counts(all,v=>v.product||'Not recorded',6))}</div></div>
-      <div class="card"><div class="card-h"><div><h3>Outcomes</h3><div class="sub">Visits with a recorded outcome</div></div></div><div class="card-b">${(()=>{ const r=counts(all,v=>v.outcome); return r.length?hbars(r):'<div class="empty">No outcomes recorded yet.</div>'; })()}</div></div>
+      <div class="card"><div class="card-h"><div><h3>Team workload</h3><div class="sub">Open visits per technician</div></div>${isOffice()?'<button class="linkbtn" data-unassigned="1">Assign →</button>':''}</div><div class="card-b">${(()=>{ const open=all.filter(editable); const r=[...techIds().map(id=>({label:nameOf(id)||'Technician',n:open.filter(v=>v.assignedTo===id).length})),{label:'Unassigned',n:open.filter(v=>!v.assignedTo).length}]; return open.length?hbars(r):'<div class="empty">No open visits.</div>'; })()}${!techIds().length?'<div class="sub" style="margin-top:10px">Give people the Technician role on the Administration page to assign visits to them.</div>':''}</div></div>
     </div>
   </div>`;
 }
 
 /* ---------- tickets: list ---------- */
-const FILTERS=[['open','Open'],['review','In review'],['completed','Completed'],['cancelled','Cancelled'],['all','All']];
+const FILTERS_ALL=[['mine','Assigned to me'],['open','Open'],['unassigned','Unassigned'],['review','In review'],['completed','Completed'],['cancelled','Cancelled'],['all','All']];
+const filtersFor=()=>{ const a=access(); return FILTERS_ALL.filter(([k])=>a==='technician'?['mine','review','completed','all'].includes(k):a==='viewer'?!['mine','unassigned'].includes(k):k!=='mine'); };
 function listRows(){
   const q=list.q.trim().toLowerCase();
   const m=v=>!q||[v.id,v.ref,v.site,v.product,v.issue,v.model,v.region,v.contact,v.technician,v.billingRef].join(' ').toLowerCase().includes(q);
-  const f={open:editable,review:v=>v.status==='review',completed:v=>v.status==='completed',cancelled:v=>v.status==='cancelled',all:()=>true}[list.status];
-  return Object.values(visits).filter(f).filter(m);
+  const f={mine:v=>editable(v)&&v.assignedTo===me.id,unassigned:v=>editable(v)&&!v.assignedTo,open:editable,review:v=>v.status==='review',completed:v=>v.status==='completed',cancelled:v=>v.status==='cancelled',all:()=>true}[list.status];
+  const mineOnly=access()==='technician';
+  return Object.values(visits).filter(v=>!mineOnly||v.assignedTo===me.id).filter(f).filter(m);
 }
 function itemHtml(v){
-  const s=sla(v), miss=v.status==='review'?missingChecks(v).length:0;
+  const s=sla(v), e=escal(v), miss=v.status==='review'?missingChecks(v).length:0;
   return `<button class="titem" data-sel="${esc(v.id)}" aria-current="${sel===v.id}">
-    <div class="top"><span class="idn">#${esc(v.id)}</span>${chip(v)}${editable(v)&&s.label!=='—'?`<span class="chip ${s.cls}" style="margin-left:auto">${esc(s.label)}</span>`:miss?`<span class="sub" style="margin-left:auto;color:var(--bad);font-weight:600">⚠ ${miss} missing</span>`:''}</div>
+    <div class="top"><span class="idn">#${esc(v.id)}</span>${chip(v)}${e?`<span class="chip sla-late" style="margin-left:auto">${esc(e.label)}</span>`:editable(v)&&s.label!=='—'?`<span class="chip ${s.cls}" style="margin-left:auto">${esc(s.label)}</span>`:miss?`<span class="sub" style="margin-left:auto;color:var(--bad);font-weight:600">⚠ ${miss} missing</span>`:''}</div>
     <div class="site">${esc(siteOf(v))}</div>
-    <div class="meta"><span>${esc(v.product||'—')}</span><span>·</span><span class="num">${esc(dayLong(v.scheduled))}</span>${v.priority&&v.priority!=='Normal'?`<span class="prio ${esc(v.priority)}">${esc(v.priority)}</span>`:''}</div>
+    <div class="meta"><span>${esc(v.product||'—')}</span><span>·</span><span class="num">${esc(dayLong(v.scheduled))}</span>${v.priority&&v.priority!=='Normal'?`<span class="prio ${esc(v.priority)}">${esc(v.priority)}</span>`:''}${editable(v)?`<span style="margin-left:auto;font-weight:600;color:${v.assignedTo?'var(--ink2)':'var(--warn)'}">${v.assignedTo?esc(assigneeName(v)):'Unassigned'}</span>`:''}</div>
   </button>`;
 }
 function listBody(){
   if(!loaded) return '<div class="empty">Loading tickets…</div>';
   const rows=listRows();
-  if(!rows.length) return `<div class="empty">${list.q?'No tickets match this search.':list.status==='open'?'No open visits. New visits appear here as soon as they are created.':'No tickets in this view.'}</div>`;
-  if(list.status==='open'){
+  if(!rows.length) return `<div class="empty">${list.q?'No tickets match this search.':list.status==='mine'?'Nothing assigned to you right now. New assignments appear here.':list.status==='unassigned'?'Every open visit has a technician.':list.status==='open'?'No open visits. New visits appear here as soon as they are created.':'No tickets in this view.'}</div>`;
+  if(['open','mine','unassigned'].includes(list.status)){
     const today=dayKey(new Date().toISOString()), now=Date.now();
     const g=v=>sla(v).late?'Overdue':v.scheduled&&dayKey(v.scheduled)===today?'Today':v.scheduled&&new Date(v.scheduled).getTime()>now?'Upcoming':'Earlier';
     rows.sort((a,b)=>(a.scheduled||'').localeCompare(b.scheduled||''));
@@ -601,19 +621,19 @@ function listBody(){
   return rows.slice(0,list.limit).map(itemHtml).join('')+(rows.length>list.limit?`<div class="more"><button class="btn block" data-act="more">Show ${Math.min(60,rows.length-list.limit)} more of ${rows.length-list.limit}</button></div>`:'');
 }
 function ticketsView(){
-  const all=Object.values(visits), n={open:all.filter(editable).length,review:all.filter(v=>v.status==='review').length,completed:all.filter(v=>v.status==='completed').length,cancelled:all.filter(v=>v.status==='cancelled').length,all:all.length};
-  const v=sel&&visits[sel];
+  const all=Object.values(visits).filter(v=>access()!=='technician'||v.assignedTo===me.id), n={mine:all.filter(v=>editable(v)&&v.assignedTo===me.id).length,unassigned:all.filter(v=>editable(v)&&!v.assignedTo).length,open:all.filter(editable).length,review:all.filter(v=>v.status==='review').length,completed:all.filter(v=>v.status==='completed').length,cancelled:all.filter(v=>v.status==='cancelled').length,all:all.length};
+  let v=sel&&visits[sel]; const hidden=v&&access()==='technician'&&v.assignedTo!==me.id; if(hidden) v=null;
   return `<div class="page">
     <div class="phead"><div><h1>Tickets</h1><div class="sub">Open a ticket to record the visit, parts and invoice, or to follow its review.</div></div></div>
     <div class="split${v?' has-sel':''}">
       <section class="card listpane" aria-label="Ticket list">
         <div class="listtools">
-          <label class="search">${svg('search',16)}<input id="l-q" class="field" type="search" placeholder="Search site, ticket, technician, invoice" value="${esc(list.q)}" autocomplete="off" aria-label="Search tickets"></label>
-          <div class="tabs" role="group" aria-label="Filter tickets">${FILTERS.map(([k,l])=>`<button data-filter="${k}" aria-pressed="${list.status===k}">${l} <span class="c">${n[k]}</span></button>`).join('')}</div>
+          <label class="search">${svg('search',16)}<input id="l-q" class="field" type="search" placeholder="Search tickets  (Ctrl+K)" value="${esc(list.q)}" autocomplete="off" aria-label="Search tickets"></label>
+          <div class="tabs" role="group" aria-label="Filter tickets">${filtersFor().map(([k,l])=>`<button data-filter="${k}" aria-pressed="${list.status===k}">${l} <span class="c">${n[k]}</span></button>`).join('')}</div>
         </div>
         <div class="tlist" id="l-body">${listBody()}</div>
       </section>
-      <section class="detail" aria-label="Ticket detail">${v?detailHtml(v):`<div class="card"><div class="empty" style="padding:64px 24px">${svg('tickets',28)}<div style="margin-top:10px;font-weight:600;color:var(--ink)">Select a ticket</div><div>Its details, visit steps and history open here.</div></div></div>`}</section>
+      <section class="detail" aria-label="Ticket detail">${v?detailHtml(v):`<div class="card"><div class="empty" style="padding:64px 24px">${svg('tickets',28)}<div style="margin-top:10px;font-weight:600;color:var(--ink)">${hidden?'This ticket is not assigned to you':'Select a ticket'}</div><div>${hidden?'Ask the office to assign it to you if you are attending this visit.':access()==='viewer'?'You have read-only access. Open a ticket to see its report or download the service report.':'Its details, visit steps and history open here.'}</div></div></div>`}</section>
     </div>
   </div>`;
 }
@@ -642,6 +662,7 @@ function headCard(v,opts={}){
     <div class="quick">
       <button class="btn" data-act="call">${svg('phone',16)}Call</button>
       <a class="btn" href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent((v.address||v.site||'')+', '+(v.region||'Dubai')+', UAE')}" target="_blank" rel="noopener">${svg('map',16)}Directions</a>
+      <span style="margin-left:auto;display:flex;align-items:center;gap:8px" class="sub">Assigned to ${isOffice()&&editable(v)?`<select class="field" data-assign="${esc(v.id)}" style="margin:0;width:auto;padding:7px 30px 7px 10px"><option value="">Unassigned</option>${[...new Set([...techIds(),...(v.assignedTo?[v.assignedTo]:[])])].map(id=>`<option value="${esc(id)}" ${v.assignedTo===id?'selected':''}>${esc(nameOf(id)||'Technician')}</option>`).join('')}</select>`:`<b style="color:var(--ink)">${esc(assigneeName(v)||'Nobody yet')}</b>`}</span>
       ${showCall?`<span class="callbox"><span class="num" id="phone-num" style="user-select:all">${esc(ph||'No phone number on this ticket')}</span>${ph?'<button class="btn" style="height:30px" data-act="copy">Copy</button>':''}</span>`:''}
     </div>
   </div>`;
@@ -662,15 +683,17 @@ function stepsCard(v){
   </div>`;
 }
 function detailHtml(v){
-  if(mode!=='view'&&draft&&draft.id===v.id&&editable(v)) return headCard(v)+editHtml();
+  if(mode!=='view'&&draft&&draft.id===v.id&&editable(v)&&canEditTicket(v)) return headCard(v)+editHtml();
   const lastNote=[...(v.history||[])].reverse().find(h=>h.status==='recheck'&&h.note);
   const lastClose=(v.history||[]).slice(-1)[0]||{};
-  let banner='';
+  let banner=''; const e=escal(v);
+  const escB=e?`<div class="banner bad"><div><b>Escalation level ${e.L} · escalated to ${e.to}</b>${esc(sla(v).label)}. ${e.L===1?'Attend the site or update the visit as soon as possible.':e.L===2?'The office supervisor should contact the site and reassign if needed.':'An administrator should review this ticket with the customer today.'}</div></div>`:'';
   if(v.status==='recheck'&&lastNote) banner=`<div class="banner warn"><div><b>Office asked for a recheck${lastNote.by?' · '+esc(nameOf(lastNote.by)):''}</b>${esc(lastNote.note)}</div></div>`;
   if(v.status==='review') banner=`<div class="banner gold"><div style="flex:1;min-width:200px"><b>Waiting for office review</b>Submitted ${esc(dmhm(lastAt(v)))}. ${esc(flagSummary(v))}.</div>${can('review')?`<button class="btn" data-review="${esc(v.id)}">Open in review queue</button>`:''}</div>`;
   if(v.status==='completed') banner=`<div class="banner ok"><div><b>Completed</b>${esc(dmhm(lastClose.at))}${lastClose.note&&lastClose.note!=='Imported from service desk'?' · '+esc(lastClose.note):''}</div></div>`;
   if(v.status==='cancelled') banner=`<div class="banner bad"><div><b>Cancelled</b>${lastClose.note?esc(lastClose.note):''}</div></div>`;
-  return headCard(v)+banner+(editable(v)?stepsCard(v):'')+bodyHtml(v);
+  const ro=editable(v)&&!canEditTicket(v)?`<div class="banner gold"><div><b>Read only</b>${access()==='viewer'?'Viewers can see tickets and download service reports, but not change them.':'Only the assigned technician or the office can update this visit.'}</div></div>`:'';
+  return headCard(v)+escB+banner+ro+(editable(v)&&canEditTicket(v)?stepsCard(v):'')+bodyHtml(v);
 }
 function bodyHtml(v){
   const ev=evItems(v);
@@ -690,6 +713,7 @@ function bodyHtml(v){
         <div class="kv"><span>Technicians</span><span>${esc(v.technician)||'—'}</span></div>
         <div class="kv"><span>Return visit</span><span>${esc(v.returnVisit||'No')}</span></div>
         <div class="kv"><span>Z Invoice No.</span><span>${esc(v.billingRef)||'—'}</span></div>
+        ${(()=>{ const a=assetFor(v); if(!a) return ''; const w=warranty(a); return `<div class="kv"><span>Registered asset</span><span>${esc(a.serial?'S/N '+a.serial:a.model)}${w?` · <span class="chip ${w.cls}" style="height:20px">${esc(w.label)}</span>`:''}</span></div>`; })()}
         ${v.internalNotes?`<div class="kv"><span>Internal notes</span><span>${esc(v.internalNotes)}</span></div>`:''}
       </div></div>
       <div class="card"><div class="card-h"><h3>Close-out checks</h3><span class="sub">${missingChecks(v).length?missingChecks(v).length+' missing':'Ready'}</span></div><div class="card-b">${checksHtml(v)}</div></div>
@@ -777,6 +801,7 @@ function partsView(){
   return `<div class="page">
     <div class="phead"><div><h1>Parts &amp; stock</h1><div class="sub">${pui.dmOnly?'Dubai Mall tickets':'All sites'} · ${all.length} part entries · ${rows.filter(r=>r.out).length} parts outstanding</div></div>
       <div class="tabs" role="group" aria-label="Scope"><button data-dm="1" aria-pressed="${pui.dmOnly}">Dubai Mall</button><button data-dm="0" aria-pressed="${!pui.dmOnly}">All sites</button></div></div>
+    ${inventoryHtml()}
     <div class="pgrid">
       <div class="card"><div class="card-h"><h3>Parts register</h3><span class="sub">Needed, used and received</span></div>
         <div class="card-b" style="border-bottom:1px solid var(--line)"><form id="pform" class="fgrid" style="grid-template-columns:repeat(2,minmax(0,1fr))">
@@ -810,11 +835,72 @@ function partsView(){
   </div>`;
 }
 
+/* ---------- inventory ---------- */
+const invState=i=>(+i.stock||0)<=0?{cls:'cancelled',label:'Out of stock'}:(+i.stock||0)<=(+i.min||0)?{cls:'review',label:'Low stock'}:{cls:'completed',label:'In stock'};
+const aed=n=>'AED '+(Math.round(n*100)/100).toLocaleString('en-US',{minimumFractionDigits:0,maximumFractionDigits:2});
+function inventoryHtml(){
+  const items=Object.values(inventory).sort((a,b)=>{ const o=x=>({cancelled:0,review:1,completed:2})[invState(x).cls]; return o(a)-o(b)||(a.partNo||'').localeCompare(b.partNo||''); });
+  const low=items.filter(i=>invState(i).cls!=='completed').length, value=items.reduce((t,i)=>t+(+i.stock||0)*(+i.unitValue||0),0);
+  const f=iui.form, fv=k=>esc((f||{})[k]??'');
+  return `<div class="card"><div class="card-h" style="flex-wrap:wrap"><div><h3>Inventory</h3><div class="sub">${items.length} parts · ${low?`<b style="color:var(--bad)">${low} low or out of stock</b>`:'all above minimum'} · stock value ${aed(value)}</div></div><button class="btn primary" data-act="newinv">+ Add part</button></div>
+    ${f?`<form id="iform" class="card-b" style="border-bottom:1px solid var(--line)"><div class="fgrid">
+      <label>Part number<input class="field" name="partNo" required value="${fv('partNo')}" placeholder="e.g. 1311753"></label>
+      <label class="span2">Description<input class="field" name="description" required value="${fv('description')}" placeholder="e.g. Panel bracket / hinge"></label>
+      <label>Location<input class="field" name="location" value="${fv('location')}" placeholder="e.g. Van 2, Store shelf B"></label>
+      <label>In stock<input class="field" type="number" min="0" name="stock" required value="${fv('stock')}"></label>
+      <label>Minimum<input class="field" type="number" min="0" name="min" value="${fv('min')}" placeholder="Reorder at"></label>
+      <label>Unit value (AED)<input class="field" type="number" min="0" step="0.01" name="unitValue" value="${fv('unitValue')}"></label>
+      <label>Supplier<input class="field" name="supplier" value="${fv('supplier')}" placeholder="e.g. Kohler UAE"></label>
+    </div><div class="row" style="justify-content:flex-end;margin-top:14px"><button type="button" class="btn" data-act="closeinv">Cancel</button><button type="submit" class="btn primary">${f.id?'Save part':'Add part'}</button></div></form>`:''}
+    ${items.length?`<div class="tblwrap"><table class="tbl"><thead><tr><th>Part</th><th>Location</th><th>Stock</th><th>Min</th><th>Status</th><th>Value</th><th>Supplier</th><th></th></tr></thead><tbody>${items.map(i=>{ const st=invState(i); return `<tr><td><b class="num">${esc(i.partNo)}</b><div class="sub">${esc(i.description)}</div></td><td>${esc(i.location)||'—'}</td><td><span class="qty"><button data-iadj="${esc(i.id)}" data-d="-1" aria-label="Remove one">−</button><span class="num" style="font-weight:700">${+i.stock||0}</span><button data-iadj="${esc(i.id)}" data-d="1" aria-label="Add one">+</button></span></td><td class="num">${+i.min||0}</td><td><span class="chip ${st.cls}">${st.label}</span></td><td class="num">${i.unitValue?aed((+i.stock||0)*(+i.unitValue||0)):'—'}</td><td>${esc(i.supplier)||'—'}</td><td style="text-align:right;white-space:nowrap"><button class="linkbtn" data-iedit="${esc(i.id)}">Edit</button> <button class="linkbtn danger" data-idel="${esc(i.id)}">${iui.del===i.id?'Confirm':'Delete'}</button></td></tr>`; }).join('')}</tbody></table></div>`:'<div class="empty">No parts in inventory yet. Add the parts you keep in the store or vans, with a minimum level for reorder warnings.</div>'}
+  </div>`;
+}
+
+/* ---------- asset register ---------- */
+const akey=(site,model)=>((site||'').split('|')[0].trim().toLowerCase())+'::'+(model||'').trim().toLowerCase();
+const assetFor=v=>v.model?Object.values(assetReg).find(a=>akey(a.site,a.model)===akey(v.site,v.model)):null;
+function warranty(a){ if(!a.warranty) return null; const d=(new Date(a.warranty+'T23:59:59+04:00')-Date.now())/86400000; return d<0?{cls:'cancelled',label:'Warranty expired'}:d<60?{cls:'review',label:'Expires in '+Math.ceil(d)+'d'}:{cls:'completed',label:'In warranty'}; }
+const assetHistory=a=>Object.values(visits).filter(v=>v.model&&akey(v.site,v.model)===akey(a.site,a.model)).sort((x,y)=>(y.scheduled||'').localeCompare(x.scheduled||''));
+function assetsView(){
+  const q=aui.q.trim().toLowerCase();
+  const reg=Object.values(assetReg).filter(a=>!q||[a.site,a.location,a.product,a.model,a.serial,a.notes].join(' ').toLowerCase().includes(q)).sort((a,b)=>(a.site||'').localeCompare(b.site||'')||(a.model||'').localeCompare(b.model||''));
+  const regKeys=new Set(Object.values(assetReg).map(a=>akey(a.site,a.model)));
+  const found={}; Object.values(visits).forEach(v=>{ if(!v.model) return; const k=akey(v.site,v.model); if(regKeys.has(k)) return; const f=found[k]||(found[k]={site:(v.site||'').split('|')[0].trim(),model:v.model,product:v.product,category:v.category,n:0,last:''}); f.n++; if((v.scheduled||'')>f.last) f.last=v.scheduled||''; });
+  const det=Object.values(found).filter(f=>!q||[f.site,f.model,f.product].join(' ').toLowerCase().includes(q)).sort((a,b)=>b.n-a.n);
+  const wcount={exp:Object.values(assetReg).filter(a=>(warranty(a)||{}).cls==='cancelled').length,soon:Object.values(assetReg).filter(a=>(warranty(a)||{}).cls==='review').length};
+  const f=aui.form, fv=k=>esc((f||{})[k]??'');
+  return `<div class="page">
+    <div class="phead"><div><h1>Assets</h1><div class="sub">${Object.keys(assetReg).length} registered Kohler units · ${wcount.soon} warranties expiring soon · ${wcount.exp} expired</div></div>
+      <div class="actions"><label class="search">${svg('search',16)}<input id="a-q" class="field" type="search" placeholder="Search site, model, serial" value="${esc(aui.q)}" autocomplete="off" aria-label="Search assets"></label><button class="btn primary" data-act="newasset">+ Register asset</button></div></div>
+    ${f?`<div class="card"><div class="card-h"><h3>${f.id?'Edit asset':'Register asset'}</h3><button class="btn ghost" data-act="closeasset" aria-label="Close">${svg('x',18)}</button></div>
+      <form id="aform" class="card-b"><div class="fgrid">
+        <label class="span2">Site<input class="field" name="site" required value="${fv('site')}" placeholder="e.g. Dubai Mall"></label>
+        <label class="span2">Location at site<input class="field" name="location" value="${fv('location')}" placeholder="e.g. Washroom L2 east, cubicle 4"></label>
+        <label>Product<input class="field" name="product" value="${fv('product')}" placeholder="e.g. Shower Toilet"></label>
+        <label>Model / SKU<input class="field" name="model" required value="${fv('model')}" placeholder="K-76395-0"></label>
+        <label>Serial number<input class="field" name="serial" value="${fv('serial')}" placeholder="From the unit label"></label>
+        <label>Category<input class="field" name="category" value="${fv('category')}" placeholder="e.g. Intelligent Toilet"></label>
+        <label>Installed on<input class="field" type="date" name="installed" value="${fv('installed')}"></label>
+        <label>Warranty until<input class="field" type="date" name="warranty" value="${fv('warranty')}"></label>
+        <label class="span2">Notes<input class="field" name="notes" value="${fv('notes')}" placeholder="Optional"></label>
+      </div><div class="row" style="justify-content:flex-end;margin-top:16px"><button type="button" class="btn" data-act="closeasset">Cancel</button><button type="submit" class="btn primary">${f.id?'Save changes':'Register asset'}</button></div></form></div>`:''}
+    <div class="card"><div class="card-h"><h3>Registered units</h3><span class="sub">Select a unit to see its service history</span></div>
+      ${reg.length?`<div class="tblwrap"><table class="tbl"><thead><tr><th>Unit</th><th>Site · location</th><th>Serial</th><th>Installed</th><th>Warranty</th><th>Visits</th><th></th></tr></thead><tbody>${reg.map(a=>{ const w=warranty(a), h=assetHistory(a), open=aui.open===a.id;
+        return `<tr data-aexp="${esc(a.id)}" style="cursor:pointer;${open?'background:var(--goldSoft)':''}"><td><b>${esc(a.product||'Unit')}</b><div class="mono">${esc(a.model)}</div></td><td>${esc(a.site)}${a.location?`<div class="sub">${esc(a.location)}</div>`:''}</td><td class="num">${esc(a.serial)||'—'}</td><td class="num">${a.installed?esc(dmy(a.installed+'T08:00:00Z')):'—'}</td><td>${w?`<span class="chip ${w.cls}">${esc(w.label)}</span><div class="sub num">${esc(dmy(a.warranty+'T08:00:00Z'))}</div>`:'<span class="sub">Not recorded</span>'}</td><td class="num">${h.length}${h[0]?`<div class="sub">Last ${esc(dm(h[0].scheduled))}</div>`:''}</td><td style="text-align:right;white-space:nowrap"><button class="linkbtn" data-aedit="${esc(a.id)}">Edit</button> <button class="linkbtn danger" data-adel="${esc(a.id)}">${aui.del===a.id?'Confirm':'Delete'}</button></td></tr>
+        ${open?`<tr><td colspan="7" style="background:var(--surface2)">${h.length?`<div class="lbl" style="margin-bottom:6px">Service history · ${h.length} visits</div>${h.slice(0,12).map(v=>`<div class="kv"><span><button class="linkbtn" data-open="${esc(v.id)}">#${esc(v.id)}</button> ${esc(dm(v.scheduled))} · ${esc(v.issue||v.type||'Visit')}</span><span>${chip(v)}${v.outcome?' <span class="sub">'+esc(v.outcome)+'</span>':''}</span></div>`).join('')}`:'<div class="sub">No tickets match this site and model yet.</div>'}${a.notes?`<div class="sub" style="margin-top:8px">Notes: ${esc(a.notes)}</div>`:''}</td></tr>`:''}`; }).join('')}</tbody></table></div>`:`<div class="empty">${q?'No registered units match this search.':'No units registered yet. Register one, or pick from the units found in tickets below.'}</div>`}
+    </div>
+    <div class="card"><div class="card-h"><h3>Found in tickets, not registered</h3><span class="sub">${det.length} site and model combinations</span></div>
+      ${det.length?`<div class="tblwrap"><table class="tbl"><thead><tr><th>Unit</th><th>Site</th><th>Visits</th><th>Last visit</th><th></th></tr></thead><tbody>${det.slice(0,40).map((d,i)=>`<tr><td><b>${esc(d.product||'Unit')}</b><div class="mono">${esc(d.model)}</div></td><td>${esc(d.site||'—')}</td><td class="num">${d.n}</td><td class="num">${esc(dm(d.last))||'—'}</td><td style="text-align:right"><button class="btn" style="height:32px" data-areg="${i}">Register</button></td></tr>`).join('')}</tbody></table></div>`:'<div class="empty">Every unit seen in tickets is registered.</div>'}
+    </div>
+  </div>`;
+}
+let detCache=[];
+
 /* ---------- access gate ---------- */
 function gateHtml(){
   const sent=requested||(me.id&&requests[me.id]);
   return `<div class="gate"><div class="card">${svg('admin',34)}<h2>You don't have access yet</h2>
-    <div class="sub" style="font-size:14px">Signed in as <b style="color:var(--ink)">${esc(me.name||'your Claude account')}</b>. An administrator at Ziar Imaar needs to give you the Office or Technician role.</div>
+    <div class="sub" style="font-size:14px">Signed in as <b style="color:var(--ink)">${esc(me.name||'your Claude account')}</b>. An administrator at Ziar Imaar needs to give you a role (Office, Technician or Viewer).</div>
     ${!me.id?'<div class="sub">Sign in to your Claude account to request access.</div>':sent?'<div class="banner ok" style="width:100%;justify-content:center"><div><b>Request sent</b>This page opens by itself as soon as an administrator gives you a role.</div></div>':'<button class="btn primary lg" data-act="reqaccess">Request access</button>'}
   </div></div>`;
 }
@@ -829,21 +915,21 @@ function adminView(){
   if(adminTab==='users') body=`<div class="pgrid">
     <div class="card"><div class="card-h"><h3>People with access</h3><span class="sub">${assigned.length} assigned</span></div>
       <div class="banner gold" style="margin:12px 16px 4px;border-radius:9px"><div><b>Admins</b>The owner and anyone given Editor access from the Share menu are admins automatically.</div></div>
-      <div>${assigned.length?assigned.map(([id,r])=>personRow(id,[`<div class="sub">Assigned ${esc(dm(r.at))}${r.by?' by '+esc(nameOf(r.by)):''}</div>`,`<span style="display:flex;gap:8px;align-items:center"><select class="field" data-setrole="${esc(id)}" style="margin:0;width:auto;padding:6px 30px 6px 10px">${['office','technician'].map(x=>`<option value="${x}" ${r.role===x?'selected':''}>${ROLE_NAME[x]}</option>`).join('')}</select><button class="linkbtn danger" data-unrole="${esc(id)}">Remove</button></span>`])).join(''):'<div class="empty">No Office or Technician users yet. Add people on the right, or approve access requests.</div>'}</div></div>
+      <div>${assigned.length?assigned.map(([id,r])=>personRow(id,[`<div class="sub">Assigned ${esc(dm(r.at))}${r.by?' by '+esc(nameOf(r.by)):''}</div>`,`<span style="display:flex;gap:8px;align-items:center"><select class="field" data-setrole="${esc(id)}" style="margin:0;width:auto;padding:6px 30px 6px 10px">${['office','technician','viewer'].map(x=>`<option value="${x}" ${r.role===x?'selected':''}>${ROLE_NAME[x]}</option>`).join('')}</select><button class="linkbtn danger" data-unrole="${esc(id)}">Remove</button></span>`])).join(''):'<div class="empty">No Office, Technician or Viewer users yet. Add people on the right, or approve access requests.</div>'}</div></div>
     <div style="display:flex;flex-direction:column;gap:16px">
       <div class="card"><div class="card-h"><h3>Add a person</h3><span class="sub">From your organization</span></div><div class="card-b">
         <label class="search" style="max-width:none">${svg('search',16)}<input id="p-q" class="field" type="search" placeholder="Search by name" value="${esc(psearch.q)}" autocomplete="off" aria-label="Search people"></label>
         <div id="p-res">${resultsHtml()}</div></div></div>
       <div class="card"><div class="card-h"><h3>Access requests</h3><span class="sub">${pend.length} pending</span></div>
-        <div>${pend.length?pend.map(([id,q])=>personRow(id,[`<div class="sub">Requested ${esc(dmhm(q.at))}</div>`,`<span style="display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end"><button class="btn" style="height:32px" data-grant="${esc(id)}" data-r="office">Office</button><button class="btn" style="height:32px" data-grant="${esc(id)}" data-r="technician">Technician</button><button class="linkbtn danger" data-dismiss="${esc(id)}">Dismiss</button></span>`])).join(''):'<div class="empty">No pending requests.</div>'}</div></div>
+        <div>${pend.length?pend.map(([id,q])=>personRow(id,[`<div class="sub">Requested ${esc(dmhm(q.at))}</div>`,`<span style="display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end"><button class="btn" style="height:32px" data-grant="${esc(id)}" data-r="office">Office</button><button class="btn" style="height:32px" data-grant="${esc(id)}" data-r="technician">Technician</button><button class="btn" style="height:32px" data-grant="${esc(id)}" data-r="viewer">Viewer</button><button class="linkbtn danger" data-dismiss="${esc(id)}">Dismiss</button></span>`])).join(''):'<div class="empty">No pending requests.</div>'}</div></div>
     </div></div>`;
   if(adminTab==='roles'){
-    const pages=[['dashboard','Dashboard'],['tickets','Tickets · record visits'],['review','Review queue · close visits'],['parts','Parts & stock'],['admin','Administration']];
-    const extra=[['Create new visits',['admin','office']],['Export CSV',['admin','office']],['Download service reports',['admin','office','technician']],['Assign roles',['admin']],['Read the audit log',['admin']]];
+    const pages=[['dashboard','Dashboard'],['tickets','Tickets'],['review','Review queue · close visits'],['parts','Parts, inventory & stock'],['assets','Asset register'],['admin','Administration']];
+    const extra=[['See all tickets',['admin','office','viewer']],['Update any open ticket',['admin','office']],['Update tickets assigned to them',['admin','office','technician']],['Assign technicians',['admin','office']],['Create new visits',['admin','office']],['Export CSV',['admin','office']],['Download service reports',['admin','office','technician','viewer']],['Assign roles',['admin']],['Read the audit log',['admin']]];
     const yes=b=>b?'<span class="yes">✓</span>':'<span class="no">—</span>';
-    body=`<div class="card"><div class="card-h"><h3>What each role can do</h3></div><div class="tblwrap"><table class="tbl matrix"><thead><tr><th>Permission</th><th>Admin</th><th>Office</th><th>Technician</th></tr></thead><tbody>
-      ${pages.map(([k,l])=>`<tr><td>${l}</td>${['admin','office','technician'].map(r=>`<td>${yes(PERMS[r].includes(k))}</td>`).join('')}</tr>`).join('')}
-      ${extra.map(([l,rs])=>`<tr><td>${l}</td>${['admin','office','technician'].map(r=>`<td>${yes(rs.includes(r))}</td>`).join('')}</tr>`).join('')}
+    body=`<div class="card"><div class="card-h"><h3>What each role can do</h3></div><div class="tblwrap"><table class="tbl matrix"><thead><tr><th>Permission</th><th>Admin</th><th>Office</th><th>Technician</th><th>Viewer</th></tr></thead><tbody>
+      ${pages.map(([k,l])=>`<tr><td>${l}</td>${['admin','office','technician','viewer'].map(r=>`<td>${yes(PERMS[r].includes(k))}</td>`).join('')}</tr>`).join('')}
+      ${extra.map(([l,rs])=>`<tr><td>${l}</td>${['admin','office','technician','viewer'].map(r=>`<td>${yes(rs.includes(r))}</td>`).join('')}</tr>`).join('')}
     </tbody></table></div><div class="card-b sub">Role changes and the audit log are protected by the shared store: only admins can change roles or read the log. Who sees which page is applied by the app for each signed-in person.</div></div>`;
   }
   if(adminTab==='audit') body=`<div class="card"><div class="card-h"><h3>Audit log</h3><span class="sub">Latest ${audit.length} actions</span></div>
@@ -854,7 +940,7 @@ function adminView(){
 function resultsHtml(){
   if(!psearch.q.trim()) return '<div class="sub" style="margin-top:8px">Type a name to find people in your organization.</div>';
   if(!psearch.res.length) return '<div class="sub" style="margin-top:8px">No one found with that name.</div>';
-  return `<div class="results">${psearch.res.map(p=>`<div class="person">${p.avatarUrl?`<img class="av" src="${esc(p.avatarUrl)}" alt="">`:`<span class="avatar">${esc(initials(p.name))}</span>`}<div style="flex:1;min-width:0"><div style="font-weight:600">${esc(p.name||'Unnamed')}</div>${roles[p.id]?`<span class="rolepill ${esc(roles[p.id].role)}">${ROLE_NAME[roles[p.id].role]}</span>`:p.isMe?'<span class="sub">You</span>':''}</div><span style="display:flex;gap:6px"><button class="btn" style="height:32px" data-grant="${esc(p.id)}" data-r="office" data-nm="${esc(p.name)}">Office</button><button class="btn" style="height:32px" data-grant="${esc(p.id)}" data-r="technician" data-nm="${esc(p.name)}">Technician</button></span></div>`).join('')}</div>`;
+  return `<div class="results">${psearch.res.map(p=>`<div class="person">${p.avatarUrl?`<img class="av" src="${esc(p.avatarUrl)}" alt="">`:`<span class="avatar">${esc(initials(p.name))}</span>`}<div style="flex:1;min-width:0"><div style="font-weight:600">${esc(p.name||'Unnamed')}</div>${roles[p.id]?`<span class="rolepill ${esc(roles[p.id].role)}">${ROLE_NAME[roles[p.id].role]}</span>`:p.isMe?'<span class="sub">You</span>':''}</div><span style="display:flex;gap:6px"><button class="btn" style="height:32px" data-grant="${esc(p.id)}" data-r="office" data-nm="${esc(p.name)}">Office</button><button class="btn" style="height:32px" data-grant="${esc(p.id)}" data-r="technician" data-nm="${esc(p.name)}">Technician</button><button class="btn" style="height:32px" data-grant="${esc(p.id)}" data-r="viewer" data-nm="${esc(p.name)}">Viewer</button></span></div>`).join('')}</div>`;
 }
 async function setRole(id,role,label){
   if(!db) return;
@@ -889,6 +975,7 @@ function modalHtml(){
       <label>Visit type${sel('type',['Inspection','Repair','Installation','Maintenance','Training'],'Inspection')}</label>
       <label class="span2">Reported issue<input class="field" name="issue" required value="${val('issue')}" placeholder="What the customer reported"></label>
       <label>Scheduled (Dubai time)<input class="field" type="datetime-local" name="scheduled" required value="${esc(f.scheduled||defDt)}"></label>
+      <label class="span2">Assign to<select class="field" name="assignedTo"><option value="">Unassigned</option>${techIds().map(id=>`<option value="${esc(id)}" ${f.assignedTo===id?'selected':''}>${esc(nameOf(id)||'Technician')}</option>`).join('')}</select></label>
       <label>Rate (AED)<input class="field" type="number" name="rate" min="0" step="10" value="${esc(f.rate??'')}" placeholder="Optional"></label>
     </div><div class="row" style="justify-content:flex-end;margin-top:18px"><button type="button" class="btn" data-act="closemodal">Cancel</button><button type="submit" class="btn primary">Create visit</button></div></form>
   </div></div>`;
@@ -945,8 +1032,9 @@ function render(){
   const a=access();
   if(a==='loading'){ $app.innerHTML='<div class="gate"><div class="card"><span class="spin" style="color:var(--navy)"></span><div class="sub">Checking your access…</div></div></div>'; return; }
   if(a==='none'){ $app.innerHTML=gateHtml(); document.getElementById('modal').innerHTML=''; return; }
+  if(!listInit){ listInit=true; if(a==='technician') list.status='mine'; }
   if(!can(route)){ route=PERMS[a][0]; try{ history.replaceState(null,'','#'+(route==='tickets'&&sel?'t'+sel:route)); }catch(e){} }
-  $app.innerHTML=route==='tickets'?ticketsView():route==='review'?reviewView():route==='parts'?partsView():route==='admin'?adminView():dashView();
+  $app.innerHTML=route==='tickets'?ticketsView():route==='review'?reviewView():route==='parts'?partsView():route==='admin'?adminView():route==='assets'?assetsView():dashView();
   document.getElementById('modal').innerHTML=modalHtml();
   if(route==='tickets'&&mode==='visit') initSig();
 }
@@ -985,12 +1073,14 @@ document.addEventListener('input',e=>{
   if(t.id==='o-inv'&&rev.edit) rev.edit.inv=t.value;
   if(t.id==='o-int'&&rev.edit) rev.edit.int=t.value;
   if(t.id==='p-q'){ psearch.q=t.value; clearTimeout(psearch.t); psearch.t=setTimeout(async()=>{ if(!userApi||!userApi.search||!psearch.q.trim()){ psearch.res=[]; } else { try{ psearch.res=(await userApi.search(psearch.q.trim())).slice(0,8); psearch.res.forEach(p=>{ if(p.name) names[p.id]=p.name; }); }catch(e){ psearch.res=[]; } } const el=document.getElementById('p-res'); if(el) el.innerHTML=resultsHtml(); },250); }
+  if(t.id==='a-q'){ aui.q=t.value; clearTimeout(aui.t); aui.t=setTimeout(()=>{ const pos=t.selectionStart; render(); const el=document.getElementById('a-q'); if(el){ el.focus(); try{ el.setSelectionRange(pos,pos); }catch(_){} } },200); }
   if(t.id==='l-q'){ list.q=t.value; list.limit=60; document.getElementById('l-body').innerHTML=listBody(); }
   if(t.form&&t.form.id==='nvform'&&t.name) nform[t.name]=t.value;
 });
 document.addEventListener('change',async e=>{
   const t=e.target;
   if(t.form&&t.form.id==='nvform'&&t.name) nform[t.name]=t.value;
+  if(t.dataset&&t.dataset.assign){ const ov=visits[t.dataset.assign]; if(!ov) return; const n=clone(ov); n.assignedTo=t.value; await save(n,t.value?'Assigned to '+(nameOf(t.value)||'technician'):'Unassigned technician'); toast(t.value?'#'+n.id+' assigned to '+(nameOf(t.value)||'technician'):'#'+n.id+' is unassigned'); return; }
   if(t.dataset&&t.dataset.setrole){ await setRole(t.dataset.setrole,t.value); return; }
   if(t.id==='s-month'){ pui.month=t.value; render(); return; }
   if(t.id!=='f-evidence') return;
@@ -1013,9 +1103,13 @@ document.addEventListener('submit',async e=>{
   if(id==='nvform'){
     const vid=nextId(), sched=new Date(g('scheduled')+':00+04:00');
     if(isNaN(sched)){ toast('Pick a valid date and time for the visit.'); return; }
-    const v={id:vid,ref:refFor(vid),site:g('site'),region:g('region')||'Dubai',contact:g('contact'),address:g('address'),product:g('product'),model:g('model'),category:g('category'),type:g('type')||'Inspection',priority:g('priority')||'Normal',issue:g('issue'),scheduled:sched.toISOString(),rate:Number(g('rate'))||0,
+    const v={id:vid,ref:refFor(vid),site:g('site'),region:g('region')||'Dubai',contact:g('contact'),address:g('address'),product:g('product'),model:g('model'),category:g('category'),type:g('type')||'Inspection',priority:g('priority')||'Normal',issue:g('issue'),scheduled:sched.toISOString(),rate:Number(g('rate'))||0,assignedTo:g('assignedTo'),
       status:'new',prepared:false,contactedAt:null,arrived:null,finished:null,findings:'',work:'',nextAction:'',outcome:'',returnVisit:'No',technician:'',internalNotes:'',parts:[],evidence:[],billingRef:'',history:[hist('new')]};
     modal=null; nform={}; list.status='open'; route='tickets'; sel=vid; mode='view'; await save(v); logAction('Created visit',{ticket:vid}); go('tickets',vid); toast('Visit #'+vid+' created'); return; }
+  if(id==='iform'){ const d={partNo:g('partNo'),description:g('description'),location:g('location'),stock:Math.max(0,Number(g('stock'))||0),min:Math.max(0,Number(g('min'))||0),unitValue:Number(g('unitValue'))||0,supplier:g('supplier'),at:new Date().toISOString()};
+    const iid=(iui.form&&iui.form.id)||newId('i'); logAction(iui.form&&iui.form.id?'Updated inventory part':'Added inventory part',{detail:d.partNo+' '+d.description+' · stock '+d.stock}); iui.form=null; await saveDoc('inventory',iid,d,inventory); toast('Part saved'); return; }
+  if(id==='aform'){ const d={site:g('site'),location:g('location'),product:g('product'),model:g('model'),serial:g('serial'),category:g('category'),installed:g('installed'),warranty:g('warranty'),notes:g('notes'),at:new Date().toISOString()}; if(me.id) d.by=me.id;
+    const aid=(aui.form&&aui.form.id)||newId('a'); logAction(aui.form&&aui.form.id?'Updated asset':'Registered asset',{detail:d.model+' at '+d.site+(d.serial?' (S/N '+d.serial+')':'')}); aui.form=null; await saveDoc('assets',aid,d,assetReg); toast('Asset saved'); return; }
   if(id==='pform'){ if(!g('ticket')){ toast('Choose the ticket these parts belong to.'); return; }
     const d={ticket:g('ticket'),type:g('type'),name:g('name'),sku:g('sku'),qty:Math.max(1,parseInt(g('qty'))||1),note:g('note'),at:new Date().toISOString()}; if(me.id) d.by=me.id;
     pui.type=d.type; logAction('Added part entry',{ticket:d.ticket,detail:d.type+': '+d.name+' × '+d.qty}); await saveDoc('parts',newId('p'),d,parts); toast(d.type+': '+d.name+' added'); return; }
@@ -1023,12 +1117,14 @@ document.addEventListener('submit',async e=>{
     logAction('Recorded stock count',{detail:d.item+' ('+d.month+'): '+d.counted+' of '+d.expected}); await saveDoc('stock',newId('s'),d,stock); toast('Count recorded for '+d.item); return; }
 });
 document.addEventListener('keydown',e=>{
+  if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='k'&&can('tickets')&&!['none','loading'].includes(access())){ e.preventDefault(); if(modal){ modal=null; } if(route!=='tickets'||sel){ sel=null; mode='view'; draft=null; go('tickets'); } const i=document.getElementById('l-q'); if(i){ i.focus(); i.select(); } return; }
   if(e.key==='Escape'&&modal){ modal=null; render(); return; }
   if(route!=='review'||e.metaKey||e.ctrlKey||e.altKey||typing()) return;
   const k=e.key.toLowerCase(); if(k!=='j'&&k!=='k') return;
   const q=reviewQueue(); const i=q.findIndex(x=>x.id===rev.id)+(k==='j'?1:-1); if(q[i]){ rev.id=q[i].id; rev.note=''; rev.confirm=null; render(); }
 });
 document.addEventListener('click',async e=>{
+  const tr=e.target.closest('tr[data-aexp]'); if(tr&&!e.target.closest('button')){ aui.open=aui.open===tr.dataset.aexp?null:tr.dataset.aexp; render(); return; }
   const b=e.target.closest('button,[data-act]'); if(!b) return;
   const ds=b.dataset, v=sel&&visits[sel];
   if(ds.act==='closemodal'){ if(b.classList.contains('overlay')&&e.target!==b) return; modal=null; render(); return; }
@@ -1043,6 +1139,17 @@ document.addEventListener('click',async e=>{
   if(ds.filter){ list.status=ds.filter; list.limit=60; render(); return; }
   if(ds.pdf){ const pv=visits[ds.pdf]; if(pv) await downloadReport(pv); return; }
   if(ds.rsel){ rev.id=ds.rsel; rev.note=''; rev.confirm=null; render(); return; }
+  if(ds.unassigned){ list.status='unassigned'; go('tickets'); return; }
+  if(ds.act==='newinv'){ iui.form={}; render(); return; }
+  if(ds.act==='closeinv'){ iui.form=null; render(); return; }
+  if(ds.iedit){ iui.form=clone(inventory[ds.iedit]); render(); return; }
+  if(ds.idel){ if(iui.del!==ds.idel){ iui.del=ds.idel; render(); return; } const it=inventory[ds.idel]; iui.del=null; logAction('Deleted inventory part',{detail:it.partNo+' '+it.description}); await delDoc('inventory',ds.idel,inventory); toast('Part deleted'); return; }
+  if(ds.iadj){ const it=inventory[ds.iadj]; if(!it) return; const n=Math.max(0,(+it.stock||0)+(+ds.d)); const {id,...rest}=it; logAction('Adjusted stock',{detail:it.partNo+': '+(+it.stock||0)+' → '+n}); await saveDoc('inventory',ds.iadj,Object.assign(rest,{stock:n,at:new Date().toISOString()}),inventory); if(n<=(+it.min||0)) toast(it.partNo+' is '+(n<=0?'out of stock':'below minimum')); return; }
+  if(ds.act==='newasset'){ aui.form={}; render(); window.scrollTo(0,0); return; }
+  if(ds.act==='closeasset'){ aui.form=null; render(); return; }
+  if(ds.aedit){ aui.form=clone(assetReg[ds.aedit]); render(); window.scrollTo(0,0); return; }
+  if(ds.adel){ if(aui.del!==ds.adel){ aui.del=ds.adel; render(); return; } const a=assetReg[ds.adel]; aui.del=null; logAction('Deleted asset',{detail:(a.model||'')+' at '+(a.site||'')}); await delDoc('assets',ds.adel,assetReg); toast('Asset deleted'); return; }
+  if(ds.areg!==undefined){ const tr=b.closest('tr'); const cells=tr.querySelectorAll('td'); aui.form={product:cells[0].querySelector('b').textContent,model:cells[0].querySelector('.mono').textContent,site:cells[1].textContent==='—'?'':cells[1].textContent}; const v=Object.values(visits).find(x=>x.model===aui.form.model&&akey(x.site,x.model)===akey(aui.form.site,aui.form.model)); if(v&&v.category) aui.form.category=v.category; render(); window.scrollTo(0,0); return; }
   if(ds.atab){ adminTab=ds.atab; render(); return; }
   if(ds.grant){ if(ds.nm) names[ds.grant]=ds.nm; await setRole(ds.grant,ds.r,ds.nm); return; }
   if(ds.unrole){ await setRole(ds.unrole,null); return; }
@@ -1052,6 +1159,7 @@ document.addEventListener('click',async e=>{
   if(ds.dm){ pui.dmOnly=ds.dm==='1'; render(); return; }
   if(ds.delpart){ if(pui.del!==ds.delpart){ pui.del=ds.delpart; render(); return; } pui.del=null; logAction('Deleted part entry',{ticket:(parts[ds.delpart]||{}).ticket,detail:(parts[ds.delpart]||{}).name}); await delDoc('parts',ds.delpart,parts); toast('Entry deleted'); return; }
   if(ds.delstock){ if(pui.del!==ds.delstock){ pui.del=ds.delstock; render(); return; } pui.del=null; logAction('Deleted stock count',{detail:(stock[ds.delstock]||{}).item}); await delDoc('stock',ds.delstock,stock); toast('Count deleted'); return; }
+  if(ds.step&&v&&!canEditTicket(v)) return;
   if(ds.step&&v){
     if(ds.step==='prepare'){ const n=clone(v); n.prepared=!n.prepared; n.contactedAt=n.prepared?new Date().toISOString():null; await save(n,n.prepared?'Marked job prepared':'Reopened prepare step'); toast(n.prepared?'Marked as contacted':'Prepare step reopened'); return; }
     mode=ds.step; draft=clone(v); draft.parts=draft.parts||[]; draft.evidence=evItems(draft); if(!draft.technician&&me.name) draft.technician=me.name; render(); return;
@@ -1085,7 +1193,7 @@ document.addEventListener('click',async e=>{
     if(act==='savebilling') n.billingRef=d.billingRef||'';
     mode='view'; draft=null; await save(n,{savevisit:'Updated visit report',saveparts:'Updated parts used',savebilling:'Updated Z invoice no.'}[act]); toast('Saved'); return;
   }
-  if(act==='submit'&&v){ if(!canSubmit(v)) return; const n=clone(v); n.status='review'; n.history=[...(n.history||[]),hist('review')]; await save(n,'Submitted for review'); toast('Submitted for review'); return; }
+  if(act==='submit'&&v){ if(!canSubmit(v)||!canEditTicket(v)) return; const n=clone(v); n.status='review'; n.history=[...(n.history||[]),hist('review')]; await save(n,'Submitted for review'); toast('Submitted for review'); return; }
   if(act==='unconfirm'){ rev.confirm=null; render(); return; }
   if(act==='savedetails'){ const ov=visits[rev.id]; if(!ov||!rev.edit) return; const n=clone(ov); n.billingRef=rev.edit.inv.trim(); n.internalNotes=rev.edit.int.trim(); await save(n,'Updated office details'); toast('Details saved for #'+n.id); return; }
   if(act==='csv'){ try{ await downloadsApi.save({filename:'ziar-imaar-kohler-tickets-'+dayKey(new Date().toISOString())+'.csv',data:toCsv()}); toast('CSV saved'); }catch(err){ if(!(err&&err.code==='declined')) toast('Could not export the CSV. Try again in a moment.'); } return; }
@@ -1143,8 +1251,8 @@ function goDemo(){ if(loaded) return; demo=true; loaded=true; visits=demoData();
   use('sample').then(s=>{ sampleApi=s; safeRender(); });
   use('downloads').then(d=>{ downloadsApi=d; safeRender(); });
   if(!db) return;
-  const sub=(col,store)=>db.collection(col).onSnapshot(snap=>{ for(const k in store) delete store[k]; snap.docs.forEach(d=>{ const x=d.data(); if(x) store[d.id]=Object.assign({id:d.id},x); }); if(route==='parts') safeRender(); resolveNames(); },()=>{});
-  sub('parts',parts); sub('stock',stock);
+  const sub=(col,store)=>db.collection(col).onSnapshot(snap=>{ for(const k in store) delete store[k]; snap.docs.forEach(d=>{ const x=d.data(); if(x) store[d.id]=Object.assign({id:d.id},x); }); if(route==='parts'||route==='assets'||route==='tickets') safeRender(); resolveNames(); },()=>{});
+  sub('parts',parts); sub('stock',stock); sub('assets',assetReg); sub('inventory',inventory);
   db.collection('roles').onSnapshot(snap=>{ roles={}; snap.docs.forEach(d=>{ const x=d.data(); if(x) roles[d.id]=x; }); rolesLoaded=true; render(); resolveNames(); },()=>{ rolesLoaded=true; render(); });
   db.collection('requests').onSnapshot(snap=>{ requests={}; snap.docs.forEach(d=>{ const x=d.data(); if(x) requests[d.id]=x; }); if(route==='admin'||access()==='none') safeRender(); resolveNames(); },()=>{});
   db.collection('audit').onSnapshot(snap=>{ audit=snap.docs.flatMap(d=>(((d.data()||{}).entries)||[]).map(x=>Object.assign({by:d.id},x))).sort((a,b)=>(b.at||'').localeCompare(a.at||'')).slice(0,300); if(route==='admin') safeRender(); resolveNames(); },()=>{});
