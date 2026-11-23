@@ -10,7 +10,8 @@
   --fg:#eef1f8; --fg2:#cdd6ea; --muted:#9fb0d2; --dim:#7f90b6;
   --accent:#d6a83e; --accent2:#f1d27f; --accentDeep:#a8822c; --chip:#2a3f6e; --chipFg:#e6ecfa; --white:#ffffff;
   --warn:#f3c56a; --ok:#93d9b4; --bad:#f2a0a0; --noteBg:#2a2615;
-  --s-new:#8fb8f0; --s-review:#d6a83e; --s-completed:#5fc49a; --s-recheck:#e9894f; --s-cancelled:#c26b85;
+  --s-new:#3987e5; --s-recheck:#d95926; --s-completed:#199e70; --s-review:#c98500; --s-cancelled:#d55181; /* validated categorical order on the navy surface */
+  --bar:#d6a83e; --grid:#1d3260;
   --sans:Inter,system-ui,-apple-system,"Segoe UI",sans-serif; --brand:Montserrat,Inter,system-ui,sans-serif; --mono:ui-monospace,Menlo,Consolas,monospace;
 }
 html,body{height:100%}
@@ -169,6 +170,51 @@ tbody tr:hover,tbody tr:focus-visible{background:var(--panel)}
 .toast{position:fixed;left:50%;bottom:calc(20px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--sel);border:1px solid var(--accent);color:var(--white);padding:10px 16px;border-radius:10px;font-size:14px;z-index:20;max-width:calc(100% - 32px)}
 .spin{display:inline-block;width:12px;height:12px;border:2px solid currentColor;border-right-color:transparent;border-radius:50%;animation:sp .8s linear infinite}
 @keyframes sp{to{transform:rotate(360deg)}}
+/* charts */
+.charts{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}
+.chart{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:16px;display:flex;flex-direction:column;gap:12px;min-width:0}
+.chart h3{margin:0;font-size:14px;font-weight:600}
+.chart .cap{font-size:12px;color:var(--muted);margin-top:2px}
+.colplot{position:relative;height:180px;margin-left:28px}
+.colplot .gl{position:absolute;left:0;right:0;border-top:1px solid var(--grid)}
+.colplot .gl span{position:absolute;left:-28px;top:-8px;width:22px;text-align:right;font-size:11px;color:var(--muted);font-variant-numeric:tabular-nums}
+.cols{position:absolute;inset:0;display:flex;align-items:flex-end;gap:2px}
+.col{flex:1;display:flex;flex-direction:column;justify-content:flex-end;align-items:center;height:100%;position:relative;cursor:default}
+.col i{display:block;width:min(70%,34px);background:var(--bar);border-radius:4px 4px 0 0;min-height:2px}
+.col:hover i,.col:focus-visible i{filter:brightness(1.15)}
+.col b{position:absolute;font-size:11px;color:var(--fg);font-weight:600;font-variant-numeric:tabular-nums}
+.colx{display:flex;gap:2px;margin-left:28px}
+.colx span{flex:1;text-align:center;font-size:11px;color:var(--muted)}
+.hbars{display:flex;flex-direction:column;gap:8px}
+.hb{display:grid;grid-template-columns:minmax(0,9em) minmax(0,1fr) 3em;gap:10px;align-items:center;font-size:13px}
+.hb .n{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--fg2)}
+.hb .t{height:12px;background:var(--card);border-radius:0 4px 4px 0;overflow:hidden}
+.hb .t i{display:block;height:100%;background:var(--bar);border-radius:0 4px 4px 0;min-width:2px}
+.hb .v{text-align:right;font-variant-numeric:tabular-nums;color:var(--fg)}
+details.tv summary{cursor:pointer;font-size:12px;color:var(--muted)}
+details.tv table{min-width:0;margin-top:6px;font-size:12px}
+details.tv td,details.tv th{padding:4px 8px}
+#tip{position:fixed;z-index:30;pointer-events:none;background:var(--sel);border:1px solid var(--line2);color:var(--fg);font-size:12px;padding:6px 9px;border-radius:8px;max-width:240px;box-shadow:0 6px 18px rgba(0,0,0,.35)}
+/* parts & stock */
+.pgrid{display:grid;grid-template-columns:minmax(0,1.2fr) minmax(0,1fr);gap:14px;align-items:start}
+.pcard{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:16px;display:flex;flex-direction:column;gap:12px;min-width:0}
+.pcard h3{margin:0;font-size:15px}
+.minitbl{border:1px solid var(--line);border-radius:10px;overflow-x:auto}
+.minitbl table{min-width:420px;font-size:13px}
+.minitbl td,.minitbl th{padding:8px 10px}
+.minitbl tbody tr{cursor:default}
+.var-neg{color:var(--bad);font-weight:600}.var-pos{color:var(--warn);font-weight:600}.var-ok{color:var(--ok)}
+.entry{display:flex;gap:10px;align-items:flex-start;justify-content:space-between;padding:10px 12px;border-top:1px solid var(--line)}
+.entry:first-child{border-top:0}
+.linkbtn{color:var(--accent2);font-size:12px;font-weight:600;white-space:nowrap}
+.linkbtn.danger{color:var(--bad)}
+.confirmbox{border:1px solid var(--warn);background:var(--noteBg);border-radius:10px;padding:10px 12px;font-size:13px;display:flex;flex-direction:column;gap:8px}
+.group-h{display:flex;align-items:center;gap:8px;margin-top:4px}
+.group-h .lbl{color:var(--fg2)}
+.group-h.late .lbl{color:var(--bad)}
+.seg svg{flex:none}
+@media (max-width:620px){.seg .lab{display:none}.seg button{padding:0 11px}}
+@media (max-width:960px){.charts,.pgrid{grid-template-columns:1fr}}
 @media (max-width:1100px){.kpis{grid-template-columns:repeat(3,minmax(0,1fr))}.fgrid{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media (max-width:960px){
   .office{grid-template-columns:1fr}
@@ -185,15 +231,18 @@ tbody tr:hover,tbody tr:focus-visible{background:var(--panel)}
   <div class="row">
     <div class="brand"><div class="wm" aria-label="Ziar Imaar Technical Services"><b>ZIAR <i></i> IMAAR</b><small>TECHNICAL SERVICES</small></div><span class="client">Kohler UAE<br>Ticket hub</span></div>
     <div class="seg" role="group" aria-label="View">
-      <button id="v-tech" type="button">Technician</button>
-      <button id="v-office" type="button">Office <span id="qbadge" class="badge" hidden></span></button>
-      <button id="v-dash" type="button">Dashboard</button>
+      <button id="v-tech" type="button" title="Technician"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M14.7 6.3a4 4 0 0 0-5.4 5.4L3 18l3 3 6.3-6.3a4 4 0 0 0 5.4-5.4l-2.5 2.5-2.4-.6-.6-2.4z"/></svg><span class="lab">Technician</span></button>
+      <button id="v-office" type="button" title="Office review"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 4h16v12H4z"/><path d="M8 10l3 3 5-5"/><path d="M8 20h8"/></svg><span class="lab">Office</span> <span id="qbadge" class="badge" hidden></span></button>
+      <button id="v-dash" type="button" title="Dashboard"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg><span class="lab">Dashboard</span></button>
+      <button id="v-parts" type="button" title="Parts and stock"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M3 7l9-4 9 4-9 4-9-4z"/><path d="M3 7v10l9 4 9-4V7"/><path d="M12 11v10"/></svg><span class="lab">Parts &amp; stock</span></button>
     </div>
     <div class="who"><span id="mode" class="mode">Connecting…</span><span id="me" class="who"></span></div>
   </div>
 </header>
 <main id="app"></main>
 <div id="toast" class="toast" role="status" hidden></div>
+<div id="tip" hidden></div>
+<script defer src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 
 <script>
 (() => {
@@ -206,9 +255,12 @@ let me={id:null,name:''};
 const names={};               // user id -> display name, resolved at render and never stored
 let demo=false, loaded=false;
 let view='tech';
-let tech={screen:'list',id:null,draft:null,tab:'todo',showCall:false,uploading:0,limit:25};
-let office={id:null,note:'',keep:false,drafting:false};
-let dash={q:'',status:'all',sort:'scheduled',dir:'desc',showForm:false,form:{}};
+let tech={screen:'list',id:null,draft:null,tab:'todo',showCall:false,uploading:0,limit:25,q:''};
+let office={id:null,note:'',keep:false,drafting:false,edit:null,confirm:null};
+let dash={q:'',status:'all',sort:'scheduled',dir:'desc',showForm:false,form:{},limit:50};
+let parts={}, stock={};
+const thisMonth=()=>new Date(Date.now()+4*3600000).toISOString().slice(0,7);
+let pui={type:'Parts Needed',dmOnly:true,month:thisMonth(),del:null};
 const $app=document.getElementById('app');
 
 /* ---------- helpers ---------- */
@@ -216,10 +268,13 @@ const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&
 const pad=n=>String(n).padStart(2,'0');
 const MON=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 const DAY=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
-const hm=iso=>{ if(!iso) return ''; const d=new Date(iso); return pad(d.getHours())+':'+pad(d.getMinutes()); };
-const dm=iso=>{ if(!iso) return ''; const d=new Date(iso); return d.getDate()+' '+MON[d.getMonth()]; };
+// all times display in Dubai time (UTC+4, no daylight saving) whatever the viewer's timezone
+const dxb=iso=>new Date(new Date(iso).getTime()+4*3600000);
+const hm=iso=>{ if(!iso) return ''; const d=dxb(iso); return pad(d.getUTCHours())+':'+pad(d.getUTCMinutes()); };
+const dm=iso=>{ if(!iso) return ''; const d=dxb(iso); return d.getUTCDate()+' '+MON[d.getUTCMonth()]; };
 const dmhm=iso=>iso?dm(iso)+' · '+hm(iso):'';
-const dayLong=iso=>{ if(!iso) return 'Date not set'; const d=new Date(iso); return DAY[d.getDay()]+' '+d.getDate()+' '+MON[d.getMonth()]+' · '+hm(iso); };
+const dayLong=iso=>{ if(!iso) return 'Date not set'; const d=dxb(iso); return DAY[d.getUTCDay()]+' '+d.getUTCDate()+' '+MON[d.getUTCMonth()]+' · '+hm(iso); };
+const dayKey=iso=>dxb(iso).toISOString().slice(0,10);
 const dur=min=>{ if(min==null||isNaN(min)) return '—'; const h=Math.floor(min/60), m=Math.round(min%60); return h>=48?Math.round(h/24)+'d':h?h+'h '+pad(m)+'m':m+'m'; };
 const clone=o=>JSON.parse(JSON.stringify(o));
 const safeUrl=u=>typeof u==='string'&&/^(\/|https:)/.test(u)?u:'';
@@ -289,19 +344,34 @@ async function resolveNames(){
 /* ---------- technician ---------- */
 const backSvg='<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"></path></svg>';
 function techList(){
-  const list=Object.values(visits).sort((a,b)=>(a.scheduled||'').localeCompare(b.scheduled||''));
-  const open=list.filter(editable), sent=list.filter(v=>!editable(v)).reverse();
-  const show=tech.tab==='todo'?open:sent;
-  const item=v=>{ const s=sla(v); return `<button class="card visitlink" data-open="${esc(v.id)}">
-      <div class="row"><span class="chip ${v.status}">${STATUS[v.status]}</span>${editable(v)?`<span class="chip ${s.cls}">${esc(s.label)}</span>`:`<span class="mono">${esc(v.model)}</span>`}</div>
-      <div style="font-size:17px;font-weight:600">#${esc(v.id)} · ${esc(v.site||'Site not recorded')}</div>
-      <div class="sub">${esc(v.product)} · ${esc(dayLong(v.scheduled))} · <span class="prio ${esc(v.priority||'Normal')}">${esc(v.priority||'Normal')}</span></div></button>`; };
+  const all=Object.values(visits);
+  const open=all.filter(editable), sent=all.filter(v=>!editable(v));
   return `<div class="phone">
     <div class="bar"><span class="icon" aria-hidden="true"></span><span class="t">My visits</span><span class="icon txt num">${open.length} open</span></div>
     <div class="scroll">
+      <input id="t-q" class="field" type="search" style="margin-top:0" placeholder="Search site, ticket, product" value="${esc(tech.q)}" autocomplete="off" aria-label="Search visits">
       <div class="tabs" role="group" aria-label="Filter visits"><button data-ttab="todo" aria-pressed="${tech.tab==='todo'}">To do · ${open.length}</button><button data-ttab="sent" aria-pressed="${tech.tab==='sent'}">Submitted · ${sent.length}</button></div>
-      ${!loaded?'<div class="empty">Loading visits…</div>':!show.length?`<div class="empty">${tech.tab==='todo'?'Nothing to do. New visits appear here as soon as the office dispatches them.':'You have not submitted any visits yet.'}</div>`:show.slice(0,tech.limit).map(item).join('')+(show.length>tech.limit?`<button class="secondary" data-act="more">Show ${Math.min(25,show.length-tech.limit)} more of ${show.length-tech.limit}</button>`:'')}
+      <div id="t-list" style="display:flex;flex-direction:column;gap:12px">${techListBody()}</div>
     </div></div>`;
+}
+function techListBody(){
+  if(!loaded) return '<div class="empty">Loading visits…</div>';
+  const q=tech.q.trim().toLowerCase();
+  const match=v=>!q||[v.id,v.ref,v.site,v.product,v.issue,v.model,v.region,v.contact].join(' ').toLowerCase().includes(q);
+  const item=v=>{ const s=sla(v); return `<button class="card visitlink" data-open="${esc(v.id)}">
+      <div class="row"><span class="chip ${v.status}">${STATUS[v.status]}</span>${editable(v)&&s.label!=='—'?`<span class="chip ${s.cls}">${esc(s.label)}</span>`:`<span class="mono">${esc(v.model||'')}</span>`}</div>
+      <div style="font-size:17px;font-weight:600">#${esc(v.id)} · ${esc(v.site||'Site not recorded')}</div>
+      <div class="sub">${esc(v.product)} · ${esc(dayLong(v.scheduled))}${editable(v)?` · <span class="prio ${esc(v.priority||'Normal')}">${esc(v.priority||'Normal')}</span>`:''}</div></button>`; };
+  if(tech.tab==='todo'){
+    const list=Object.values(visits).filter(editable).filter(match).sort((a,b)=>(a.scheduled||'').localeCompare(b.scheduled||''));
+    if(!list.length) return `<div class="empty">${q?'No open visits match this search.':'Nothing to do. New visits appear here as soon as the office dispatches them.'}</div>`;
+    const today=dayKey(new Date().toISOString()), now=Date.now();
+    const grp=v=>sla(v).late?'Overdue':v.scheduled&&dayKey(v.scheduled)===today?'Today':v.scheduled&&new Date(v.scheduled).getTime()>now?'Upcoming':'Earlier';
+    return ['Overdue','Today','Upcoming','Earlier'].map(g=>{ const xs=list.filter(v=>grp(v)===g); return xs.length?`<div class="group-h${g==='Overdue'?' late':''}"><span class="lbl">${g} · ${xs.length}</span></div>${xs.map(item).join('')}`:''; }).join('');
+  }
+  const list=Object.values(visits).filter(v=>!editable(v)).filter(match).sort((a,b)=>(b.scheduled||'').localeCompare(a.scheduled||''));
+  if(!list.length) return `<div class="empty">${q?'No submitted visits match this search.':'You have not submitted any visits yet.'}</div>`;
+  return list.slice(0,tech.limit).map(item).join('')+(list.length>tech.limit?`<button class="secondary" data-act="more">Show ${Math.min(25,list.length-tech.limit)} more of ${list.length-tech.limit}</button>`:'');
 }
 function techHub(v){
   if(!editable(v)) return techReceipt(v);
@@ -434,7 +504,7 @@ function techReceipt(v){
           ${v.signature?`<div style="border-top:1px solid var(--line);padding-top:10px"><div class="sub" style="margin-bottom:6px">Signed by ${esc(v.signerName||'customer')}</div>${sigHtml(v)}</div>`:''}
         </div></div>
     </div>
-    <div class="foot"><span class="secondary" style="color:var(--muted)">${v.status==='review'?'Waiting for office review':'Visit closed'}</span></div></div>`;
+    <div class="foot">${canPdf()?`<button class="primary" data-pdf="${esc(v.id)}">Download service report</button>`:''}<span class="hint">${v.status==='review'?'Waiting for office review':'Visit closed'}</span></div></div>`;
 }
 
 /* ---------- office ---------- */
@@ -454,7 +524,7 @@ function officeView(){
   if(!v) return bar+`<div class="office">${qcol}<section class="detail"><div class="empty">${loaded?'The queue is clear. When a technician submits a visit, it shows up here for review.':'Loading visits…'}</div></section><aside class="decide"></aside></div>`;
   const ck=checks(v), s=sla(v), ev=evItems(v);
   const detail=`<section class="detail">
-    <div><div class="row" style="justify-content:flex-start;flex-wrap:wrap;gap:8px"><span style="font-family:var(--mono);font-size:12px;color:var(--muted);font-weight:700">${esc(v.ref)}</span><span class="chip ${v.status}">${STATUS[v.status]}</span><span class="chip ${s.cls}">SLA ${esc(s.label)}</span><span class="prio ${esc(v.priority||'Normal')}">${esc(v.priority||'Normal')}</span></div>
+    <div><div class="row" style="justify-content:flex-start;flex-wrap:wrap;gap:8px"><span style="font-family:var(--mono);font-size:12px;color:var(--muted);font-weight:700">${esc(v.ref)}</span><span class="chip ${v.status}">${STATUS[v.status]}</span><span class="chip ${s.cls}">SLA ${esc(s.label)}</span><span class="prio ${esc(v.priority||'Normal')}">${esc(v.priority||'Normal')}</span>${canPdf()?`<button class="btn inl" style="height:30px;margin-left:auto;font-size:13px" data-pdf="${esc(v.id)}">Download report</button>`:''}</div>
       <div style="font-size:20px;font-weight:600;letter-spacing:-.01em;margin-top:4px;text-wrap:balance">${esc(v.site||'Site not recorded')}${v.issue?': '+esc(v.issue):''}</div>
       <div class="sub" style="margin-top:2px">${esc(v.product)} · <span class="mono">${esc(v.model||'—')}</span> · ${esc(v.region)}${v.contact?' · '+esc(v.contact):''}${v.outcome?' · Outcome: <b style="color:var(--fg)">'+esc(v.outcome)+'</b>':''}</div></div>
     <div class="tiles num">
@@ -475,17 +545,27 @@ function officeView(){
       ${ck.map(c=>`<div class="tr${c.ok||!c.req?'':' flag'}"><span>${c.f}</span><span style="overflow-wrap:anywhere">${esc(c.val)}</span><span class="${c.ok?'m-ok':c.req?'m-bad':'sub'}">${c.label}</span></div>`).join('')}</div></div>
   </section>`;
   const inReview=v.status==='review';
+  if(!office.edit||office.edit.id!==v.id) office.edit={id:v.id,inv:v.billingRef||'',int:v.internalNotes||''};
+  const pending=Object.assign(clone(v),{billingRef:office.edit.inv.trim()});
+  const miss=missingChecks(pending);
+  const details=`<div style="display:flex;flex-direction:column;gap:8px;border-top:1px solid var(--line);padding-top:12px">
+      <div class="lbl">Office details</div>
+      <label for="o-inv" style="font-size:12px;color:var(--fg2)">Z Invoice No.<input id="o-inv" class="field" style="margin-top:4px;padding:9px 10px;border-radius:10px" value="${esc(office.edit.inv)}" placeholder="e.g. ZRA1853" autocomplete="off"></label>
+      <label for="o-int" style="font-size:12px;color:var(--fg2)">Internal notes<textarea id="o-int" class="field" style="margin-top:4px;padding:9px 10px;border-radius:10px;min-height:60px" placeholder="Visible to the office only">${esc(office.edit.int)}</textarea></label>
+      <button class="btn" data-act="savedetails" style="height:34px;font-size:13px">Save details</button></div>`;
   const dec=`<aside class="decide">
     <div style="font-weight:600;font-size:15px">Decision</div>
     ${inReview?`
     <div><label for="o-note" style="display:block;font-size:12px;color:var(--fg2);margin-bottom:6px">Review note (required for recheck or cancel)</label>
-      <textarea id="o-note" class="field" style="margin-top:0;border-radius:10px;min-height:96px" placeholder="Add a note for the technician">${esc(office.note)}</textarea></div>
+      <textarea id="o-note" class="field" style="margin-top:0;border-radius:10px;min-height:90px" placeholder="Add a note for the technician">${esc(office.note)}</textarea></div>
     ${sampleApi?`<button class="btn ai" data-act="draftnote" ${office.drafting?'disabled':''}>${office.drafting?'<span class="spin"></span> Drafting…':'✦ Draft note with Claude'}</button>`:''}
     <div class="err" id="o-err"></div>
-    <button class="btn go" data-decide="completed">Mark completed</button>
+    ${office.confirm===v.id?`<div class="confirmbox" role="alert"><b>${miss.length} required item${miss.length>1?'s':''} missing</b><span>${esc(miss.map(m=>m.f).join(', '))}. Close the visit anyway?</span><div style="display:flex;gap:8px"><button class="btn go inl" data-decide="completed">Close anyway</button><button class="btn inl" data-act="unconfirm">Go back</button></div></div>`
+      :`<button class="btn go" data-decide="completed">Mark completed${miss.length?` · ${miss.length} missing`:''}</button>`}
     <button class="btn" data-decide="recheck">Return for recheck</button>
     <button class="btn" data-decide="cancelled" style="color:var(--fg2)">Cancel visit</button>`
-    :`<div class="sub">This visit is not in the review queue.</div>${v.status==='completed'||v.status==='cancelled'?'<button class="btn" data-act="reopen">Reopen for review</button>':''}`}
+    :`<div class="row"><span class="chip ${v.status}">${STATUS[v.status]}</span>${v.status==='completed'||v.status==='cancelled'?'<button class="linkbtn" data-act="reopen">Reopen for review</button>':''}</div>`}
+    ${details}
     <div style="margin-top:auto;padding-top:12px"><div class="lbl" style="margin-bottom:8px">History</div>${timelineHtml(v)}</div>
   </aside>`;
   return bar+`<div class="office">${qcol}${detail}${dec}</div>`;
@@ -501,6 +581,7 @@ function dashView(){
   const withOut=closed.filter(v=>v.outcome); const ftf=withOut.length?Math.round(100*withOut.filter(v=>v.outcome==='Resolved').length/withOut.length):null;
   const attended=all.filter(v=>v.arrived), slaMet=attended.length?Math.round(100*attended.filter(v=>!sla(v).late).length/attended.length):null;
   const order=['new','recheck','review','completed','cancelled'];
+  const corder=['new','recheck','completed','review','cancelled'];
   const kpi=(label,val,sub,cls='')=>`<div class="kpi ${cls}"><span class="lbl">${label}</span><b>${val}</b><span class="sub">${sub}</span></div>`;
   return `<div class="dashbar"><div style="display:flex;align-items:baseline;gap:12px;flex-wrap:wrap"><span style="font-weight:600;font-size:16px">Operations</span><span class="sub">Kohler UAE service desk · ${all.length} tickets</span></div>
     <div style="display:flex;gap:8px;flex-wrap:wrap">${downloadsApi?'<button class="btn inl" data-act="csv">Export CSV</button>':''}<button class="btn go inl" data-act="toggleform">${dash.showForm?'Close form':'+ New visit'}</button></div></div>
@@ -516,9 +597,10 @@ function dashView(){
     </div>
     <div style="display:flex;flex-direction:column;gap:10px">
       <div class="lbl">Pipeline</div>
-      <div class="stack" role="img" aria-label="${order.map(k=>STATUS[k]+' '+c(k)).join(', ')}">${order.filter(k=>c(k)).map(k=>`<span style="flex:${c(k)};background:var(--s-${k})" title="${STATUS[k]}: ${c(k)}"></span>`).join('')}</div>
-      <div class="legend">${order.map(k=>`<span><i style="background:var(--s-${k})"></i>${STATUS[k]} <b class="num">${c(k)}</b></span>`).join('')}</div>
+      <div class="stack" role="img" aria-label="${corder.map(k=>STATUS[k]+' '+c(k)).join(', ')}">${corder.filter(k=>c(k)).map(k=>`<span style="flex:${c(k)};background:var(--s-${k})" data-tip="${STATUS[k]}: ${c(k)} of ${all.length} tickets"></span>`).join('')}</div>
+      <div class="legend">${corder.map(k=>`<span><i style="background:var(--s-${k})"></i>${STATUS[k]} <b class="num">${c(k)}</b></span>`).join('')}</div>
     </div>
+    ${chartsHtml(all)}
     <div style="display:flex;flex-direction:column;gap:10px">
       <div class="toolbar">
         <input id="d-q" class="field" type="search" placeholder="Search site, ticket, model, technician, invoice" value="${esc(dash.q)}" autocomplete="off" aria-label="Search visits">
@@ -541,8 +623,8 @@ function dashTable(){
   const th=(k,l)=>`<th><button data-dsort="${k}">${l}${dash.sort===k?(dash.dir==='asc'?' ↑':' ↓'):''}</button></th>`;
   if(!rows.length) return `<div class="empty">${Object.keys(visits).length?'No visits match this search.':'No visits yet. Use “New visit” to dispatch the first one.'}</div>`;
   return `<div class="grid-tbl"><table><thead><tr>${th('id','Visit')}${th('site','Site')}<th>Product</th>${th('scheduled','Scheduled')}${th('tech','Technician')}${th('priority','Priority')}${th('status','Status')}<th>SLA</th>${th('onsite','On site')}<th>Flags</th></tr></thead><tbody>
-    ${rows.map(v=>{ const s=sla(v), f=(v.status==='review'||v.status==='recheck')?flagCount(v):0; return `<tr data-row="${esc(v.id)}" tabindex="0"><td class="num" style="font-weight:600">#${esc(v.id)}</td><td>${esc(v.site)||'<span class="sub">Not recorded</span>'}<div class="sub">${esc(v.region)}</div></td><td>${esc(v.product)}<div class="mono">${esc(v.model||'')}</div></td><td class="num">${v.scheduled?esc(dm(v.scheduled))+' '+esc(hm(v.scheduled)):'—'}</td><td>${esc(v.technician)||'<span class="sub">—</span>'}</td><td><span class="prio ${esc(v.priority||'Normal')}">${esc(v.priority||'Normal')}</span></td><td><span class="chip ${v.status}">${STATUS[v.status]}</span></td><td><span class="chip ${s.cls}">${esc(s.label)}</span></td><td class="num">${dur(onsite(v))}</td><td>${f?`<span style="color:var(--warn)">⚠ ${f}</span>`:'<span class="sub">—</span>'}</td></tr>`; }).join('')}
-  </tbody></table></div><div class="sub" style="margin-top:6px">${rows.length} of ${Object.keys(visits).length} visits · select a row to open it</div>`;
+    ${rows.slice(0,dash.limit).map(v=>{ const s=sla(v), f=(v.status==='review'||v.status==='recheck')?flagCount(v):0; return `<tr data-row="${esc(v.id)}" tabindex="0"><td class="num" style="font-weight:600">#${esc(v.id)}</td><td>${esc(v.site)||'<span class="sub">Not recorded</span>'}<div class="sub">${esc(v.region)}</div></td><td>${esc(v.product)}<div class="mono">${esc(v.model||'')}</div></td><td class="num">${v.scheduled?esc(dm(v.scheduled))+' '+esc(hm(v.scheduled)):'—'}</td><td>${esc(v.technician)||'<span class="sub">—</span>'}</td><td><span class="prio ${esc(v.priority||'Normal')}">${esc(v.priority||'Normal')}</span></td><td><span class="chip ${v.status}">${STATUS[v.status]}</span></td><td><span class="chip ${s.cls}">${esc(s.label)}</span></td><td class="num">${dur(onsite(v))}</td><td>${f?`<span style="color:var(--warn)">⚠ ${f}</span>`:'<span class="sub">—</span>'}</td></tr>`; }).join('')}
+  </tbody></table></div><div class="row" style="margin-top:8px;flex-wrap:wrap"><span class="sub">Showing ${Math.min(dash.limit,rows.length)} of ${rows.length} matching tickets · select a row to open it</span>${rows.length>dash.limit?`<button class="btn inl" data-act="dmore">Show ${Math.min(50,rows.length-dash.limit)} more</button>`:''}</div>`;
 }
 const nextId=()=>String(Math.max(0,...Object.keys(visits).map(Number).filter(n=>!isNaN(n)))+1).padStart(4,'0');
 const refFor=id=>'EZR-KOHLER-SRV-'+String(new Date().getFullYear()).slice(2)+'-'+id;
@@ -576,9 +658,131 @@ function toCsv(){
   return [cols,...rows].map(r=>r.map(q).join(',')).join('\n');
 }
 
+/* ---------- dashboard charts ---------- */
+const niceMax=m=>{ if(m<=5) return 5; const p=Math.pow(10,Math.floor(Math.log10(m))); const n=[1,2,2.5,5,10].map(x=>x*p).find(x=>x>=m); return n; };
+function hbars(rows,unit){ const max=Math.max(1,...rows.map(r=>r.n)); return `<div class="hbars">${rows.map(r=>`<div class="hb" data-tip="${esc(r.label)}: ${r.n} ${unit}${r.n===1?'':'s'}"><span class="n" title="${esc(r.label)}">${esc(r.label)}</span><span class="t"><i style="width:${(r.n/max*100).toFixed(1)}%"></i></span><span class="v">${r.n}</span></div>`).join('')}</div>`; }
+function chartsHtml(all){
+  const dated=all.filter(v=>v.scheduled); if(!dated.length) return '';
+  const keyOf=d=>{ const x=dxb(d.toISOString()); return x.getUTCFullYear()*12+x.getUTCMonth(); };
+  const ks=dated.map(v=>keyOf(new Date(v.scheduled))); const lo=Math.max(Math.min(...ks),Math.max(...ks)-11), hi=Math.max(...ks);
+  const months=[]; for(let k=lo;k<=hi;k++){ const xs=dated.filter(v=>keyOf(new Date(v.scheduled))===k); months.push({label:MON[k%12],year:Math.floor(k/12),n:xs.length,done:xs.filter(v=>v.status==='completed').length}); }
+  const max=niceMax(Math.max(...months.map(m=>m.n))), peak=months.reduce((a,b)=>b.n>a.n?b:a,months[0]);
+  const ticks=[0,.5,1].map(f=>Math.round(max*f));
+  const col=months.map((m,i)=>{ const show=m===peak||i===months.length-1; return `<div class="col" tabindex="0" data-tip="${m.label} ${m.year}: ${m.n} tickets · ${m.done} completed"><i style="height:${(m.n/max*100).toFixed(1)}%"></i>${show?`<b style="bottom:calc(${(m.n/max*100).toFixed(1)}% + 4px)">${m.n}</b>`:''}</div>`; }).join('');
+  const em={}; all.forEach(v=>{ const k=v.region||'Not recorded'; em[k]=(em[k]||0)+1; });
+  const emRows=Object.entries(em).map(([label,n])=>({label,n})).sort((a,b)=>b.n-a.n);
+  const st={}; all.forEach(v=>{ const k=(v.site||'').split('|')[0].trim(); if(k) st[k]=(st[k]||0)+1; });
+  const stRows=Object.entries(st).map(([label,n])=>({label,n})).sort((a,b)=>b.n-a.n).slice(0,6);
+  const pr={}; all.forEach(v=>{ const k=v.product||'Not recorded'; pr[k]=(pr[k]||0)+1; });
+  const prRows=Object.entries(pr).map(([label,n])=>({label,n})).sort((a,b)=>b.n-a.n).slice(0,6);
+  return `<div class="charts">
+    <section class="chart"><div><h3>Tickets per month</h3><div class="cap">By scheduled visit date · peak ${peak.label} ${peak.year} with ${peak.n}</div></div>
+      <div class="colplot" role="img" aria-label="Tickets per month">${ticks.map(t=>`<div class="gl" style="bottom:${(t/max*100).toFixed(1)}%"><span>${t}</span></div>`).join('')}<div class="cols">${col}</div></div>
+      <div class="colx">${months.map(m=>`<span>${m.label}</span>`).join('')}</div>
+      <details class="tv"><summary>Show as table</summary><table><thead><tr><th>Month</th><th>Tickets</th><th>Completed</th></tr></thead><tbody>${months.map(m=>`<tr><td>${m.label} ${m.year}</td><td class="num">${m.n}</td><td class="num">${m.done}</td></tr>`).join('')}</tbody></table></details>
+    </section>
+    <section class="chart"><div><h3>Tickets by emirate</h3><div class="cap">All ${all.length} tickets</div></div>${hbars(emRows,'ticket')}</section>
+    <section class="chart"><div><h3>Busiest sites</h3><div class="cap">Top ${stRows.length} by ticket count</div></div>${hbars(stRows,'ticket')}</section>
+    <section class="chart"><div><h3>Products serviced</h3><div class="cap">Top ${prRows.length} products</div></div>${hbars(prRows,'ticket')}</section>
+  </div>`;
+}
+
+/* ---------- service report PDF ---------- */
+const canPdf=()=>!!(downloadsApi&&window.jspdf);
+async function downloadReport(v){
+  if(!canPdf()){ toast('Report download is not available in this view.'); return; }
+  const {jsPDF}=window.jspdf; const doc=new jsPDF({unit:'pt',format:'a4'});
+  const W=595.28, H=841.89, M=42; let y;
+  const ink=[20,33,61], muted=[105,118,145];
+  const header=()=>{ doc.setFillColor(10,23,51); doc.rect(0,0,W,84,'F'); doc.setFillColor(214,168,62); doc.rect(0,84,W,3,'F');
+    doc.setTextColor(255,255,255); doc.setFont('helvetica','bold'); doc.setFontSize(19); doc.text('ZIAR  IMAAR',M,40);
+    doc.setFont('helvetica','normal'); doc.setFontSize(7.5); doc.setTextColor(205,214,234); doc.text('T E C H N I C A L   S E R V I C E S   L . L . C .',M,55);
+    doc.setFontSize(10); doc.setTextColor(241,210,127); doc.text('Kohler UAE  ·  Service report',W-M,38,{align:'right'});
+    doc.setFontSize(9); doc.setTextColor(255,255,255); doc.text(v.ref||('#'+v.id),W-M,54,{align:'right'}); y=116; };
+  const need=h=>{ if(y+h>H-56){ doc.addPage(); header(); } };
+  header();
+  doc.setTextColor(...ink); doc.setFont('helvetica','bold'); doc.setFontSize(15);
+  const title=doc.splitTextToSize((v.site||'Site not recorded')+(v.issue?': '+v.issue:''),W-2*M); doc.text(title,M,y); y+=title.length*18+6;
+  const kv=[['Ticket','#'+v.id],['Status',STATUS[v.status]],['Visit date',v.scheduled?dayLong(v.scheduled):'—'],['Emirate',v.region||'—'],['Product',v.product||'—'],['Model / SKU',v.model||'—'],['Category',v.category||'—'],['Visit type',v.type||'—'],['Technicians',v.technician||'—'],['Time in / out',v.arrived?hm(v.arrived)+' – '+(hm(v.finished)||'—'):'—'],['Outcome',v.outcome||'—'],['Return visit',v.returnVisit||'No'],['Z Invoice No.',v.billingRef||'—'],['Contact',v.contact||'—']];
+  doc.setDrawColor(222,226,235); const colW=(W-2*M)/2;
+  for(let i=0;i<kv.length;i+=2){ need(34); for(let c=0;c<2;c++){ const k=kv[i+c]; if(!k) continue; const x=M+c*colW;
+      doc.setFont('helvetica','normal'); doc.setFontSize(7.5); doc.setTextColor(...muted); doc.text(k[0].toUpperCase(),x,y);
+      doc.setFontSize(10); doc.setTextColor(...ink); doc.text(doc.splitTextToSize(String(k[1]),colW-12)[0],x,y+13); }
+    y+=30; doc.line(M,y-8,W-M,y-8); }
+  y+=8;
+  const para=(t,txt)=>{ if(!txt) return; const lines=doc.splitTextToSize(String(txt),W-2*M); need(30);
+    doc.setFont('helvetica','bold'); doc.setFontSize(8); doc.setTextColor(168,130,44); doc.text(t.toUpperCase(),M,y); y+=14;
+    doc.setFont('helvetica','normal'); doc.setFontSize(10); doc.setTextColor(...ink);
+    lines.forEach(l=>{ need(14); doc.text(l,M,y); y+=13.5; }); y+=10; };
+  para('Findings',v.findings); para('Action taken',v.work); para('Required next action',v.nextAction);
+  para('Parts',(v.parts||[]).map(p=>p.name+' × '+p.qty).join('\n')); para('Photos / documents',evItems(v).map(e=>e.name).join(', '));
+  if(typeof v.signature==='string'&&v.signature.startsWith('data:image/png')){ need(120);
+    doc.setFont('helvetica','bold'); doc.setFontSize(8); doc.setTextColor(168,130,44); doc.text('CUSTOMER SIGN-OFF',M,y); y+=8;
+    try{ doc.addImage(v.signature,'PNG',M,y,220,80); }catch(e){} y+=92; doc.setFont('helvetica','normal'); doc.setFontSize(10); doc.setTextColor(...ink); doc.text(v.signerName||'Customer',M,y); y+=16; }
+  const pages=doc.getNumberOfPages();
+  for(let i=1;i<=pages;i++){ doc.setPage(i); doc.setFont('helvetica','normal'); doc.setFontSize(8); doc.setTextColor(...muted);
+    doc.text('Generated '+dmhm(new Date().toISOString())+' · Ziar Imaar Technical Services L.L.C.',M,H-28); doc.text('Page '+i+' of '+pages,W-M,H-28,{align:'right'}); }
+  try{ await downloadsApi.save({filename:(v.ref||('ticket-'+v.id))+'-service-report.pdf',data:doc.output('blob')}); toast('Report saved'); }
+  catch(err){ if(!(err&&err.code==='declined')) toast('Could not save the report. Try again in a moment.'); }
+}
+
+/* ---------- parts & stock ---------- */
+const PTYPES=['Parts Needed','Parts Used','Parts Received'];
+const isDM=v=>(v&&v.site||'').trim().toLowerCase()==='dubai mall';
+const newId=p=>p+Date.now().toString(36)+Math.random().toString(36).slice(2,6);
+async function saveDoc(col,id,data,store){ store[id]=Object.assign({id},data); render(); if(db){ try{ await db.doc(col+'/'+id).set(data); }catch(e){ toast('Could not save. Check your access and connection.'); } } }
+async function delDoc(col,id,store){ delete store[id]; render(); if(db){ try{ await db.doc(col+'/'+id).delete(); }catch(e){ toast('Could not delete. Check your access and connection.'); } } }
+function partsView(){
+  const tickets=Object.values(visits).filter(v=>!pui.dmOnly||isDM(v)).sort((a,b)=>b.id.localeCompare(a.id));
+  const all=Object.values(parts).filter(p=>!pui.dmOnly||isDM(visits[p.ticket]));
+  const list=all.filter(p=>p.type===pui.type).sort((a,b)=>(b.at||'').localeCompare(a.at||''));
+  const bal={}; all.forEach(p=>{ const k=(p.sku||p.name||'').trim().toLowerCase(); if(!k) return; const b=bal[k]||(bal[k]={name:p.name,sku:p.sku,need:0,used:0,rec:0}); const q=+p.qty||0; if(p.type==='Parts Needed') b.need+=q; if(p.type==='Parts Used') b.used+=q; if(p.type==='Parts Received') b.rec+=q; });
+  const rows=Object.values(bal).map(b=>Object.assign(b,{out:Math.max(0,b.need-b.rec)})).sort((a,b)=>b.out-a.out||a.name.localeCompare(b.name));
+  const st=Object.values(stock).filter(x=>x.month===pui.month).sort((a,b)=>a.item.localeCompare(b.item));
+  const months=[...new Set([thisMonth(),...Object.values(stock).map(x=>x.month)])].sort().reverse();
+  const counts=PTYPES.map(t=>all.filter(p=>p.type===t).length);
+  return `<div class="dashbar"><div style="display:flex;align-items:baseline;gap:12px;flex-wrap:wrap"><span style="font-weight:600;font-size:16px">Parts &amp; stock</span><span class="sub">${pui.dmOnly?'Dubai Mall tickets':'All tickets'} · ${all.length} part entries</span></div>
+    <div class="tabs" role="group" aria-label="Scope"><button data-dm="1" aria-pressed="${pui.dmOnly}">Dubai Mall</button><button data-dm="0" aria-pressed="${!pui.dmOnly}">All sites</button></div></div>
+  <div class="dash">
+    <div class="pgrid">
+      <section class="pcard">
+        <div class="row"><h3>Parts register</h3><span class="sub">Items needed, fitted and received</span></div>
+        <form id="pform" class="fgrid" style="grid-template-columns:repeat(2,minmax(0,1fr))">
+          <label>Ticket<select class="field" name="ticket" required><option value="">Choose a ticket</option>${tickets.map(v=>`<option value="${esc(v.id)}">#${esc(v.id)} · ${esc(v.site||'—')} · ${esc(dm(v.scheduled))}</option>`).join('')}</select></label>
+          <label>Entry type<select class="field" name="type">${PTYPES.map(t=>`<option ${t===pui.type?'selected':''}>${t}</option>`).join('')}</select></label>
+          <label>Part name<input class="field" name="name" required placeholder="e.g. Seat sensor" list="partlist2" autocomplete="off"></label>
+          <label>SKU<input class="field" name="sku" placeholder="e.g. 1311753" autocomplete="off"></label>
+          <label>Quantity<input class="field" name="qty" type="number" min="1" value="1" required></label>
+          <label>Note<input class="field" name="note" placeholder="Optional" autocomplete="off"></label>
+          <datalist id="partlist2">${[...new Set(Object.values(parts).map(p=>p.name))].map(n=>`<option value="${esc(n)}">`).join('')}</datalist>
+          <div class="span2" style="display:flex;justify-content:flex-end"><button class="btn go inl" type="submit">Add entry</button></div>
+        </form>
+        <div class="tabs" role="group" aria-label="Entry type">${PTYPES.map((t,i)=>`<button data-ptype="${t}" aria-pressed="${pui.type===t}">${t} · ${counts[i]}</button>`).join('')}</div>
+        <div class="list" style="background:var(--card)">${list.length?list.map(p=>`<div class="entry"><div style="min-width:0"><div style="font-weight:600">${esc(p.name)} <span class="num" style="color:var(--accent2)">× ${esc(p.qty)}</span></div><div class="sub">${[p.sku,p.note].filter(Boolean).map(esc).join(' · ')}${p.sku||p.note?' · ':''}${esc(dm(p.at))}${p.by?' · '+esc(nameOf(p.by)):''}</div></div>
+            <div style="display:flex;gap:12px;align-items:center"><button class="linkbtn" data-goto2="${esc(p.ticket)}">#${esc(p.ticket)}</button><button class="linkbtn danger" data-delpart="${esc(p.id)}">${pui.del===p.id?'Confirm delete':'Delete'}</button></div></div>`).join(''):`<div class="empty">No ${pui.type.toLowerCase()} recorded${pui.dmOnly?' for Dubai Mall':''} yet. Add the first entry above.</div>`}</div>
+      </section>
+      <section class="pcard">
+        <div class="row"><h3>Outstanding parts</h3><span class="sub">Needed minus received</span></div>
+        ${rows.length?`<div class="minitbl"><table><thead><tr><th>Part</th><th>Needed</th><th>Received</th><th>Used</th><th>Outstanding</th></tr></thead><tbody>${rows.map(b=>`<tr><td>${esc(b.name)}${b.sku?`<div class="mono">${esc(b.sku)}</div>`:''}</td><td class="num">${b.need}</td><td class="num">${b.rec}</td><td class="num">${b.used}</td><td class="num ${b.out?'var-neg':'var-ok'}">${b.out?b.out:'✓ 0'}</td></tr>`).join('')}</tbody></table></div>`:'<div class="empty">Outstanding parts appear here once you record parts needed and received.</div>'}
+      </section>
+    </div>
+    <section class="pcard">
+      <div class="row" style="flex-wrap:wrap"><h3>Monthly stock check</h3><label class="sub" style="display:flex;align-items:center;gap:8px">Month<select id="s-month" class="field" style="margin:0;padding:6px 30px 6px 10px;width:auto">${months.map(m=>`<option value="${m}" ${m===pui.month?'selected':''}>${MON[+m.slice(5)-1]} ${m.slice(0,4)}</option>`).join('')}</select></label></div>
+      <form id="sform" class="fgrid">
+        <label class="span2">Item or SKU<input class="field" name="item" required placeholder="e.g. K-76395-0 seat sensor" autocomplete="off"></label>
+        <label>Expected quantity<input class="field" name="expected" type="number" min="0" required></label>
+        <label>Counted quantity<input class="field" name="counted" type="number" min="0" required></label>
+        <label class="span2">Note<input class="field" name="note" placeholder="Optional" autocomplete="off"></label>
+        <div class="span2" style="display:flex;justify-content:flex-end;align-items:end"><button class="btn go inl" type="submit">Record count for ${MON[+pui.month.slice(5)-1]}</button></div>
+      </form>
+      ${st.length?`<div class="minitbl"><table><thead><tr><th>Item</th><th>Expected</th><th>Counted</th><th>Variance</th><th>Note</th><th></th></tr></thead><tbody>${st.map(x=>{ const d=(+x.counted)-(+x.expected); return `<tr><td>${esc(x.item)}</td><td class="num">${esc(x.expected)}</td><td class="num">${esc(x.counted)}</td><td class="num ${d<0?'var-neg':d>0?'var-pos':'var-ok'}">${d>0?'+':''}${d}</td><td>${esc(x.note)}</td><td><button class="linkbtn danger" data-delstock="${esc(x.id)}">${pui.del===x.id?'Confirm':'Delete'}</button></td></tr>`; }).join('')}</tbody></table></div><div class="sub">${st.filter(x=>+x.counted!==+x.expected).length} of ${st.length} items differ from the expected count.</div>`:`<div class="empty">No counts recorded for ${MON[+pui.month.slice(5)-1]} ${pui.month.slice(0,4)} yet.</div>`}
+    </section>
+  </div>`;
+}
+
 /* ---------- render ---------- */
 function header(){
-  for(const k of ['tech','office','dash']) document.getElementById('v-'+k).setAttribute('aria-pressed',view===k);
+  for(const k of ['tech','office','dash','parts']) document.getElementById('v-'+k).setAttribute('aria-pressed',view===k);
   const n=reviewQueue().length, b=document.getElementById('qbadge'); b.textContent=n; b.hidden=!n;
   const m=document.getElementById('mode'); m.textContent=!loaded?'Connecting…':demo?'Demo mode · changes stay in this tab':'Live'; m.className='mode'+(demo?' demo':'');
   document.getElementById('me').innerHTML=me.name?`<span class="avatar">${esc(initials(me.name))}</span><span class="nm">${esc(me.name)}</span>`:'';
@@ -587,6 +791,7 @@ function render(){
   header();
   if(view==='office'){ $app.innerHTML=officeView(); return; }
   if(view==='dash'){ $app.innerHTML=dashView(); return; }
+  if(view==='parts'){ $app.innerHTML=partsView(); return; }
   const v=tech.id&&visits[tech.id];
   if(tech.screen==='list'||!v){ tech.screen='list'; $app.innerHTML=techList(); return; }
   $app.innerHTML=tech.screen==='visit'?techVisit():tech.screen==='parts'?techParts():tech.screen==='billing'?techBilling():techHub(v);
@@ -599,7 +804,8 @@ function setView(x){ view=x; try{ history.replaceState(null,'','#'+x); }catch(e)
 document.getElementById('v-tech').onclick=()=>setView('tech');
 document.getElementById('v-office').onclick=()=>setView('office');
 document.getElementById('v-dash').onclick=()=>setView('dash');
-window.addEventListener('hashchange',()=>{ const h=location.hash.slice(1); if(['tech','office','dash'].includes(h)&&h!==view){ view=h; render(); } });
+document.getElementById('v-parts').onclick=()=>setView('parts');
+window.addEventListener('hashchange',()=>{ const h=location.hash.slice(1); if(['tech','office','dash','parts'].includes(h)&&h!==view){ view=h; render(); } });
 
 /* ---------- signature pad ---------- */
 function initSig(){
@@ -627,11 +833,15 @@ $app.addEventListener('input',e=>{
   if(t.id==='f-next') tech.draft.nextAction=t.value;
   if(t.id==='f-bill') tech.draft.billingRef=t.value.trim();
   if(t.id==='o-note'){ office.note=t.value; const er=document.getElementById('o-err'); if(er) er.textContent=''; }
-  if(t.id==='d-q'){ dash.q=t.value; document.getElementById('d-table').innerHTML=dashTable(); }
+  if(t.id==='t-q'){ tech.q=t.value; tech.limit=25; document.getElementById('t-list').innerHTML=techListBody(); }
+  if(t.id==='o-inv'&&office.edit) office.edit.inv=t.value;
+  if(t.id==='o-int'&&office.edit) office.edit.int=t.value;
+  if(t.id==='d-q'){ dash.q=t.value; dash.limit=50; document.getElementById('d-table').innerHTML=dashTable(); }
   dispatchField(t);
 });
 $app.addEventListener('change',async e=>{
   const t=e.target; dispatchField(t);
+  if(t.id==='s-month'){ pui.month=t.value; render(); return; }
   if(t.id!=='f-evidence') return;
   const files=[...t.files]; if(!files.length) return;
   const draftRef=tech.draft; tech.uploading=files.length; render();
@@ -648,6 +858,13 @@ $app.addEventListener('change',async e=>{
 });
 $app.addEventListener('submit',async e=>{
   e.preventDefault();
+  if(e.target.id==='pform'){ const fd=new FormData(e.target), g=k=>(fd.get(k)||'').toString().trim();
+    if(!g('ticket')){ toast('Choose the ticket these parts belong to.'); return; }
+    const d={ticket:g('ticket'),type:g('type'),name:g('name'),sku:g('sku'),qty:Math.max(1,parseInt(g('qty'))||1),note:g('note'),at:new Date().toISOString()}; if(me.id) d.by=me.id;
+    pui.type=d.type; await saveDoc('parts',newId('p'),d,parts); toast(d.type+': '+d.name+' added'); return; }
+  if(e.target.id==='sform'){ const fd=new FormData(e.target), g=k=>(fd.get(k)||'').toString().trim();
+    const d={month:pui.month,item:g('item'),expected:Number(g('expected'))||0,counted:Number(g('counted'))||0,note:g('note'),at:new Date().toISOString()}; if(me.id) d.by=me.id;
+    await saveDoc('stock',newId('s'),d,stock); toast('Count recorded for '+d.item); return; }
   if(e.target.id==='partform'){ const i=document.getElementById('f-part'); const n=i.value.trim(); if(!n) return;
     const ex=tech.draft.parts.find(p=>p.name.toLowerCase()===n.toLowerCase()); if(ex) ex.qty++; else tech.draft.parts.push({name:n,qty:1});
     render(); document.getElementById('f-part').focus(); return; }
@@ -672,6 +889,12 @@ $app.addEventListener('click',async e=>{
   if(row){ office.id=row.dataset.row; office.keep=true; office.note=''; setView('office'); return; }
   const b=e.target.closest('button,[data-open]'); if(!b) return;
   const ds=b.dataset, v=tech.id&&visits[tech.id];
+  if(ds.pdf){ const pv=visits[ds.pdf]; if(pv) await downloadReport(pv); return; }
+  if(ds.ptype){ pui.type=ds.ptype; render(); return; }
+  if(ds.dm){ pui.dmOnly=ds.dm==='1'; render(); return; }
+  if(ds.goto2){ office.id=ds.goto2; office.keep=true; office.note=''; setView('office'); return; }
+  if(ds.delpart){ if(pui.del!==ds.delpart){ pui.del=ds.delpart; render(); return; } pui.del=null; await delDoc('parts',ds.delpart,parts); toast('Entry deleted'); return; }
+  if(ds.delstock){ if(pui.del!==ds.delstock){ pui.del=ds.delstock; render(); return; } pui.del=null; await delDoc('stock',ds.delstock,stock); toast('Count deleted'); return; }
   if(ds.ttab){ tech.tab=ds.ttab; tech.limit=25; render(); return; }
   if(ds.open){ Object.assign(tech,{screen:'hub',id:ds.open,draft:null,showCall:false}); render(); window.scrollTo(0,0); return; }
   if(ds.nav){ Object.assign(tech,{screen:ds.nav,draft:null,showCall:false,uploading:0}); render(); window.scrollTo(0,0); return; }
@@ -687,16 +910,22 @@ $app.addEventListener('click',async e=>{
   if(ds.sel){ office.id=ds.sel; office.note=''; office.keep=false; render(); return; }
   if(ds.goto){ office.id=ds.goto; office.keep=true; office.note=''; render(); return; }
   if(ds.page){ const q=reviewQueue(); const i=q.findIndex(x=>x.id===office.id)+ +ds.page; if(q[i]){ office.id=q[i].id; office.note=''; render(); } return; }
-  if(ds.dstat){ dash.status=ds.dstat; render(); return; }
+  if(ds.dstat){ dash.status=ds.dstat; dash.limit=50; render(); return; }
   if(ds.dsort){ if(dash.sort===ds.dsort) dash.dir=dash.dir==='asc'?'desc':'asc'; else { dash.sort=ds.dsort; dash.dir='asc'; } document.getElementById('d-table').innerHTML=dashTable(); return; }
   if(ds.decide){
     const ov=visits[office.id]; const note=office.note.trim();
     if(ds.decide!=='completed'&&!note){ document.getElementById('o-err').textContent='Add a review note so the technician knows why.'; document.getElementById('o-note').focus(); return; }
-    const n=clone(ov); n.status=ds.decide; n.history=[...(n.history||[]),hist(ds.decide,note)];
-    office.note=''; office.id=null; office.keep=false; await save(n);
+    const n=clone(ov);
+    if(office.edit&&office.edit.id===ov.id){ n.billingRef=office.edit.inv.trim(); n.internalNotes=office.edit.int.trim(); }
+    if(ds.decide==='completed'&&missingChecks(n).length&&office.confirm!==ov.id){ office.confirm=ov.id; render(); return; }
+    n.status=ds.decide; n.history=[...(n.history||[]),hist(ds.decide,note)];
+    office.note=''; office.id=null; office.keep=false; office.confirm=null; office.edit=null; await save(n);
     toast({completed:'#'+n.id+' marked completed',recheck:'#'+n.id+' returned to the technician',cancelled:'#'+n.id+' cancelled'}[ds.decide]); return;
   }
   const act=ds.act;
+  if(act==='unconfirm'){ office.confirm=null; render(); return; }
+  if(act==='savedetails'){ const ov=visits[office.id]; if(!ov||!office.edit) return; const n=clone(ov); n.billingRef=office.edit.inv.trim(); n.internalNotes=office.edit.int.trim(); await save(n); toast('Details saved for #'+n.id); return; }
+  if(act==='dmore'){ dash.limit+=50; document.getElementById('d-table').innerHTML=dashTable(); return; }
   if(act==='more'){ tech.limit+=25; render(); return; }
   if(act==='call'){ tech.showCall=!tech.showCall; render(); return; }
   if(act==='copy'){ const el=document.getElementById('phone-num'); try{ await navigator.clipboard.writeText(el.textContent); toast('Number copied'); }catch(err){ const r=document.createRange(); r.selectNodeContents(el); const s=getSelection(); s.removeAllRanges(); s.addRange(r); toast('Number selected. Copy it from here.'); } return; }
@@ -730,8 +959,16 @@ Required items still missing: ${bad.length?bad.join(', '):'none'}. Next action n
   }
 });
 
+/* ---------- chart tooltips ---------- */
+const tipEl=document.getElementById('tip');
+const showTip=(el,x,y)=>{ tipEl.textContent=el.dataset.tip; tipEl.hidden=false; const r=tipEl.getBoundingClientRect(); tipEl.style.left=Math.max(8,Math.min(innerWidth-r.width-8,x+12))+'px'; tipEl.style.top=Math.max(8,y-r.height-12)+'px'; };
+$app.addEventListener('mousemove',e=>{ const el=e.target.closest('[data-tip]'); if(el) showTip(el,e.clientX,e.clientY); else tipEl.hidden=true; });
+$app.addEventListener('mouseleave',()=>tipEl.hidden=true);
+$app.addEventListener('focusin',e=>{ const el=e.target.closest('[data-tip]'); if(el){ const r=el.getBoundingClientRect(); showTip(el,r.left+r.width/2,r.top); } });
+$app.addEventListener('focusout',()=>tipEl.hidden=true);
+
 /* ---------- boot ---------- */
-(()=>{ const h=location.hash.slice(1), ok=x=>['tech','office','dash'].includes(x); let saved=null; try{ saved=localStorage.getItem('zi-view'); }catch(e){} view=ok(h)?h:ok(saved)?saved:'tech'; })();
+(()=>{ const h=location.hash.slice(1), ok=x=>['tech','office','dash','parts'].includes(x); let saved=null; try{ saved=localStorage.getItem('zi-view'); }catch(e){} view=ok(h)?h:ok(saved)?saved:'tech'; })();
 render();
 
 function demoData(){ // only used when the shared store is unavailable; the header labels this as demo mode
@@ -762,6 +999,8 @@ function goDemo(){ if(loaded) return; demo=true; loaded=true; visits=demoData();
   use('sample').then(s=>{ sampleApi=s; safeRender(); });
   use('downloads').then(d=>{ downloadsApi=d; safeRender(); });
   if(!db) return;
+  const sub=(col,store)=>db.collection(col).onSnapshot(snap=>{ for(const k in store) delete store[k]; snap.docs.forEach(d=>{ const x=d.data(); if(x) store[d.id]=Object.assign({id:d.id},x); }); if(view==='parts') safeRender(); },()=>{});
+  sub('parts',parts); sub('stock',stock);
   db.collection('visits').onSnapshot(snap=>{
     clearTimeout(fallback); if(demo) return;
     const next={}; snap.docs.forEach(d=>{ const x=d.data(); if(x){ const v=Object.assign({id:d.id,history:[],parts:[],evidence:[]},x); if(!STATUS[v.status]) v.status=(v.history[v.history.length-1]||{}).status||'new'; next[d.id]=v; } });
