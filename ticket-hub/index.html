@@ -1,0 +1,509 @@
+<title>Ziar Imaar Ticket Hub</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Montserrat:wght@500;700&display=swap" rel="stylesheet">
+<style>
+/* Layout: one shared visit store; technician phone flow (390px column) and office review (3-pane desktop, stacks on narrow). Dark-only by design, from the high-fidelity mockups. */
+:root{
+  color-scheme:dark;
+  /* Ziar Imaar Technical Services: deep navy ground, gold accent */
+  --bg:#0a1733; --panel:#0e1f42; --card:#132a54; --sel:#1c335f; --line:#24396a; --line2:#3a5287; --muted3:#5d72a3;
+  --fg:#eef1f8; --fg2:#cdd6ea; --muted:#9fb0d2; --dim:#7f90b6;
+  --accent:#d6a83e; --accent2:#f1d27f; --accentDeep:#a8822c; --chip:#2a3f6e; --chipFg:#e6ecfa; --white:#ffffff;
+  --warn:#f3c56a; --ok:#93d9b4; --bad:#f2a0a0; --noteBg:#2a2615;
+  --sans:Inter,system-ui,-apple-system,"Segoe UI",sans-serif; --brand:Montserrat,Inter,system-ui,sans-serif; --mono:ui-monospace,Menlo,Consolas,monospace;
+}
+html,body{height:100%}
+body{margin:0;background:var(--bg);color:var(--fg);font-family:var(--sans);font-size:15px;line-height:1.45}
+*{box-sizing:border-box}
+button,input,textarea{font:inherit;color:inherit}
+button{cursor:pointer;background:none;border:0;padding:0}
+:focus-visible{outline:2px solid var(--accent2);outline-offset:2px;border-radius:6px}
+.lbl{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);font-weight:600}
+.row{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.mono{font-family:var(--mono);font-size:12px;color:var(--muted)}
+.num{font-variant-numeric:tabular-nums}
+.chip{display:inline-flex;align-items:center;height:24px;padding:0 10px;border-radius:999px;font-size:12px;font-weight:600;background:var(--chip);color:var(--chipFg);white-space:nowrap}
+.chip.review{background:#3a3418;color:var(--accent2)}.chip.completed{background:#173f39;color:var(--ok)}.chip.cancelled{background:#43233a;color:var(--bad)}.chip.recheck{background:#3f3115;color:var(--warn)}
+
+/* top bar */
+.top{position:sticky;top:env(safe-area-inset-top,0px);z-index:5;background:var(--bg);border-bottom:1px solid var(--line);padding-block:8px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top,0px);z-index:10;background:var(--bg)}
+.top .row{max-width:1280px;margin:0 auto;flex-wrap:wrap}
+.brand{display:flex;align-items:center;gap:12px;min-width:0}
+.wm{display:flex;flex-direction:column;line-height:1}
+.wm b{font-family:var(--brand);font-weight:700;font-size:17px;letter-spacing:.06em;color:var(--white);display:flex;align-items:center;gap:6px}
+.wm b i{display:inline-block;width:18px;height:2px;background:var(--accent);border-radius:2px}
+.wm small{font-family:var(--brand);font-weight:500;font-size:8.5px;letter-spacing:.32em;color:var(--fg2);margin-top:4px}
+.client{font-size:12px;color:var(--muted);border-left:1px solid var(--line2);padding-left:12px}
+.top{box-shadow:inset 0 -1px 0 var(--accentDeep)}
+.seg{display:inline-flex;background:var(--card);border-radius:10px;padding:3px}
+.seg button{height:32px;padding:0 14px;border-radius:8px;color:var(--fg2);font-weight:500;font-size:14px}
+.seg button[aria-pressed="true"]{background:var(--sel);color:var(--white);font-weight:600;box-shadow:inset 0 0 0 1px var(--accent)}
+.mode{font-size:12px;color:var(--muted)}
+.mode.demo{color:var(--warn)}
+
+/* technician */
+.phone{max-width:420px;margin:0 auto;min-height:calc(100% - 50px);display:flex;flex-direction:column}
+.bar{height:56px;display:flex;align-items:center;justify-content:space-between;padding:0 8px 0 4px}
+.icon{width:44px;height:44px;display:grid;place-items:center;color:var(--fg);border-radius:10px}
+.icon.txt{color:var(--muted);font-size:13px;width:auto;min-width:44px;padding:0 6px}
+.bar .t{font-weight:600;font-size:16px}
+.scroll{flex:1;padding:4px 16px 16px;display:flex;flex-direction:column;gap:16px}
+.card{background:var(--card);border-radius:14px;padding:16px;display:flex;flex-direction:column;gap:12px}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.ghost{height:44px;border-radius:10px;border:1px solid var(--line2);display:flex;align-items:center;justify-content:center;gap:6px;font-weight:500;text-decoration:none;color:var(--fg)}
+.list{background:var(--card);border-radius:14px;overflow:hidden}
+.step{display:flex;align-items:center;gap:12px;min-height:56px;padding:8px 16px;border-top:1px solid var(--line);width:100%;text-align:left}
+.step:first-child{border-top:none}
+.step.cur{background:var(--sel)}
+.step:disabled{cursor:default}
+.dot{width:24px;height:24px;border-radius:50%;flex:none;display:grid;place-items:center;font-size:12px;font-weight:600;border:1.5px solid var(--muted3);color:var(--muted)}
+.dot.done{background:var(--accentDeep);color:var(--white);border:0}
+.dot.cur{border:2px solid var(--accent);color:var(--accent2)}
+.sub{font-size:12px;color:var(--muted)}
+.chev{color:var(--muted)}
+.foot{position:sticky;bottom:0;padding:12px 16px calc(24px + env(safe-area-inset-bottom,0px));border-top:1px solid var(--line);background:var(--bg);display:flex;flex-direction:column;gap:8px}
+.primary{height:48px;border-radius:12px;background:var(--accent);color:var(--bg);display:flex;align-items:center;justify-content:center;font-weight:600;width:100%}
+.primary:disabled{background:var(--line);color:var(--dim);cursor:not-allowed}
+.secondary{height:48px;border-radius:12px;border:1px solid var(--line2);display:flex;align-items:center;justify-content:center;font-weight:500;color:var(--fg);width:100%}
+.hint{text-align:center;font-size:12px;color:var(--muted)}
+.field{display:block;width:100%;margin-top:6px;border-radius:12px;border:1px solid var(--line2);background:var(--card);padding:12px;color:var(--fg);resize:vertical}
+.field::placeholder{color:var(--muted)}
+.stamps{display:flex;gap:10px;margin-top:6px}
+.stamp{flex:1;min-height:64px;border-radius:12px;border:1px dashed var(--muted3);display:flex;flex-direction:column;justify-content:center;padding:10px 12px;text-align:left}
+.stamp.on{border:1.5px solid var(--accent);background:var(--sel)}
+.pills{display:flex;gap:8px;flex-wrap:wrap;margin-top:6px}
+.pill{height:36px;padding:0 14px;border-radius:999px;border:1px solid var(--line2);font-weight:500;color:var(--fg2)}
+.pill[aria-pressed="true"]{border-color:var(--accent);background:var(--sel);color:var(--white)}
+.drop{margin-top:6px;min-height:64px;border-radius:12px;border:1.5px dashed var(--muted3);display:flex;align-items:center;justify-content:center;gap:8px;color:var(--fg2);width:100%;position:relative}
+.drop input{position:absolute;inset:0;opacity:0;cursor:pointer}
+.files{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+.file{display:inline-flex;align-items:center;gap:6px;height:28px;padding:0 6px 0 10px;border-radius:8px;background:var(--card);font-size:12px;color:var(--fg2);max-width:100%}
+.file span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.file button{width:22px;height:22px;border-radius:6px;color:var(--muted)}
+.note{border:1px solid var(--warn);background:var(--noteBg);border-radius:12px;padding:12px;font-size:14px;color:var(--fg)}
+.timeline{display:flex;flex-direction:column;gap:10px;border-left:2px solid var(--line2);padding-left:14px}
+.kv{display:flex;justify-content:space-between;gap:12px}
+.kv span:first-child{color:var(--muted)}
+.partrow{display:flex;align-items:center;gap:8px;padding:10px 12px;border-top:1px solid var(--line)}
+.partrow:first-child{border-top:0}
+.qty{display:inline-flex;align-items:center;border:1px solid var(--line2);border-radius:8px}
+.qty button{width:32px;height:32px}
+.qty span{min-width:22px;text-align:center}
+.inline{display:flex;gap:8px;margin-top:6px}
+.inline .field{margin-top:0}
+.small-btn{height:44px;padding:0 14px;border-radius:12px;background:var(--sel);border:1px solid var(--accent);color:var(--white);font-weight:600;flex:none}
+.visitlink{display:flex;flex-direction:column;gap:6px;text-align:left;width:100%}
+.callbox{display:flex;align-items:center;justify-content:space-between;gap:8px;background:var(--sel);border-radius:10px;padding:8px 12px}
+
+/* office */
+.office{max-width:1280px;margin:0 auto;display:grid;grid-template-columns:240px minmax(0,1fr) 320px;min-height:calc(100% - 50px)}
+.officebar{max-width:1280px;margin:0 auto;height:56px;display:flex;align-items:center;justify-content:space-between;gap:12px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));border-bottom:1px solid var(--line);flex-wrap:wrap}
+.pager{display:flex;align-items:center;gap:6px;color:var(--fg2);font-size:14px;flex-wrap:wrap}
+.pager button{padding:4px 8px;border-radius:6px;background:var(--card)}
+.pager button[aria-current="true"]{background:var(--sel);color:var(--white);font-weight:600}
+.queue{border-right:1px solid var(--line);padding:16px;display:flex;flex-direction:column;gap:10px;font-size:14px}
+.q{border:1px solid var(--line);border-radius:8px;padding:10px;text-align:left;width:100%}
+.q[aria-current="true"]{border:1.5px solid var(--accent);background:var(--sel)}
+.detail{padding:20px 24px;display:flex;flex-direction:column;gap:16px;font-size:14px;min-width:0}
+.tiles{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
+.tile{background:var(--card);border-radius:10px;padding:12px;display:flex;flex-direction:column;gap:4px}
+.ev{display:flex;gap:10px;flex-wrap:wrap}
+.evbox{width:96px;height:68px;border-radius:8px;border:1px solid var(--line2);display:flex;align-items:center;justify-content:center;color:var(--muted);font-size:12px;padding:4px;text-align:center;overflow:hidden;word-break:break-all}
+.tbl{border:1px solid var(--line);border-radius:10px;overflow-x:auto}
+.tr{display:grid;grid-template-columns:1.2fr 1fr 1fr 1fr;padding:8px 12px;border-top:1px solid var(--line);min-width:420px;gap:8px}
+.tr.h{background:var(--card);color:var(--muted);font-size:12px;border-top:0}
+.tr.flag{background:var(--sel)}
+.m-ok{color:var(--accent2)}.m-bad{color:var(--white);font-weight:600}
+.decide{border-left:1px solid var(--line);padding:20px;display:flex;flex-direction:column;gap:12px;background:var(--panel);font-size:14px}
+.btn{height:40px;border-radius:10px;display:flex;align-items:center;justify-content:center;font-weight:500;width:100%;border:1px solid var(--line2);color:var(--fg)}
+.btn.go{background:var(--accent);color:var(--bg);font-weight:600;border:0}
+.btn:disabled{opacity:.45;cursor:not-allowed}
+.err{color:var(--warn);font-size:12px;min-height:16px}
+.empty{color:var(--muted);padding:24px;text-align:center}
+.toast{position:fixed;left:50%;bottom:calc(20px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--sel);border:1px solid var(--accent);color:var(--white);padding:10px 16px;border-radius:10px;font-size:14px;z-index:20;max-width:calc(100% - 32px)}
+@media (max-width:960px){
+  .office{grid-template-columns:1fr}
+  .queue{border-right:0;border-bottom:1px solid var(--line)}
+  .decide{border-left:0;border-top:1px solid var(--line)}
+  .tiles{grid-template-columns:repeat(2,1fr)}
+  .detail,.queue,.decide{padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+}
+@media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+</style>
+
+<header class="top">
+  <div class="row">
+    <div class="brand"><div class="wm" aria-label="Ziar Imaar Technical Services"><b>ZIAR <i></i> IMAAR</b><small>TECHNICAL SERVICES</small></div><span class="client">Kohler UAE<br>Ticket hub</span></div>
+    <div class="seg" role="group" aria-label="View">
+      <button id="v-tech" type="button">Technician</button>
+      <button id="v-office" type="button">Office</button>
+    </div>
+    <span id="mode" class="mode">Connecting…</span>
+  </div>
+</header>
+<main id="app"></main>
+<div id="toast" class="toast" hidden></div>
+
+<script>
+(() => {
+const STATUS = {new:'New', review:'Ready for review', completed:'Completed', recheck:'Recheck', cancelled:'Cancelled'};
+const PHONE = '+971 4 362 7500';
+let visits = {};          // id -> visit
+let db = null, demo = false, loaded = false;
+let view = 'tech';        // tech | office
+let tech = {screen:'list', id:null, draft:null};
+let office = {id:null, note:'', invoice:''};
+const $app = document.getElementById('app');
+
+/* ---------- helpers ---------- */
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const pad = n => String(n).padStart(2,'0');
+const MON = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+const DAY = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+const hm = iso => { if(!iso) return ''; const d=new Date(iso); return pad(d.getHours())+':'+pad(d.getMinutes()); };
+const dm = iso => { if(!iso) return ''; const d=new Date(iso); return d.getDate()+' '+MON[d.getMonth()]; };
+const dmhm = iso => iso ? dm(iso)+' · '+hm(iso) : '';
+const dayLong = iso => { const d=new Date(iso); return DAY[d.getDay()]+' '+d.getDate()+' '+MON[d.getMonth()]+' · '+hm(iso); };
+const clone = o => JSON.parse(JSON.stringify(o));
+const partsCount = v => (v.parts||[]).reduce((a,p)=>a+(+p.qty||0),0);
+const evidenceLabel = v => { const e=v.evidence||[]; if(!e.length) return 'None'; const pdf=e.filter(n=>/\.pdf$/i.test(n)).length, ph=e.length-pdf; return [ph?ph+' photo'+(ph>1?'s':''):'', pdf?pdf+' PDF':''].filter(Boolean).join(', '); };
+const canSubmit = v => !!(v.arrived && (v.work||'').trim());
+const editable = v => v.status==='new' || v.status==='recheck';
+function toast(msg){ const t=document.getElementById('toast'); t.textContent=msg; t.hidden=false; clearTimeout(toast.t); toast.t=setTimeout(()=>t.hidden=true,2600); }
+
+function checks(v){
+  const a=v.airtable||{};
+  const rows=[
+    ['Region', v.region, a.region],
+    ['Visit date', dm(v.scheduled), a.date ? dm(a.date) : ''],
+    ['Rate (AED)', v.rate, a.rate],
+    ['Invoice no.', v.billingRef||'', a.invoice||''],
+  ];
+  return rows.map(([f,t,at])=>{
+    let ok, label;
+    if(f==='Invoice no.'){ ok = !!t && !!at && String(t)===String(at); label = (!t && !at) ? '⚠ Missing' : ok ? 'Matches' : (!t||!at) ? '⚠ Missing' : '⚠ Differs'; }
+    else { ok = String(t??'')===String(at??''); label = ok ? 'Matches' : '⚠ Differs'; }
+    return {f, t: t===''||t==null?'—':t, at: at===''||at==null?'—':at, ok, label};
+  });
+}
+function flagSummary(v){
+  const bad=checks(v).filter(c=>!c.ok);
+  if(!bad.length) return 'Ready';
+  if(bad.length===1){ const b=bad[0]; return b.f==='Invoice no.' ? 'Invoice missing' : b.f==='Rate (AED)' ? 'Rate check pending' : b.f+' differs'; }
+  return bad.length+' flags';
+}
+
+/* ---------- persistence ---------- */
+async function save(v){
+  v.updatedAt = new Date().toISOString();
+  visits[v.id] = clone(v);
+  if(db){
+    try { await db.doc('visits/'+v.id).set(clone(v)); }
+    catch(e){ toast(e && e.code==='not_granted' || e && e.code==='permission_denied' ? 'You can view this hub but not change it.' : 'Could not save. Check your connection and try again.'); }
+  }
+  render();
+}
+
+/* ---------- technician screens ---------- */
+function techList(){
+  const list=Object.values(visits).sort((a,b)=>a.scheduled.localeCompare(b.scheduled));
+  const open=list.filter(v=>editable(v)), sent=list.filter(v=>!editable(v));
+  const item=v=>`<button class="card visitlink" data-open="${esc(v.id)}">
+      <div class="row"><span class="chip ${v.status}">${STATUS[v.status]}</span><span class="mono">${esc(v.model)}</span></div>
+      <div style="font-size:17px;font-weight:600">#${esc(v.id)} · ${esc(v.site)}</div>
+      <div class="sub">${esc(v.product)} · ${esc(dayLong(v.scheduled))}</div></button>`;
+  return `<div class="phone">
+    <div class="bar"><span class="icon" aria-hidden="true"></span><span class="t">My visits</span><span class="icon txt num">${open.length} open</span></div>
+    <div class="scroll">
+      ${!loaded ? '<div class="empty">Loading visits…</div>' : !list.length ? '<div class="empty">No visits assigned yet. New tickets appear here as soon as the office creates them.</div>' : ''}
+      ${open.length?`<div class="lbl">To do</div>${open.map(item).join('')}`:''}
+      ${sent.length?`<div class="lbl">Submitted</div>${sent.map(item).join('')}`:''}
+    </div></div>`;
+}
+
+function techHub(v){
+  if(!editable(v)) return techReceipt(v);
+  const done=[v.prepared, !!(v.arrived&&v.finished&&(v.work||'').trim()), partsCount(v)>0, !!v.billingRef];
+  const doneN=done.filter(Boolean).length;
+  const curIdx = done.indexOf(false);
+  const ready=canSubmit(v);
+  const missing=[!v.arrived&&'arrival time', !(v.work||'').trim()&&'work performed'].filter(Boolean);
+  const lastNote=[...(v.history||[])].reverse().find(h=>h.status==='recheck'&&h.note);
+  const steps=[
+    {t:'Prepare job', s: v.prepared?'Contacted '+hm(v.contactedAt):'Call the site to confirm access', go:'prepare'},
+    {t:'Complete visit', s: v.arrived ? ('Arrived '+hm(v.arrived)+(v.finished?' · Finished '+hm(v.finished):'')) : 'Next step', go:'visit'},
+    {t: v.site+' parts', s: partsCount(v)+' part'+(partsCount(v)===1?'':'s'), go:'parts'},
+    {t:'Billing reference', s: v.billingRef || 'Optional', go:'billing'},
+  ];
+  return `<div class="phone">
+    <div class="bar"><button class="icon" data-nav="list" aria-label="Back to my visits">${backSvg}</button><span class="t">Visit #${esc(v.id)}</span><span class="icon txt">${esc(v.type)}</span></div>
+    <div class="scroll">
+      ${lastNote?`<div class="note"><div class="lbl" style="color:var(--warn)">Office asked for a recheck</div><div style="margin-top:4px">${esc(lastNote.note)}</div></div>`:''}
+      <div class="card">
+        <div class="row"><span class="chip ${v.status}">${STATUS[v.status]}</span><span class="mono">${esc(v.model)}</span></div>
+        <div><div style="font-size:22px;font-weight:600;letter-spacing:-.01em">${esc(v.site)}</div><div style="color:var(--fg2);margin-top:2px">${esc(v.product)}</div></div>
+        <div class="grid2" style="border-top:1px solid var(--line);padding-top:12px">
+          <div><div class="lbl">Visit</div><div style="margin-top:2px" class="num">${esc(dayLong(v.scheduled))}</div></div>
+          <div><div class="lbl">Type</div><div style="margin-top:2px">${esc(v.type)}</div></div>
+          <div style="grid-column:1/-1"><div class="lbl">Reported issue</div><div style="margin-top:2px">${esc(v.issue)}</div></div>
+        </div>
+        <div class="grid2" style="gap:8px">
+          <button class="ghost" data-act="call">Call</button>
+          <a class="ghost" href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(v.site+', Dubai')}" target="_blank" rel="noopener">Directions</a>
+        </div>
+        ${tech.showCall?`<div class="callbox"><span class="num" id="phone-num" style="user-select:all">${esc(v.phone||PHONE)}</span><button class="ghost" style="height:32px;padding:0 10px" data-act="copy">Copy</button></div>`:''}
+      </div>
+      <div>
+        <div class="lbl" style="margin-bottom:8px">Your steps · ${doneN} of 4 done</div>
+        <div class="list">${steps.map((s,i)=>{
+          const isDone=done[i], isCur=i===curIdx;
+          return `<button class="step${isCur?' cur':''}" data-step="${s.go}">
+            <span class="dot${isDone?' done':isCur?' cur':''}" aria-hidden="true">${isDone?'✓':i+1}</span>
+            <div style="flex:1;min-width:0"><div style="font-weight:${isCur?600:500}">${esc(s.t)}</div><div class="sub" style="${isCur?'color:var(--fg2)':''}">${esc(s.s)}</div></div>
+            <span class="${isCur?'':'chev'}" style="${isCur?'color:var(--accent2);font-weight:600':''}">${isCur ? (i===0?'Mark done':'Start') : '›'}</span>
+          </button>`;}).join('')}</div>
+      </div>
+    </div>
+    <div class="foot">
+      <button class="primary" data-act="submit" ${ready?'':'disabled'}>Submit for review</button>
+      <span class="hint">${ready?'Ready to submit':'Needs '+missing.join(' and ')}</span>
+    </div></div>`;
+}
+
+function techVisit(){
+  const d=tech.draft;
+  const stamp=(key,label)=>`<button class="stamp${d[key]?' on':''}" data-stamp="${key}">
+      <span style="font-weight:${d[key]?600:500};color:${d[key]?'var(--white)':'var(--fg)'}">${label}${d[key]?' '+hm(d[key]):''}</span>
+      <span class="sub" style="${d[key]?'color:var(--fg2)':''}">${d[key]?'Stamped · tap to clear':'Tap to stamp'}</span></button>`;
+  return `<div class="phone">
+    <div class="bar"><button class="icon" data-nav="hub" aria-label="Back without saving">${backSvg}</button><span class="t">Complete visit</span><span class="icon txt">#${esc(d.id)}</span></div>
+    <div class="scroll" style="gap:18px;padding-top:8px">
+      <div><span class="lbl">Technician attending</span><div class="field row" style="cursor:default"><span>Me</span><span class="sub">Prefilled</span></div></div>
+      <div><span class="lbl">Visit times</span><div class="stamps">${stamp('arrived','Arrived')}${stamp('finished','Finished')}</div></div>
+      <div><label class="lbl" for="f-findings">Findings</label><textarea id="f-findings" class="field" rows="3" placeholder="Describe what you found on site">${esc(d.findings)}</textarea></div>
+      <div><label class="lbl" for="f-work">Work performed</label><textarea id="f-work" class="field" rows="4" placeholder="Describe the work done during this visit">${esc(d.work)}</textarea></div>
+      <div><span class="lbl">Outcome</span><div class="pills">${['Resolved','Needs parts','Revisit'].map(o=>`<button class="pill" data-outcome="${o}" aria-pressed="${d.outcome===o}">${o}</button>`).join('')}</div></div>
+      <div><span class="lbl">Evidence</span>
+        <label class="drop" for="f-evidence">Add photo or PDF<input id="f-evidence" type="file" accept="image/*,application/pdf" multiple></label>
+        ${(d.evidence||[]).length?`<div class="files">${d.evidence.map((n,i)=>`<span class="file"><span>${esc(n)}</span><button data-rmev="${i}" aria-label="Remove ${esc(n)}">✕</button></span>`).join('')}</div>`:''}
+      </div>
+    </div>
+    <div class="foot"><button class="primary" data-act="savevisit">Save and back to ticket</button></div></div>`;
+}
+
+function techParts(){
+  const d=tech.draft;
+  return `<div class="phone">
+    <div class="bar"><button class="icon" data-nav="hub" aria-label="Back without saving">${backSvg}</button><span class="t">${esc(d.site)} parts</span><span class="icon txt">#${esc(d.id)}</span></div>
+    <div class="scroll">
+      <div><label class="lbl" for="f-part">Add a part</label>
+        <form class="inline" id="partform"><input id="f-part" class="field" placeholder="Part name or Kohler code" autocomplete="off"><button class="small-btn" type="submit">Add</button></form></div>
+      <div><div class="lbl" style="margin-bottom:8px">Parts used · ${partsCount(d)}</div>
+        ${(d.parts||[]).length ? `<div class="list">${d.parts.map((p,i)=>`<div class="partrow"><span style="flex:1;min-width:0;overflow-wrap:anywhere">${esc(p.name)}</span>
+          <span class="qty"><button data-q="${i}" data-dq="-1" aria-label="Decrease">−</button><span class="num">${p.qty}</span><button data-q="${i}" data-dq="1" aria-label="Increase">+</button></span></div>`).join('')}</div>`
+        : '<div class="card sub">No parts recorded. Add each part you fitted so the office can match it to stock.</div>'}
+      </div>
+    </div>
+    <div class="foot"><button class="primary" data-act="saveparts">Save parts</button></div></div>`;
+}
+
+function techBilling(){
+  const d=tech.draft;
+  return `<div class="phone">
+    <div class="bar"><button class="icon" data-nav="hub" aria-label="Back without saving">${backSvg}</button><span class="t">Billing reference</span><span class="icon txt">#${esc(d.id)}</span></div>
+    <div class="scroll">
+      <div><label class="lbl" for="f-bill">Invoice or PO number</label><input id="f-bill" class="field" value="${esc(d.billingRef)}" placeholder="e.g. INV-26-1148" autocomplete="off"></div>
+      <div class="sub">Optional. The office checks this against the Airtable record before closing the visit.</div>
+    </div>
+    <div class="foot"><button class="primary" data-act="savebilling">Save reference</button></div></div>`;
+}
+
+function techReceipt(v){
+  const sub=[...(v.history||[])].reverse().find(h=>h.status==='review');
+  const last=(v.history||[])[v.history.length-1];
+  const msg={review:'Locked while the office reviews. It returns to you if a recheck is requested.',completed:'The office closed this visit. No further action needed.',cancelled:'The office cancelled this visit.'}[v.status];
+  return `<div class="phone">
+    <div class="bar"><button class="icon" data-nav="list" aria-label="Back to my visits">${backSvg}</button><span class="t">Visit #${esc(v.id)}</span><span class="icon txt">Receipt</span></div>
+    <div class="scroll">
+      <div class="card" style="border:1px solid var(--dim);background:var(--sel)">
+        <div class="row"><span class="chip ${v.status}">${STATUS[v.status]}</span><span class="sub" style="color:var(--fg2)">Read only</span></div>
+        <div style="font-size:17px;font-weight:600" class="num">${v.status==='review'?'Submitted '+esc(dmhm(sub&&sub.at)):esc(STATUS[v.status])+' '+esc(dmhm(last&&last.at))}</div>
+        <div style="color:var(--fg2);font-size:14px">${msg}</div>
+        ${last&&last.note&&v.status!=='review'?`<div style="font-size:14px"><span class="sub">Office note:</span> ${esc(last.note)}</div>`:''}
+      </div>
+      <div><div class="lbl" style="margin-bottom:8px">Status history</div>
+        <div class="timeline">${[...(v.history||[])].reverse().map((h,i)=>`<div><div style="font-weight:${i===0?600:500}">${esc(STATUS[h.status])}</div><div class="sub num">${h.status==='new'?'Created '+esc(dm(h.at)):esc(dmhm(h.at))}${h.note?' · '+esc(h.note):''}</div></div>`).join('')}</div></div>
+      <div><div class="lbl" style="margin-bottom:8px">What you submitted</div>
+        <div class="card">
+          <div class="kv"><span>Arrived</span><span class="num">${esc(hm(v.arrived))||'—'}</span></div>
+          <div class="kv"><span>Finished</span><span class="num">${esc(hm(v.finished))||'—'}</span></div>
+          <div class="kv"><span>Outcome</span><span>${esc(v.outcome)||'—'}</span></div>
+          <div class="kv"><span>Parts used</span><span class="num">${partsCount(v)}</span></div>
+          <div class="kv"><span>Evidence</span><span>${esc(evidenceLabel(v))}</span></div>
+          <div class="kv"><span>Billing ref</span><span>${esc(v.billingRef)||'—'}</span></div>
+          <div style="border-top:1px solid var(--line);padding-top:10px"><div class="sub">Work performed</div><div style="margin-top:2px">${esc(v.work)||'—'}</div></div>
+        </div></div>
+    </div>
+    <div class="foot"><span class="secondary" style="color:var(--muted)">${v.status==='review'?'Waiting for office review':'Visit closed'}</span></div></div>`;
+}
+
+const backSvg='<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"></path></svg>';
+
+/* ---------- office ---------- */
+function officeView(){
+  const all=Object.values(visits);
+  const queue=all.filter(v=>v.status==='review').sort((a,b)=>b.id.localeCompare(a.id));
+  const rechecks=all.filter(v=>v.status==='recheck');
+  if(!office.id || !visits[office.id] || (visits[office.id].status!=='review' && !office.keep)) office.id = queue[0]?.id || null;
+  const v=office.id && visits[office.id];
+  const idx=queue.findIndex(q=>q.id===office.id);
+  const bar=`<div class="officebar"><div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap"><span style="font-weight:600;font-size:16px">Review queue</span><span class="sub num">${queue.length} waiting</span></div>
+    <div class="pager">${queue.length?`<button data-page="-1" aria-label="Previous visit" ${idx<=0?'disabled':''}>‹</button>${queue.map(q=>`<button data-sel="${esc(q.id)}" aria-current="${q.id===office.id}">#${esc(q.id)}</button>`).join('')}<button data-page="1" aria-label="Next visit" ${idx<0||idx>=queue.length-1?'disabled':''}>›</button>`:''}</div></div>`;
+  const qcol=`<aside class="queue"><div class="lbl">Ready for review</div>
+    ${queue.length?queue.map(q=>{const f=flagSummary(q),bad=checks(q).filter(c=>!c.ok).length;return `<button class="q" data-sel="${esc(q.id)}" aria-current="${q.id===office.id}"><div style="font-weight:${q.id===office.id?600:500}">#${esc(q.id)} · ${esc(q.site)} ${bad?`<span style="color:var(--accent2);font-size:12px">⚠ ${bad} flag${bad>1?'s':''}</span>`:''}</div><div class="sub">${esc(q.product)} · ${esc(f)}</div></button>`;}).join(''):'<div class="sub">Nothing waiting. Submitted visits appear here.</div>'}
+    <div class="lbl" style="margin-top:10px">Recheck · ${rechecks.length}</div>
+    <div class="sub" style="color:var(--fg2)">${rechecks.length?rechecks.map(r=>'#'+esc(r.id)).join(' · '):'None'}</div></aside>`;
+  if(!v) return bar+`<div class="office">${qcol}<section class="detail"><div class="empty">${loaded?'The queue is clear. When a technician submits a visit, it shows up here for review.':'Loading visits…'}</div></section><aside class="decide"></aside></div>`;
+  const ck=checks(v);
+  const detail=`<section class="detail">
+    <div><div style="font-family:var(--mono);font-size:12px;color:var(--muted);font-weight:700">${esc(v.ref)}</div>
+      <div style="font-size:20px;font-weight:600;letter-spacing:-.01em;margin-top:2px;text-wrap:balance">${esc(v.site)}: ${esc(v.issue)}</div>
+      <div class="sub" style="margin-top:2px">${esc(v.product)} · <span class="mono">${esc(v.model)}</span>${v.outcome?' · Outcome: '+esc(v.outcome):''}</div></div>
+    <div class="tiles num">
+      <div class="tile"><span class="lbl">Scheduled</span><span style="font-weight:500">${esc(dm(v.scheduled))} ${esc(hm(v.scheduled))}</span></div>
+      <div class="tile"><span class="lbl">On site</span><span style="font-weight:500">${esc(hm(v.arrived))||'—'}–${esc(hm(v.finished))||'—'}</span></div>
+      <div class="tile"><span class="lbl">Parts used</span><span style="font-weight:500">${partsCount(v)}</span></div>
+      <div class="tile"><span class="lbl">Invoice</span><span style="font-weight:500;${v.billingRef?'':'color:var(--muted)'}">${esc(v.billingRef)||'None yet'}</span></div>
+    </div>
+    ${v.findings?`<div><div class="lbl" style="margin-bottom:6px">Findings</div><div>${esc(v.findings)}</div></div>`:''}
+    <div><div class="lbl" style="margin-bottom:6px">Work performed</div><div>${esc(v.work)||'—'}</div></div>
+    ${(v.parts||[]).length?`<div><div class="lbl" style="margin-bottom:6px">Parts</div><div>${v.parts.map(p=>esc(p.name)+' × '+p.qty).join(' · ')}</div></div>`:''}
+    <div><div class="lbl" style="margin-bottom:8px">Evidence · ${(v.evidence||[]).length}</div>
+      <div class="ev">${(v.evidence||[]).length?v.evidence.map(n=>`<div class="evbox">${esc(n)}</div>`).join(''):'<span class="sub">No files attached</span>'}</div></div>
+    <div><div class="lbl" style="margin-bottom:8px">Source checks</div>
+      <div class="tbl"><div class="tr h"><span>Field</span><span>Ticket</span><span>Airtable</span><span>Status</span></div>
+      ${ck.map(c=>`<div class="tr${c.ok?'':' flag'}"><span>${c.f}</span><span class="num">${esc(c.t)}</span><span class="num">${esc(c.at)}</span><span class="${c.ok?'m-ok':'m-bad'}">${c.label}</span></div>`).join('')}</div></div>
+  </section>`;
+  const inReview=v.status==='review';
+  const dec=`<aside class="decide">
+    <div style="font-weight:600;font-size:15px">Decision</div>
+    ${inReview?`
+    <div><label for="o-note" style="display:block;font-size:12px;color:var(--fg2);margin-bottom:6px">Review note (required for recheck or cancel)</label>
+      <textarea id="o-note" class="field" style="margin-top:0;border-radius:10px;min-height:88px" placeholder="Add a note for the technician">${esc(office.note)}</textarea></div>
+    <div class="err" id="o-err"></div>
+    <button class="btn go" data-decide="completed">Mark completed</button>
+    <button class="btn" data-decide="recheck">Return for recheck</button>
+    <button class="btn" data-decide="cancelled" style="color:var(--fg2)">Cancel visit</button>`
+    :`<div><span class="chip ${v.status}">${STATUS[v.status]}</span></div><div class="sub">This visit is no longer in the review queue.</div>`}
+    <div style="margin-top:auto"><div class="lbl" style="margin-bottom:6px">History</div>
+      <div class="timeline" style="padding-left:12px;color:var(--fg2);gap:6px">${(v.history||[]).slice(1).map((h,i)=>`<div class="num">${esc(STATUS[(v.history[i]||{}).status]||'')} → ${esc(STATUS[h.status])} · ${esc(dmhm(h.at))}${h.note?`<div class="sub">${esc(h.note)}</div>`:''}</div>`).join('')||'<div class="sub">No changes yet</div>'}</div></div>
+  </aside>`;
+  return bar+`<div class="office">${qcol}${detail}${dec}</div>`;
+}
+
+/* ---------- render ---------- */
+function render(){
+  document.getElementById('v-tech').setAttribute('aria-pressed', view==='tech');
+  document.getElementById('v-office').setAttribute('aria-pressed', view==='office');
+  const m=document.getElementById('mode');
+  m.textContent = !loaded ? 'Connecting…' : demo ? 'Demo mode · changes stay in this tab' : 'Live · shared with your team';
+  m.className = 'mode'+(demo?' demo':'');
+  if(view==='office'){ $app.innerHTML=officeView(); return; }
+  const v=tech.id && visits[tech.id];
+  if(tech.screen==='list' || !v){ tech.screen='list'; $app.innerHTML=techList(); return; }
+  $app.innerHTML = tech.screen==='visit'?techVisit() : tech.screen==='parts'?techParts() : tech.screen==='billing'?techBilling() : techHub(v);
+}
+function setView(x){ view=x; try{ history.replaceState(null,'','#'+x); }catch(e){ location.hash=x; } render(); window.scrollTo(0,0); }
+document.getElementById('v-tech').onclick=()=>setView('tech');
+document.getElementById('v-office').onclick=()=>setView('office');
+window.addEventListener('hashchange',()=>{ const h=location.hash.slice(1); if(h==='tech'||h==='office'){ view=h; render(); } });
+const editing = () => view==='tech' && ['visit','parts','billing'].includes(tech.screen);
+
+/* ---------- events ---------- */
+$app.addEventListener('input', e=>{
+  const t=e.target;
+  if(t.id==='f-findings') tech.draft.findings=t.value;
+  if(t.id==='f-work') tech.draft.work=t.value;
+  if(t.id==='f-bill') tech.draft.billingRef=t.value.trim();
+  if(t.id==='o-note'){ office.note=t.value; const er=document.getElementById('o-err'); if(er) er.textContent=''; }
+});
+$app.addEventListener('change', e=>{
+  if(e.target.id==='f-evidence'){ const names=[...e.target.files].map(f=>f.name); tech.draft.evidence=[...(tech.draft.evidence||[]), ...names]; render(); }
+});
+$app.addEventListener('submit', e=>{
+  if(e.target.id==='partform'){ e.preventDefault(); const i=document.getElementById('f-part'); const n=i.value.trim(); if(!n) return;
+    const ex=tech.draft.parts.find(p=>p.name.toLowerCase()===n.toLowerCase()); if(ex) ex.qty++; else tech.draft.parts.push({name:n,qty:1});
+    render(); document.getElementById('f-part').focus(); }
+});
+$app.addEventListener('click', async e=>{
+  const b=e.target.closest('button,[data-open]'); if(!b) return;
+  const ds=b.dataset, v=tech.id&&visits[tech.id];
+  if(ds.open){ tech={screen:'hub', id:ds.open, draft:null}; render(); window.scrollTo(0,0); return; }
+  if(ds.nav){ tech.screen=ds.nav; tech.draft=null; tech.showCall=false; render(); window.scrollTo(0,0); return; }
+  if(ds.step){
+    if(ds.step==='prepare'){ const n=clone(v); n.prepared=!n.prepared; n.contactedAt=n.prepared?new Date().toISOString():null; await save(n); toast(n.prepared?'Marked as contacted':'Prepare step reopened'); return; }
+    tech.screen=ds.step; tech.draft=clone(v); tech.draft.parts=tech.draft.parts||[]; tech.draft.evidence=tech.draft.evidence||[]; render(); window.scrollTo(0,0); return;
+  }
+  if(ds.stamp){ tech.draft[ds.stamp] = tech.draft[ds.stamp] ? null : new Date().toISOString(); render(); return; }
+  if(ds.outcome){ tech.draft.outcome = tech.draft.outcome===ds.outcome ? '' : ds.outcome; render(); return; }
+  if(ds.rmev){ tech.draft.evidence.splice(+ds.rmev,1); render(); return; }
+  if(ds.q){ const p=tech.draft.parts[+ds.q]; p.qty+= +ds.dq; if(p.qty<=0) tech.draft.parts.splice(+ds.q,1); render(); return; }
+  const act=ds.act;
+  if(act==='call'){ tech.showCall=!tech.showCall; render(); return; }
+  if(act==='copy'){ const num=document.getElementById('phone-num').textContent; try{ await navigator.clipboard.writeText(num); toast('Number copied'); }catch(err){ const r=document.createRange(); r.selectNodeContents(document.getElementById('phone-num')); const s=getSelection(); s.removeAllRanges(); s.addRange(r); toast('Number selected, copy it from here'); } return; }
+  if(act==='savevisit'||act==='saveparts'||act==='savebilling'){
+    const n=clone(visits[tech.draft.id]);
+    if(act==='savevisit') Object.assign(n,{arrived:tech.draft.arrived||null,finished:tech.draft.finished||null,findings:tech.draft.findings||'',work:tech.draft.work||'',outcome:tech.draft.outcome||'',evidence:tech.draft.evidence});
+    if(act==='saveparts') n.parts=tech.draft.parts;
+    if(act==='savebilling') n.billingRef=tech.draft.billingRef||'';
+    tech.screen='hub'; tech.draft=null; await save(n); toast('Saved'); window.scrollTo(0,0); return;
+  }
+  if(act==='submit'){ if(!canSubmit(v)) return; const n=clone(v); n.status='review'; n.history=[...(n.history||[]),{status:'review',at:new Date().toISOString()}]; await save(n); toast('Submitted for review'); window.scrollTo(0,0); return; }
+  if(ds.sel){ office.id=ds.sel; office.note=''; office.keep=false; render(); return; }
+  if(ds.page){ const q=Object.values(visits).filter(x=>x.status==='review').sort((a,b)=>b.id.localeCompare(a.id)); const i=q.findIndex(x=>x.id===office.id)+ +ds.page; if(q[i]){ office.id=q[i].id; office.note=''; render(); } return; }
+  if(ds.decide){
+    const ov=visits[office.id]; const note=office.note.trim();
+    if(ds.decide!=='completed' && !note){ document.getElementById('o-err').textContent='Add a review note so the technician knows why.'; document.getElementById('o-note').focus(); return; }
+    const n=clone(ov); n.status=ds.decide; n.history=[...(n.history||[]),{status:ds.decide,at:new Date().toISOString(),note:note||''}];
+    office.note=''; office.id=null; await save(n);
+    toast({completed:'#'+n.id+' marked completed',recheck:'#'+n.id+' returned to the technician',cancelled:'#'+n.id+' cancelled'}[ds.decide]);
+  }
+});
+
+/* ---------- boot ---------- */
+const h=location.hash.slice(1); if(h==='office') view='office';
+render();
+
+function demoData(){ // used only when the shared store is unavailable; clearly labelled as demo mode
+  const t=(d,h,m)=>new Date(2026,10,d,h,m).toISOString();
+  const base=(id,o)=>Object.assign({id,ref:'EZR-KOHLER-SRV-26-'+id,region:'Dubai',rate:260,type:'Inspection',product:'Shower Toilet',model:'K-76395-0',prepared:false,contactedAt:null,arrived:null,finished:null,findings:'',work:'',outcome:'',parts:[],evidence:[],billingRef:'',airtable:{region:'Dubai',date:null,rate:260,invoice:''},history:[]},o,{status:(o.history&&o.history.length?o.history[o.history.length-1].status:'new')});
+  const list=[
+    base('0218',{site:'Dubai Mall',scheduled:t(21,7,30),issue:'Inspection & Parts Installation',prepared:true,contactedAt:t(21,8,10),airtable:{region:'Dubai',date:t(21,7,30),rate:260,invoice:''},history:[{status:'new',at:t(20,9,0)}]}),
+    base('0220',{site:'Mall of the Emirates',product:'Smart Toilet',model:'K-5401-0',scheduled:t(24,10,0),type:'Repair',issue:'Bidet nozzle not retracting',airtable:{region:'Dubai',date:t(24,10,0),rate:260,invoice:''},history:[{status:'new',at:t(22,14,5)}]}),
+    base('0216',{site:'Atlantis The Palm',product:'Wall-hung WC',model:'K-4026-0',scheduled:t(20,13,0),issue:'Leak at flush valve',prepared:true,contactedAt:t(20,11,40),arrived:t(20,13,6),finished:t(20,14,20),work:'Replaced flush valve seal',outcome:'Resolved',parts:[{name:'Flush valve seal',qty:1}],evidence:['valve-before.jpg','valve-after.jpg'],airtable:{region:'Dubai',date:t(20,13,0),rate:280,invoice:''},history:[{status:'new',at:t(19,9,0)},{status:'review',at:t(20,14,35)}]}),
+    base('0213',{site:'Burj Khalifa Residences',product:'Shower Toilet',scheduled:t(19,9,0),issue:'Seat heater fault',prepared:true,contactedAt:t(19,8,0),arrived:t(19,9,2),finished:t(19,10,15),work:'Reset controller, replaced heater fuse',outcome:'Resolved',parts:[{name:'Heater fuse 2A',qty:1}],evidence:['controller.jpg'],airtable:{region:'Dubai',date:t(19,9,0),rate:260,invoice:''},history:[{status:'new',at:t(18,10,0)},{status:'review',at:t(19,10,30)}]}),
+    base('0211',{site:'Yas Mall',region:'Abu Dhabi',product:'Basin Mixer',model:'K-99481',scheduled:t(18,11,0),type:'Installation',issue:'New unit installation',prepared:true,contactedAt:t(18,9,30),arrived:t(18,11,5),finished:t(18,12,10),work:'Installed and pressure-tested mixer',outcome:'Resolved',parts:[{name:'Basin mixer K-99481',qty:1}],evidence:['install.jpg','handover.pdf'],billingRef:'INV-26-1131',airtable:{region:'Abu Dhabi',date:t(18,11,0),rate:260,invoice:'INV-26-1131'},history:[{status:'new',at:t(17,9,0)},{status:'review',at:t(18,12,30)}]}),
+    base('0215',{site:'City Walk',scheduled:t(19,15,0),issue:'Noise during flush cycle',prepared:true,contactedAt:t(19,14,0),arrived:t(19,15,10),finished:t(19,15,50),work:'Inspected pump',outcome:'Revisit',airtable:{region:'Dubai',date:t(19,15,0),rate:260,invoice:''},history:[{status:'new',at:t(18,9,0)},{status:'review',at:t(19,16,0)},{status:'recheck',at:t(20,9,15),note:'Add a photo of the pump label and the part number you need.'}]}),
+    base('0212',{site:'Dubai Marina Mall',product:'Smart Toilet',model:'K-5401-0',scheduled:t(18,16,0),issue:'Remote not pairing',prepared:true,contactedAt:t(18,15,0),arrived:t(18,16,4),finished:t(18,16,40),work:'Re-paired remote',outcome:'Resolved',airtable:{region:'Dubai',date:t(18,16,0),rate:260,invoice:''},history:[{status:'new',at:t(17,12,0)},{status:'review',at:t(18,17,0)},{status:'recheck',at:t(19,10,0),note:'Finished time is missing a sign-off photo.'}]}),
+  ];
+  const o={}; list.forEach(v=>o[v.id]=v); return o;
+}
+function goDemo(){ if(loaded) return; demo=true; loaded=true; visits=demoData(); render(); }
+
+(async()=>{
+  const fallback=setTimeout(goDemo,10000);
+  try{ db = window.claude && await window.claude.use('db'); }catch(e){ db=null; }
+  if(!db){ clearTimeout(fallback); goDemo(); return; }
+  db.collection('visits').onSnapshot(snap=>{
+    clearTimeout(fallback);
+    if(demo) return;
+    const next={}; snap.docs.forEach(d=>{ const x=d.data(); if(x){ const v=Object.assign({id:d.id,history:[],parts:[],evidence:[]},x); if(!STATUS[v.status]) v.status=(v.history[v.history.length-1]||{}).status||'new'; next[d.id]=v; } });
+    visits=next; loaded=true;
+    const a=document.activeElement;
+    if(!editing() && !(a && a.id==='o-note')) render();
+  }, err=>{ clearTimeout(fallback); db=null; goDemo(); toast('Could not reach the shared store, showing demo data.'); });
+})();
+})();
+</script>
