@@ -1118,7 +1118,7 @@ function finTodo(){
   const lastSt=Object.values(statements).sort((a,b)=>b.month.localeCompare(a.month))[0];
   const noRate=Object.values(visits).filter(v=>v.billingRef&&rateRows()&&ticketCharge(v).missing);
   const todo=[];
-  if(lastSt) todo.push(['ok','Statement ready · '+mlab(lastSt.month),'Easy to send: balance due '+money(lastSt.closing),canPdf()?`<button class="btn" data-stmtpdf="${lastSt.month}">${svg('doc',14)}Download PDF</button>`:'']);
+  if(lastSt) todo.push(['ok','Statement ready · '+stLabel(lastSt.month),'Easy to send: balance due '+money(lastSt.closing),canPdf()?`<button class="btn" data-stmtpdf="${lastSt.month}">${svg('doc',14)}Download PDF</button>`:'']);
   if(over.length) todo.push(['bad',over.length+' invoice'+(over.length>1?'s':'')+' overdue',money(over.reduce((a,[i])=>a+invGross(i)-invPaid(i),0))+' to collect. When money arrives, press Mark paid.',`<button class="btn" data-gofin="invoices:overdue">See them</button>`]);
   const ub=unbilled(); if(ub.length) todo.push(['warn',ub.length+' completed ticket'+(ub.length>1?'s':'')+' not invoiced',(pricingOn()?money(ub.reduce((a,v)=>a+ticketCharge(v).net,0))+' + VAT · ':'')+(autoNumOn()?'They get an invoice number automatically.':'Create the invoice with the next number in one click.'),`<button class="btn" data-gofin="invoices">Invoice now</button>`]);
   if(noamt.length) todo.push(['warn',noamt.length+' invoice'+(noamt.length>1?'s have':' has')+' no amount',rateRows()?'Their tickets have no emirate on the rate card.':'Fill in the rate card so amounts come in automatically.',`<button class="btn" data-gofin="${rateRows()?'invoices:noamt':'statements'}">Fix</button>`]);
@@ -1150,7 +1150,7 @@ function finOverview(){
 function unbilledCard(){
   const xs=unbilled(); if(!xs.length) return ''; const sel=fui.ub||(fui.ub=new Set(xs.map(v=>v.id))); const pick=xs.filter(v=>sel.has(v.id));
   const tot=r2(pick.reduce((a,v)=>a+ticketCharge(v).net,0));
-  return `<div class="card"><div class="card-h"><div><h3>Completed work not invoiced</h3><div class="sub">${xs.length} ticket${xs.length>1?'s':''} without a Z invoice number${autoNumOn()?' · numbered automatically ('+esc(FS().autoNumber==='ticket'?'per ticket':FS().autoNumber==='weekly'?'weekly':'monthly')+')':''}</div></div>
+  return `<div class="card"><div class="card-h"><div><h3>Completed work not invoiced</h3><div class="sub">${xs.length} ticket${xs.length>1?'s':''} without a Z invoice number${autoNumOn()?' · numbered automatically ('+esc(FS().autoNumber==='ticket'?'per ticket':FS().autoNumber==='weekly'?'weekly':FS().autoNumber==='half'?'1–15 and 16–end':'monthly')+')':''}</div></div>
    <button class="btn primary" data-act="billnow" ${pick.length?'':'disabled'}>Create invoice ${esc(nextInvoiceNo())} · ${pick.length} ticket${pick.length===1?'':'s'}${pricingOn()?' · '+esc(money(tot))+' + VAT':''}</button></div>
    <div class="tblwrap"><table class="tbl"><thead><tr><th style="width:36px"><input type="checkbox" data-uball ${pick.length===xs.length?'checked':''} aria-label="Select all"></th><th>Ticket</th><th>Date</th><th>Site</th><th>Emirate</th><th class="amt">Charge</th></tr></thead><tbody>
    ${xs.map(v=>{ const c=ticketCharge(v); return `<tr><td><input type="checkbox" data-ub="${esc(v.id)}" ${sel.has(v.id)?'checked':''} aria-label="Include #${esc(v.id)}"></td><td><button class="linkbtn" data-open="${esc(v.id)}">#${esc(v.id)}</button></td><td class="num">${esc(ticketDate(v).split('-').reverse().join('/'))}</td><td>${esc(siteOf(v))}</td><td>${esc(v.region||'—')}</td><td class="amt">${c.missing?'<span class="chip sla-risk">No rate</span>':esc(money(c.net))}</td></tr>`; }).join('')}</tbody></table></div></div>`;
@@ -1342,9 +1342,16 @@ function nextInvoiceNo(skip=0){
   return (s.invPrefix||'ZRA ')+Math.max(mx+1,+s.nextNo||0)+'';
 }
 const unbilled=()=>Object.values(visits).filter(v=>v.status==='completed'&&!(v.billingRef||'').trim()&&billKindOf(v)!=='none').sort((a,b)=>ticketDate(a).localeCompare(ticketDate(b))||a.id.localeCompare(b.id));
+function periodOf(d,mode){
+  const fd=x=>x.split('-').reverse().join('/');
+  if(mode==='weekly'){ const a=weekStart(d), e=addDays(a,6); return {key:a,end:e,label:fd(a)+' – '+fd(e)}; }
+  if(mode==='half'){ const m=d.slice(0,7), first=+d.slice(8,10)<=15, a=m+(first?'-01':'-16'), e=first?m+'-15':monthEnd(m); return {key:a,end:e,label:fd(a)+' – '+fd(e)}; }
+  const m=d.slice(0,7); return {key:m,end:monthEnd(m),label:fd(m+'-01')+' – '+fd(monthEnd(m))};
+}
 const weekStart=d=>{ const x=new Date(d+'T00:00:00Z'); const wd=(x.getUTCDay()+6)%7; x.setUTCDate(x.getUTCDate()-wd); return x.toISOString().slice(0,10); };
-async function billTickets(list,why){
-  if(!list.length) return null; const no=nextInvoiceNo();
+async function billTickets(list,why,invDate){
+  if(!list.length) return null; const no=nextInvoiceNo(), s=FS();
+  if(invDate){ const k=invKey(no).replace(/[^A-Z0-9]/g,''); await saveDoc('invoices','inv-'+k,{invoiceNo:no,customer:s.customer,endClient:s.endClient,date:invDate,dueDate:addDays(invDate,s.terms),net:0,vat:0,status:'issued',paidOther:0,tickets:0,lines:[],amountAuto:true,auto:true,period:why,notes:'Billing period '+why,at:new Date().toISOString()},invoices); }
   for(const v of list){ const n=clone(v); n.billingRef=no; n.history=[...(n.history||[])]; await save(n,null); }
   logAction('Invoice number assigned',{detail:no+' · '+list.length+' ticket(s) · '+why}); return no;
 }
@@ -1352,10 +1359,9 @@ async function autoNumberRun(){
   const mode=FS().autoNumber; if(!mode||mode==='off') return [];
   const xs=unbilled().filter(v=>ticketDate(v)), t=todayDxb(), made=[];
   if(mode==='ticket'){ for(const v of xs){ made.push(await billTickets([v],'one per ticket')); } return made; }
-  const key=mode==='weekly'?v=>weekStart(ticketDate(v)):v=>ticketDate(v).slice(0,7);
-  const cur=mode==='weekly'?weekStart(t):t.slice(0,7), groups={};
-  xs.forEach(v=>{ const k=key(v); if(k<cur) (groups[k]=groups[k]||[]).push(v); });
-  for(const k of Object.keys(groups).sort()) made.push(await billTickets(groups[k],mode==='weekly'?'week of '+k:'month '+k));
+  const per=d=>periodOf(d,mode), cur=per(t), groups={};
+  xs.forEach(v=>{ const k=per(ticketDate(v)); if(k.key<cur.key) (groups[k.key]=groups[k.key]||{p:k,list:[]}).list.push(v); });
+  for(const k of Object.keys(groups).sort()){ const g=groups[k]; made.push(await billTickets(g.list,g.p.label,g.p.end)); }
   return made;
 }
 const addDays=(d,n)=>{ const x=new Date(d+'T00:00:00Z'); x.setUTCDate(x.getUTCDate()+(+n||0)); return x.toISOString().slice(0,10); };
@@ -1363,7 +1369,16 @@ const monthEnd=m=>m+'-'+String(new Date(Date.UTC(+m.slice(0,4),+m.slice(5,7),0))
 const nextMonth=m=>{ const y=+m.slice(0,4), mo=+m.slice(5,7); return mo===12?(y+1)+'-01':y+'-'+String(mo+1).padStart(2,'0'); };
 const todayDxb=()=>dayKey(new Date().toISOString());
 /* the month whose statement is due: last month once today has reached the statement day */
+const halfOn=()=>FS().autoNumber==='half';
+function stRange(id){ const m=id.slice(0,7); if(/-H1$/.test(id)) return [m+'-01',m+'-15']; if(/-H2$/.test(id)) return [m+'-16',monthEnd(m)]; return [m+'-01',monthEnd(m)]; }
+function stLabel(id){ const m=id.slice(0,7); if(/-H1$/.test(id)) return '1–15 '+mlab(m); if(/-H2$/.test(id)) return '16–'+(+monthEnd(m).slice(8))+' '+mlab(m); return mlab(m); }
 function dueStatementMonths(){
+  const out0=dueStatementMonths0(); if(!halfOn()) return out0;
+  const from=FS().halfFrom||todayDxb().slice(0,7), t=todayDxb(), out=out0.filter(m=>m<from);
+  let m=from; while(m<=t.slice(0,7)){ ['H1','H2'].forEach(h=>{ const id=m+'-'+h; if(stRange(id)[1]<t) out.push(id); }); m=nextMonth(m); }
+  return out.slice(-14);
+}
+function dueStatementMonths0(){
   const s=FS(), t=todayDxb(); const cur=t.slice(0,7); let last=cur; { const y=+cur.slice(0,4), mo=+cur.slice(5,7); last=mo===1?(y-1)+'-12':y+'-'+String(mo-1).padStart(2,'0'); }
   if(+t.slice(8,10)<(+s.stmtDay||1)){ const y=+last.slice(0,4), mo=+last.slice(5,7); last=mo===1?(y-1)+'-12':y+'-'+String(mo-1).padStart(2,'0'); }
   const dates=[...Object.values(invoices).map(i=>i.date),...Object.values(bankTx).map(x=>x.date),...Object.values(visits).map(v=>(v.scheduled||'').slice(0,10))].filter(Boolean).sort();
@@ -1371,7 +1386,7 @@ function dueStatementMonths(){
   let m=dates[0].slice(0,7); const out=[]; while(m<=last){ out.push(m); m=nextMonth(m); } return out.slice(-12);
 }
 function buildStatement(m){
-  const s=FS(), start=m+'-01', end=monthEnd(m);
+  const s=FS(), [start,end]=stRange(m);
   const inv=Object.values(invoices).filter(i=>!['draft','void'].includes(i.status)&&i.date);
   const invC=inv.filter(i=>(i.customer||'')===s.customer), cKeys=new Set(invC.map(i=>invKey(i.invoiceNo)));
   const rec=Object.values(bankTx).filter(t=>t.invoiceNo&&+t.amount>0&&t.date&&cKeys.has(invKey(t.invoiceNo)));
@@ -1415,26 +1430,26 @@ async function finAuto(force){
         if(!ex){ await saveDoc('invoices','inv-'+k.replace(/[^A-Z0-9]/g,''),{invoiceNo:x.invoiceNo,customer:s.customer,endClient:s.endClient,date:x.date,dueDate:x.date?addDays(x.date,s.terms):'',net,vat:r2(net*VAT_RATE),status:'issued',paidOther:0,tickets:x.n,lines:x.lines,amountAuto:true,auto:true,notes:note,at:new Date().toISOString()},invoices); made++; continue; }
         const isAuto=(ex.amountAuto||(!(+ex.net)&&/^Created from service tickets/.test(ex.notes||'')))&&!invLocked(ex);
         if(isAuto&&ex.customer!==s.customer&&!(+ex.net&&!ex.amountAuto)){ const d=Object.assign({},ex,{customer:s.customer,endClient:s.endClient}); delete d.id; await saveDoc('invoices',ex.id,d,invoices); upd++; ex.customer=s.customer; }
-        if(isAuto&&ex.status==='issued'&&pricingOn()&&(r2(ex.net)!==net||ex.tickets!==x.n||!ex.dueDate||canon(ex.lines||[])!==canon(x.lines)||ex.notes!==note)){
-          const d=Object.assign({},ex,{net,vat:r2(net*VAT_RATE),tickets:x.n,lines:x.lines,amountAuto:true,dueDate:ex.dueDate||(ex.date?addDays(ex.date,s.terms):''),notes:note}); delete d.id; await saveDoc('invoices',ex.id,d,invoices); upd++; }
+        if(isAuto&&ex.status==='issued'&&pricingOn()&&(r2(ex.net)!==net||ex.tickets!==x.n||!ex.dueDate||canon(ex.lines||[])!==canon(x.lines)||ex.notes!==((ex.period?"Billing period "+ex.period+" · ":"")+note))){
+          const d=Object.assign({},ex,{net,vat:r2(net*VAT_RATE),tickets:x.n,lines:x.lines,amountAuto:true,dueDate:ex.dueDate||(ex.date?addDays(ex.date,s.terms):''),notes:(ex.period?"Billing period "+ex.period+" · ":"")+note}); delete d.id; await saveDoc('invoices',ex.id,d,invoices); upd++; }
       }
     }
     if(s.autoStatement||force){ for(const m of dueStatementMonths()){ const b=buildStatement(m), ex=statements[m], sig=x=>canon([x.opening,x.closing,x.lines,x.aging,x.pl,x.cash,x.banks,x.vat,x.service,x.uncategorised]); if(ex&&sig(ex)===sig(b)) continue; await saveDoc('statements',m,Object.assign(b,{auto:true,firstAt:(ex&&(ex.firstAt||ex.generatedAt))||b.generatedAt}),statements); if(!ex) stm.push(m); else upd2++; }  }
     if(made||upd) logAction('Automatic invoicing',{detail:made+' new, '+upd+' updated'});
     if(upd2) logAction('Monthly statements updated',{detail:upd2+' statement(s) changed by new figures'});
-    if(stm.length){ logAction('Monthly statements generated',{detail:stm.map(mlab).join(', ')}); toast('Statement ready: '+mlab(stm[stm.length-1])); }
+    if(stm.length){ logAction('Monthly statements generated',{detail:stm.map(stLabel).join(', ')}); toast('Statement ready: '+stLabel(stm[stm.length-1])); }
     else if(made) toast(made+' invoice'+(made>1?'s':'')+' raised from tickets');
   } finally { finAutoBusy=false; }
 }
 function finStatements(){
   const s=FS(), list=Object.values(statements).sort((a,b)=>b.month.localeCompare(a.month)), due=dueStatementMonths(), t=todayDxb();
-  const nm=nextMonth(t.slice(0,7)), nextDate=(+t.slice(8,10)<(+s.stmtDay||1)?t.slice(0,7):nm)+'-'+String(s.stmtDay||1).padStart(2,'0');
+  const nm=nextMonth(t.slice(0,7)), nextDate=halfOn()?(+t.slice(8,10)<16?t.slice(0,7)+'-16':nm+'-01'):(+t.slice(8,10)<(+s.stmtDay||1)?t.slice(0,7):nm)+'-'+String(s.stmtDay||1).padStart(2,'0');
   const missing=due.filter(m=>!statements[m]);
   return `<div class="grid2" style="display:grid;grid-template-columns:minmax(0,2fr) minmax(0,1fr);gap:16px;align-items:start;grid-auto-flow:row dense" id="stmt-grid">
   <div class="card"><div class="card-h"><h3>Monthly statements</h3><span class="sub">${s.autoStatement?'Next automatic statement '+esc(nextDate.split('-').reverse().join('/'))+' (Dubai)':'Automatic statements are off'}</span></div>
-   ${missing.length?`<div class="notice" style="margin:0 16px 12px">${missing.length} statement${missing.length>1?'s are':' is'} due (${esc(missing.map(mlab).join(', '))}). <button class="linkbtn" data-act="stmtgen">Generate now</button></div>`:''}
+   ${missing.length?`<div class="notice" style="margin:0 16px 12px">${missing.length} statement${missing.length>1?'s are':' is'} due (${esc(missing.map(stLabel).join(', '))}). <button class="linkbtn" data-act="stmtgen">Generate now</button></div>`:''}
    ${list.length?`<div class="tblwrap"><table class="tbl"><thead><tr><th>Month</th><th class="amt">Opening</th><th class="amt">Invoiced</th><th class="amt">Received</th><th class="amt">Closing due</th><th class="amt">Profit</th><th>Generated</th><th></th></tr></thead><tbody>${list.map(x=>{ const inv=x.lines.filter(l=>l.type==='Invoice').reduce((a,l)=>a+l.debit,0), rc=x.lines.reduce((a,l)=>a+l.credit,0);
-     return `<tr><td style="white-space:nowrap"><b>${esc(mlab(x.month))}</b>${x.auto?' <span class="pill plain" style="font-size:11px">auto</span>':''}</td><td class="amt">${esc(money(x.opening))}</td><td class="amt">${esc(money(inv))}</td><td class="amt">${esc(money(rc))}</td><td class="amt"><b>${esc(money(x.closing))}</b></td><td class="amt">${esc(money(x.pl.profit))}</td><td class="num">${esc(dmhm(x.generatedAt))}</td>
+     return `<tr><td style="white-space:nowrap"><b>${esc(stLabel(x.month))}</b>${x.auto?' <span class="pill plain" style="font-size:11px">auto</span>':''}</td><td class="amt">${esc(money(x.opening))}</td><td class="amt">${esc(money(inv))}</td><td class="amt">${esc(money(rc))}</td><td class="amt"><b>${esc(money(x.closing))}</b></td><td class="amt">${esc(money(x.pl.profit))}</td><td class="num">${esc(dmhm(x.generatedAt))}</td>
      <td style="white-space:nowrap">${canPdf()?`<button class="btn" data-stmtpdf="${x.month}">${svg('doc',14)}PDF</button> `:''}<button class="linkbtn" data-stmtre="${x.month}">Refresh</button></td></tr>`; }).join('')}</tbody></table></div>`
    :`<div class="card-b sub">No statements yet. ${due.length?'':'They appear once the hub has invoices, bank lines or tickets from a finished month.'}</div>`}
    <div class="card-b sub" style="font-size:12.5px">Each statement holds the customer statement of account (opening balance, invoices, payments, closing balance and ageing) and the month's finance summary (profit, cash in and out, bank balances, VAT and service activity). Statements update themselves when invoices, payments or bank lines for that month change.</div></div>
@@ -1444,7 +1459,7 @@ function finStatements(){
    <label>Payment terms (days)<input class="field" name="terms" type="number" min="0" max="180" value="${s.terms}"></label>
    <label>Contract customer (billed)<input class="field" name="customer" value="${esc(s.customer)}"></label>
    <label>End client (sites)<input class="field" name="endClient" value="${esc(s.endClient)}"></label>
-   <label>Invoice numbers for completed tickets<select class="field" name="autoNumber">${[['off','Typed on the ticket (as now)'],['ticket','Automatic — one invoice per ticket'],['weekly','Automatic — one invoice per week'],['monthly','Automatic — one invoice per month']].map(([k,l])=>`<option value="${k}"${(s.autoNumber||'off')===k?' selected':''}>${l}</option>`).join('')}</select></label>
+   <label>Invoice numbers for completed tickets<select class="field" name="autoNumber">${[['off','Typed on the ticket (as now)'],['ticket','Automatic — one invoice per ticket'],['weekly','Automatic — one invoice per week'],['half','Automatic — twice a month (1–15 and 16–end)'],['monthly','Automatic — one invoice per month']].map(([k,l])=>`<option value="${k}"${(s.autoNumber||'off')===k?' selected':''}>${l}</option>`).join('')}</select></label>
    <label>Next invoice number<input class="field" name="nextNoTxt" value="${esc(nextInvoiceNo())}" placeholder="ZRA 1899"></label>
    <label class="chk"><input type="checkbox" name="autoStatement" ${s.autoStatement?'checked':''}> Prepare the monthly statement automatically</label>
    <label>Statement day each month<input class="field" name="stmtDay" type="number" min="1" max="28" value="${s.stmtDay}"></label>
@@ -1466,7 +1481,7 @@ async function statementPdf(m){
   const x=statements[m]; if(!x||!canPdf()) return;
   const {jsPDF}=window.jspdf; const doc=new jsPDF({unit:'pt',format:'a4'}); const W=595.28,H=841.89,M=42; let y; const ink=[13,27,62], muted=[103,114,140];
   const fd=d=>d?d.split('-').reverse().join('/'):'—', amt=n=>(n<0?'-':'')+Math.abs(r2(n)).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});
-  const header=()=>{ doc.setFillColor(10,31,77); doc.rect(0,0,W,84,'F'); doc.setFillColor(201,151,47); doc.rect(0,84,W,3,'F'); doc.setTextColor(255,255,255); doc.setFont('helvetica','bold'); doc.setFontSize(19); doc.text('ZIAR  IMAAR',M,40); doc.setFont('helvetica','normal'); doc.setFontSize(7.5); doc.setTextColor(201,211,234); doc.text('T E C H N I C A L   S E R V I C E S   L . L . C .',M,55); doc.setFontSize(10); doc.setTextColor(241,210,127); doc.text('Monthly statement',W-M,38,{align:'right'}); doc.setFontSize(9); doc.setTextColor(255,255,255); doc.text(mlab(m)+'  ·  '+fd(x.start)+' – '+fd(x.end),W-M,54,{align:'right'}); y=116; };
+  const header=()=>{ doc.setFillColor(10,31,77); doc.rect(0,0,W,84,'F'); doc.setFillColor(201,151,47); doc.rect(0,84,W,3,'F'); doc.setTextColor(255,255,255); doc.setFont('helvetica','bold'); doc.setFontSize(19); doc.text('ZIAR  IMAAR',M,40); doc.setFont('helvetica','normal'); doc.setFontSize(7.5); doc.setTextColor(201,211,234); doc.text('T E C H N I C A L   S E R V I C E S   L . L . C .',M,55); doc.setFontSize(10); doc.setTextColor(241,210,127); doc.text(/-H[12]$/.test(m)?'Statement · billing period':'Monthly statement',W-M,38,{align:'right'}); doc.setFontSize(9); doc.setTextColor(255,255,255); doc.text(stLabel(m)+'  ·  '+fd(x.start)+' – '+fd(x.end),W-M,54,{align:'right'}); y=116; };
   const h2=t=>{ if(y>H-120){ doc.addPage(); header(); } doc.setFont('helvetica','bold'); doc.setFontSize(12.5); doc.setTextColor(...ink); doc.text(t,M,y); y+=8; doc.setDrawColor(201,151,47); doc.setLineWidth(1); doc.line(M,y,M+40,y); y+=16; };
   const row=(cells,bold)=>{ if(y>H-60){ doc.addPage(); header(); } doc.setFont('helvetica',bold?'bold':'normal'); doc.setFontSize(8.8); doc.setTextColor(...ink); cells.forEach(([t,xx,al])=>doc.text(doc.splitTextToSize(String(t),al==='right'?110:200)[0]||'',xx,y,al?{align:al}:undefined)); y+=14; };
   const kv=(k,v,b)=>row([[k,M],[v,W-M,'right']],b);
@@ -1486,7 +1501,7 @@ async function statementPdf(m){
   kv('Service visits scheduled',String(x.service.visits)); kv('Visits completed',String(x.service.completed)); kv('Visits with an invoice number',String(x.service.invoiced));
   if(x.uncategorised) kv('Bank lines still uncategorised',String(x.uncategorised));
   const pages=doc.getNumberOfPages(); for(let i=1;i<=pages;i++){ doc.setPage(i); doc.setFont('helvetica','normal'); doc.setFontSize(8); doc.setTextColor(...muted); doc.text('Prepared '+dmhm(x.generatedAt)+(x.auto?' (automatic)':'')+' · Ziar Imaar Technical Services L.L.C. · management figures, not audited',M,H-28); doc.text('Page '+i+' of '+pages,W-M,H-28,{align:'right'}); }
-  try{ await downloadsApi.save({filename:'ziar-imaar-statement-'+m+'.pdf',data:doc.output('blob')}); toast('Statement saved'); logAction('Downloaded monthly statement',{detail:mlab(m)}); }catch(err){ if(!(err&&err.code==='declined')) toast('Could not save the statement.'); }
+  try{ await downloadsApi.save({filename:'ziar-imaar-statement-'+m+'.pdf',data:doc.output('blob')}); toast('Statement saved'); logAction('Downloaded statement',{detail:stLabel(m)}); }catch(err){ if(!(err&&err.code==='declined')) toast('Could not save the statement.'); }
 }
 
 /* ---------- inventory ---------- */
@@ -1824,7 +1839,7 @@ document.addEventListener('submit',async e=>{
     if(fui.bulkConfirm!==xs.length||fui.bulkUpto!==upto){ fui.bulkConfirm=xs.length; fui.bulkUpto=upto; render(); return; }
     let tot=0; for(const i of xs){ const due=r2(invGross(i)-invPaid(i)); tot+=due; const d=Object.assign({},i,{paidOther:r2((+i.paidOther||0)+due),paidDate:on,locked:true}); delete d.id; await saveDoc('invoices',i.id,d,invoices); }
     logAction('Marked invoices paid in bulk',{detail:xs.length+' invoices up to '+upto+' · '+money(tot)}); fui.bulkConfirm=null; toast(xs.length+' invoices marked paid ('+money(tot)+')'); return; }
-  if(id==='fsetform'){ const el=e.target.elements; const d={autoInvoice:el.autoInvoice.checked,rate:Math.max(0,r2(el.rate.value)),terms:Math.min(180,Math.max(0,parseInt(el.terms.value,10)||0)),autoNumber:el.autoNumber.value,invPrefix:((el.nextNoTxt.value.match(/^\s*([A-Za-z]+[\s\-]?)/)||[,'ZRA '])[1].replace('-',' ').replace(/([A-Za-z])$/,'$1 ').toUpperCase()),nextNo:parseInt((el.nextNoTxt.value.match(/(\d+)\s*$/)||[,0])[1],10)||0,customer:(el.customer.value||'').trim()||'Easy Renovations LLC',endClient:(el.endClient.value||'').trim(),autoStatement:el.autoStatement.checked,stmtDay:Math.min(28,Math.max(1,parseInt(el.stmtDay.value,10)||1)),at:new Date().toISOString()};
+  if(id==='fsetform'){ const el=e.target.elements; const d={autoInvoice:el.autoInvoice.checked,rate:Math.max(0,r2(el.rate.value)),terms:Math.min(180,Math.max(0,parseInt(el.terms.value,10)||0)),autoNumber:el.autoNumber.value,halfFrom:el.autoNumber.value==='half'?(FS().halfFrom||todayDxb().slice(0,7)):(FS().halfFrom||''),invPrefix:((el.nextNoTxt.value.match(/^\s*([A-Za-z]+[\s\-]?)/)||[,'ZRA '])[1].replace('-',' ').replace(/([A-Za-z])$/,'$1 ').toUpperCase()),nextNo:parseInt((el.nextNoTxt.value.match(/(\d+)\s*$/)||[,0])[1],10)||0,customer:(el.customer.value||'').trim()||'Easy Renovations LLC',endClient:(el.endClient.value||'').trim(),autoStatement:el.autoStatement.checked,stmtDay:Math.min(28,Math.max(1,parseInt(el.stmtDay.value,10)||1)),at:new Date().toISOString()};
     if(FS().rateCard) d.rateCard=FS().rateCard; if(FS().rateHistory) d.rateHistory=FS().rateHistory; await saveDoc('finSettings','main',d,finSettings); logAction('Updated finance automation',{detail:(d.autoInvoice?'auto invoices on':'auto invoices off')+' · '+money(d.rate)+' per ticket · statements day '+d.stmtDay}); toast('Automation saved'); scheduleFinAuto(); return; }
   if(id==='fptxform'){ const d={partner:g('partner'),type:g('type'),date:g('date'),amount:r2(g('amount')),note:g('note'),at:new Date().toISOString()};
     logAction('Recorded partner movement',{detail:d.partner+' · '+d.type+' '+money(d.amount)}); await saveDoc('partnerTx',newId('p'),d,partnerTx); e.target.reset(); toast('Partner movement recorded'); return; }
@@ -1896,7 +1911,7 @@ document.addEventListener('click',async e=>{
   if(ds.invpaid){ const i=invoices[ds.invpaid]; if(!i) return; const due=r2(invGross(i)-invPaid(i)); if(due<=0) return; const d=Object.assign({},i,{paidOther:r2((+i.paidOther||0)+due),locked:true,paidDate:todayDxb(),notes:((i.notes||'')+' · Marked paid '+todayDxb()).replace(/^ · /,'')}); delete d.id; await saveDoc('invoices',i.id,d,invoices); logAction('Marked invoice paid',{detail:i.invoiceNo+' · '+money(due)}); toast(i.invoiceNo+' marked paid ('+money(due)+')'); return; }
   if(ds.act==='stmtgen'){ await finAuto(true); render(); return; }
   if(ds.stmtpdf){ await statementPdf(ds.stmtpdf); return; }
-  if(ds.stmtre){ const m=ds.stmtre; await saveDoc('statements',m,Object.assign(buildStatement(m),{auto:false}),statements); logAction('Refreshed monthly statement',{detail:mlab(m)}); toast('Statement refreshed: '+mlab(m)); return; }
+  if(ds.stmtre){ const m=ds.stmtre; await saveDoc('statements',m,Object.assign(buildStatement(m),{auto:false}),statements); logAction('Refreshed statement',{detail:stLabel(m)}); toast('Statement refreshed: '+stLabel(m)); return; }
   if(ds.act==='impcancel'){ fui.imp=null; render(); return; }
   if(ds.act==='impgo'){ const im=fui.imp; if(!im||!im.rows) return; const key=t=>t.date+'|'+r2(t.amount)+'|'+t.desc.toLowerCase().slice(0,40); const add=im.rows.filter(t=>!im.have.has(key(t))); fui.imp={busy:true}; render(); let n=0; for(const t of add){ const inc=t.amount>0; const base=Object.assign({account:im.acct,category:'Uncategorised',vat:0,invoiceNo:'',source:im.name,at:new Date().toISOString()},t); const tid=newId('t'); await saveDoc('bankTx',tid,Object.assign(base,guessTx(Object.assign({id:tid},base))),bankTx); n++; }
     logAction('Imported bank statement',{detail:im.name+' · '+n+' transactions into '+((bankAccounts[im.acct]||{}).name||'')}); fui.imp=null; render(); toast(n+' transactions imported'); return; }
