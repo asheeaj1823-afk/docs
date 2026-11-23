@@ -305,7 +305,9 @@ kbd{font-family:var(--mono);font-size:11px;border:1px solid var(--line2);border-
 .cashrow .bars{display:flex;flex-direction:column;gap:3px}
 .cashrow .bars i{display:block;height:8px;border-radius:0 4px 4px 0;min-width:2px}
 @media (max-width:700px){.cashrow{grid-template-columns:4em minmax(0,1fr)}.cashrow .amt{display:none}}
-@media (max-width:900px){#stmt-grid{grid-template-columns:1fr !important}}
+@media (max-width:900px){#stmt-grid{grid-template-columns:minmax(0,1fr) !important}#stmt-grid>*{grid-column:auto !important}}
+@media (max-width:1100px){.pgrid{grid-template-columns:minmax(0,1fr) !important}}
+@media (max-width:560px){.card-h{flex-wrap:wrap;row-gap:6px}.card-h>.btn{white-space:normal;height:auto;min-height:38px;padding:8px 12px;text-align:left;max-width:100%}.phead .actions{flex-wrap:wrap}}
 
 /* ---------- logo watermark (emblem redrawn as vector, transparent) ---------- */
 .wmark{position:fixed;top:0;bottom:0;left:248px;right:0;z-index:15;display:grid;place-items:center;pointer-events:none;opacity:.05;color:var(--navy)}
@@ -684,7 +686,7 @@ const NAV=[
  ['07','Reports & Analytics','reports',[['Operations Reports',{r:'reports'}],['Financial Reports',{r:'finance',t:'statements'}],['Customer Reports',{r:'customers',t:'dir'}],['Data Quality Reports',{r:'quality'}]]],
  ['08','Administration','admin',[['Users & Roles',{r:'admin',t:'users'}],['Permissions',{r:'admin',t:'roles'}],['Audit Logs',{r:'admin',t:'audit'}],['Integrations',{r:'integrations'}],['Backup & Recovery',{r:'backup'}],['System Settings',{r:'company',t:'system'}]]]
 ];
-let navCur=null, navOpen=null, cui={tab:'dir',q:''}, tui={tab:'mine'}, coui={tab:'profile'}, plannedName='', bk=null;
+let navCur=null, navOpen=null, navClosedCur=false, cui={tab:'dir',q:''}, tui={tab:'mine'}, coui={tab:'profile'}, plannedName='', bk=null;
 const navItemOk=o=>o.r==='planned'?can(o.t==='General Ledger'?'finance':'parts'):can(o.r);
 function curNavKey(){ if(navCur){ const [si,ii]=navCur.split('.'); const it=NAV[si]&&NAV[si][3][ii]; if(it&&it[1].r===route) return navCur; }
   for(let si=0;si<NAV.length;si++) for(let ii=0;ii<NAV[si][3].length;ii++){ const o=NAV[si][3][ii][1]; if(o.r===route&&(!o.t||(route==='finance'&&o.t===fui.tab)||(route==='admin'&&o.t===adminTab)||(route==='customers'&&o.t===cui.tab)||(route==='tasks'&&o.t===tui.tab)||(route==='company'&&o.t===coui.tab))) return si+'.'+ii; }
@@ -693,7 +695,7 @@ function navGroupsHtml(){
   const cur=curNavKey(), curSec=cur?+cur.split('.')[0]:-1, n=reviewQueue().length;
   if(navOpen===null) navOpen=new Set([curSec]);
   return NAV.map(([no,label,icon,items],si)=>{ const vis=items.map((it,ii)=>[it,ii]).filter(([it])=>navItemOk(it[1])); if(!vis.length) return '';
-    const open=navOpen.has(si)||si===curSec;
+    const open=navOpen.has(si)||(si===curSec&&!navClosedCur);
     return `<div class="ngrp${si===curSec?' cur':''}"><button class="nsec" data-nsec="${si}" aria-expanded="${open}">${svg(icon)}<span><small>${no}</small> ${label}</span>${si===2-1&&n?`<span class="badge">${n}</span>`:''}<i class="chev">${open?'▾':'▸'}</i></button>
       ${open?`<div class="nitems">${vis.map(([[l,o],ii])=>`<button data-nav="${si}.${ii}" ${cur===si+'.'+ii?'aria-current="page"':''}>${esc(l)}${o.r==='planned'?'<span class="soon">planned</span>':''}${o.r==='review'&&n?`<span class="badge">${n}</span>`:''}</button>`).join('')}</div>`:''}</div>`; }).join('');
 }
@@ -703,7 +705,7 @@ function mnavShow(on){ let el=document.getElementById('msheet'); if(!on){ if(el)
   el.innerHTML=`<div class="msheet-bg" data-act="mnavclose"></div><div class="msheet" role="dialog" aria-label="Menu"><div class="msheet-h"><b>Menu</b><button class="btn ghost" data-act="mnavclose" aria-label="Close">${svg('x',18)}</button></div><nav class="nav">${html}</nav></div>`; }
 function scrollToHeading(txt){ setTimeout(()=>{ const h=[...document.querySelectorAll('#app h3, #app h2')].find(x=>x.textContent.trim().toLowerCase().startsWith(txt.toLowerCase())); if(h) h.closest('.card,form,section')?.scrollIntoView({behavior:'smooth',block:'start'}); },60); }
 function openNav(key){
-  const [si,ii]=key.split('.'); const [l,o]=NAV[si][3][ii]; navCur=key; if(navOpen) navOpen.add(+si);
+  const [si,ii]=key.split('.'); const [l,o]=NAV[si][3][ii]; navCur=key; navOpen=new Set([+si]); navClosedCur=false;
   if(o.r==='finance'){ fui.tab=o.t||'overview'; fui.form=null; fui.del=null; if(['recon','vat','partners','controls'].includes(fui.tab)) fui.more=true; if(o.q!==undefined) fui.q=o.q; else if(fui.tab==='bank') fui.q=''; }
   if(o.r==='admin') adminTab=o.t||'users';
   if(o.r==='customers') cui.tab=o.t||'dir';
@@ -867,6 +869,7 @@ function navHtml(){
   const n=reviewQueue().length;
   const R2=ROUTES.filter(r=>can(r[0]));
   document.getElementById('nav').innerHTML=navGroupsHtml();
+  { const side=document.querySelector('.side'), a=document.querySelector('#nav [aria-current]'); if(side&&a){ const sr=side.getBoundingClientRect(), ar=a.getBoundingClientRect(); if(ar.top<sr.top+60||ar.bottom>sr.bottom-20) side.scrollTop+=ar.top-sr.top-sr.height/3; } }
   const T2=R2.filter(r=>['dashboard','tickets','review','finance'].includes(r[0])), more=R2.length>T2.length||ROUTES_X.some(r=>can(r)&&r!=='planned');
   document.getElementById('tabbar').style.gridTemplateColumns=`repeat(${Math.max(1,T2.length+(more?1:0))},1fr)`;
   document.getElementById('tabbar').hidden=T2.length+(more?1:0)<2; document.body.classList.toggle('onetab',T2.length+(more?1:0)<2);
@@ -2080,7 +2083,7 @@ document.addEventListener('click',async e=>{
   if(e.target.matches&&e.target.matches('[data-uball]')){ fui.ub=e.target.checked?new Set(unbilled().map(v=>v.id)):new Set(); render(); return; }
   const b=e.target.closest('button,[data-act]'); if(!b) return;
   const ds=b.dataset, v=sel&&visits[sel];
-  if(ds.nsec!==undefined){ const i=+ds.nsec; if(!navOpen) navOpen=new Set(); navOpen.has(i)?navOpen.delete(i):navOpen.add(i); navHtml(); return; }
+  if(ds.nsec!==undefined){ const i=+ds.nsec, inSheet=!!b.closest('#msheet'); if(inSheet) return; const cs=curNavKey(), isCur=cs&&+cs.split('.')[0]===i, was=(navOpen&&navOpen.has(i))||(isCur&&!navClosedCur); navClosedCur=isCur&&was; navOpen=new Set(was?[]:[i]); navHtml(); return; }
   if(ds.act==='mnav'){ mnavShow(true); return; }
   if(ds.act==='mnavclose'){ mnavShow(false); return; }
   if(ds.nav){ mnavShow(false); openNav(ds.nav); return; }
