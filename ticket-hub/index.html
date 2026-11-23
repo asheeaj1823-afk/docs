@@ -1363,6 +1363,7 @@ function buildStatement(m){
     uncategorised:tx.filter(t=>!t.category||t.category==='Uncategorised').length,
     generatedAt:new Date().toISOString()};
 }
+const canon=x=>JSON.stringify(x,(k,v)=>v&&typeof v==='object'&&!Array.isArray(v)?Object.keys(v).sort().reduce((o,kk)=>(o[kk]=v[kk],o),{}):v);
 let finAutoBusy=false, finAutoT=null; const finSeen=new Set();
 const finReady=()=>db&&!demo&&loaded&&access()==='admin'&&signedIn()&&['bankAccounts','bankTx','invoices','partnerTx','finSettings','statements'].every(c=>finSeen.has(c));
 function scheduleFinAuto(){ clearTimeout(finAutoT); finAutoT=setTimeout(finAuto,1500); }
@@ -1377,11 +1378,11 @@ async function finAuto(force){
         if(!ex){ await saveDoc('invoices','inv-'+k.replace(/[^A-Z0-9]/g,''),{invoiceNo:x.invoiceNo,customer:s.customer,endClient:s.endClient,date:x.date,dueDate:x.date?addDays(x.date,s.terms):'',net,vat:r2(net*VAT_RATE),status:'issued',paidOther:0,tickets:x.n,lines:x.lines,amountAuto:true,auto:true,notes:note,at:new Date().toISOString()},invoices); made++; continue; }
         const isAuto=ex.amountAuto||(!(+ex.net)&&/^Created from service tickets/.test(ex.notes||''));
         if(isAuto&&ex.customer!==s.customer&&!(+ex.net&&!ex.amountAuto)){ const d=Object.assign({},ex,{customer:s.customer,endClient:s.endClient}); delete d.id; await saveDoc('invoices',ex.id,d,invoices); upd++; ex.customer=s.customer; }
-        if(isAuto&&ex.status==='issued'&&pricingOn()&&(r2(ex.net)!==net||ex.tickets!==x.n||!ex.dueDate||JSON.stringify(ex.lines||[])!==JSON.stringify(x.lines)||ex.notes!==note)){
+        if(isAuto&&ex.status==='issued'&&pricingOn()&&(r2(ex.net)!==net||ex.tickets!==x.n||!ex.dueDate||canon(ex.lines||[])!==canon(x.lines)||ex.notes!==note)){
           const d=Object.assign({},ex,{net,vat:r2(net*VAT_RATE),tickets:x.n,lines:x.lines,amountAuto:true,dueDate:ex.dueDate||(ex.date?addDays(ex.date,s.terms):''),notes:note}); delete d.id; await saveDoc('invoices',ex.id,d,invoices); upd++; }
       }
     }
-    if(s.autoStatement||force){ for(const m of dueStatementMonths()){ const b=buildStatement(m), ex=statements[m], sig=x=>JSON.stringify([x.opening,x.closing,x.lines,x.aging,x.pl,x.cash,x.banks,x.vat,x.service,x.uncategorised]); if(ex&&sig(ex)===sig(b)) continue; await saveDoc('statements',m,Object.assign(b,{auto:true,firstAt:(ex&&(ex.firstAt||ex.generatedAt))||b.generatedAt}),statements); if(!ex) stm.push(m); else upd2++; }  }
+    if(s.autoStatement||force){ for(const m of dueStatementMonths()){ const b=buildStatement(m), ex=statements[m], sig=x=>canon([x.opening,x.closing,x.lines,x.aging,x.pl,x.cash,x.banks,x.vat,x.service,x.uncategorised]); if(ex&&sig(ex)===sig(b)) continue; await saveDoc('statements',m,Object.assign(b,{auto:true,firstAt:(ex&&(ex.firstAt||ex.generatedAt))||b.generatedAt}),statements); if(!ex) stm.push(m); else upd2++; }  }
     if(made||upd) logAction('Automatic invoicing',{detail:made+' new, '+upd+' updated'});
     if(upd2) logAction('Monthly statements updated',{detail:upd2+' statement(s) changed by new figures'});
     if(stm.length){ logAction('Monthly statements generated',{detail:stm.map(mlab).join(', ')}); toast('Statement ready: '+mlab(stm[stm.length-1])); }
