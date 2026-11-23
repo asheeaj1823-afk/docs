@@ -272,6 +272,26 @@ kbd{font-family:var(--mono);font-size:11px;border:1px solid var(--line2);border-
 .linkbtn{color:var(--navy3);font-size:12.5px;font-weight:600;white-space:nowrap}
 .linkbtn.danger{color:var(--bad)}
 
+/* ---------- finance ---------- */
+.ftabs{display:flex;gap:4px;flex-wrap:wrap;border-bottom:1px solid var(--line);padding-bottom:0}
+.ftabs button{height:38px;padding:0 14px;font-weight:600;color:var(--muted);border-bottom:2px solid transparent;margin-bottom:-1px}
+.ftabs button[aria-pressed="true"]{color:var(--navy);border-bottom-color:var(--gold)}
+.amt{font-variant-numeric:tabular-nums;white-space:nowrap;text-align:right}
+.amt.in{color:var(--ok)}.amt.out{color:var(--ink)}
+.tbl td.amt,.tbl th.amt{text-align:right}
+.tbl select.field,.tbl input.field{margin:0;padding:5px 26px 5px 8px;font-size:13px;height:32px}
+.tbl input.field{padding:5px 8px;width:100%}
+.mini{display:flex;flex-direction:column;gap:2px}
+.notice{border:1px dashed var(--goldLine);background:var(--goldSoft);color:#5a420c;border-radius:10px;padding:10px 14px;font-size:13px}
+.ctl{display:grid;grid-template-columns:28px minmax(0,1fr) auto;gap:10px;align-items:center;padding:12px 16px;border-top:1px solid var(--line)}
+.ctl:first-child{border-top:0}
+.ctl .ic{width:24px;height:24px;border-radius:50%;display:grid;place-items:center;font-weight:700;font-size:13px}
+.ctl .ic.ok{background:var(--okSoft);color:var(--ok)}.ctl .ic.bad{background:var(--badSoft);color:var(--bad)}.ctl .ic.warn{background:var(--warnSoft);color:var(--warn)}
+.cashrow{display:grid;grid-template-columns:5em minmax(0,1fr) 7.5em 7.5em;gap:10px;align-items:center;font-size:13px;padding:6px 0}
+.cashrow .bars{display:flex;flex-direction:column;gap:3px}
+.cashrow .bars i{display:block;height:8px;border-radius:0 4px 4px 0;min-width:2px}
+@media (max-width:700px){.cashrow{grid-template-columns:4em minmax(0,1fr)}.cashrow .amt{display:none}}
+
 /* ---------- logo watermark (emblem redrawn as vector, transparent) ---------- */
 .wmark{position:fixed;top:0;bottom:0;left:248px;right:0;z-index:15;display:grid;place-items:center;pointer-events:none;opacity:.05;color:var(--navy)}
 .wmark .em{width:min(620px,72%);display:flex;flex-direction:column;align-items:center;gap:18px}
@@ -385,6 +405,7 @@ kbd{font-family:var(--mono);font-size:11px;border:1px solid var(--line2);border-
 <div id="tip" hidden></div>
 <script defer src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script defer src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<script defer src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 
 <script>
 (() => {
@@ -401,6 +422,7 @@ const ICON={
   tickets:'<path d="M4 5h16v4a2 2 0 0 0 0 4v4H4v-4a2 2 0 0 0 0-4z"/><path d="M9 9h6M9 13h4"/>',
   review:'<path d="M4 4h16v12H4z"/><path d="M8 10l3 3 5-5"/><path d="M8 20h8"/>',
   parts:'<path d="M3 7l9-4 9 4-9 4-9-4z"/><path d="M3 7v10l9 4 9-4V7"/><path d="M12 11v10"/>',
+  finance:'<rect x="3" y="6" width="18" height="13" rx="2"/><path d="M3 10h18M7 15h3"/><path d="M8 3h8"/>',
   reports:'<path d="M4 4h16v16H4z"/><path d="M8 16v-4M12 16V8M16 16v-6"/>',
   wa:'<path d="M4 20l1.3-3.9A8 8 0 1 1 8 19z"/><path d="M9 9.5c0 3 2.5 5.5 5.5 5.5l1-1.5-2-1-1 1a4 4 0 0 1-2-2l1-1-1-2z"/>',
   assets:'<rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 7h8M8 11h8M8 15h5"/>',
@@ -413,9 +435,9 @@ const ICON={
   x:'<path d="M6 6l12 12M18 6L6 18"/>'
 };
 const svg=(k,s=18)=>`<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICON[k]}</svg>`;
-const ROUTES=[['dashboard','Dashboard'],['tickets','Tickets'],['review','Review queue'],['parts','Parts & stock'],['assets','Assets'],['reports','Reports'],['admin','Administration']];
+const ROUTES=[['dashboard','Dashboard'],['tickets','Tickets'],['review','Review queue'],['parts','Parts & stock'],['assets','Assets'],['reports','Reports'],['finance','Finance'],['admin','Administration']];
 const ROLE_NAME={admin:'Admin',office:'Office',technician:'Technician',viewer:'Viewer'};
-const PERMS={admin:['dashboard','tickets','review','parts','assets','reports','admin'],office:['dashboard','tickets','review','parts','assets','reports'],technician:['tickets'],viewer:['dashboard','tickets','reports']};
+const PERMS={admin:['dashboard','tickets','review','parts','assets','reports','finance','admin'],office:['dashboard','tickets','review','parts','assets','reports'],technician:['tickets'],viewer:['dashboard','tickets','reports']};
 const ESC_TO=['','Technician','Office supervisor','Administrator'];
 
 let visits={}, parts={}, stock={};
@@ -433,6 +455,7 @@ const thisMonth=()=>new Date(Date.now()+4*3600000).toISOString().slice(0,7);
 let pui={type:'Parts Needed',dmOnly:true,month:thisMonth(),del:null};
 let modal=null, nform={};
 let rui={month:null};
+let bankAccounts={}, bankTx={}, invoices={}, partnerTx={}, fui={tab:'overview',acct:'all',q:'',month:'all',inv:null,invQ:'',invStatus:'all',form:null,imp:null,del:null,limit:100};
 let pinDoc, signErr='', signBusy=false, lastAct=Date.now(), signStep='pin', pendKeep=false, pendSecret='';
 const UNLOCK_KEY='zi-signin', FAIL_KEY='zi-signin-fails', SESSION_MS=8*3600000, IDLE_MS=30*60000;
 const stores2=()=>{ const out=[]; try{ out.push(sessionStorage); }catch(e){} try{ out.push(localStorage); }catch(e){} return out; };
@@ -606,8 +629,8 @@ async function save(v,action){
 }
 function hist(status,note){ const h={status,at:new Date().toISOString()}; if(note) h.note=note; if(me.id) h.by=me.id; return h; }
 const newId=p=>p+Date.now().toString(36)+Math.random().toString(36).slice(2,6);
-async function saveDoc(col,id,data,store){ store[id]=Object.assign({id},data); render(); if(db){ try{ await db.doc(col+'/'+id).set(data); }catch(e){ toast('Could not save. Check your access and connection.'); } } }
-async function delDoc(col,id,store){ delete store[id]; render(); if(db){ try{ await db.doc(col+'/'+id).delete(); }catch(e){ toast('Could not delete. Check your access and connection.'); } } }
+async function saveDoc(col,id,data,store){ store[id]=Object.assign({id},data); setTimeout(render,0); if(db){ try{ await db.doc(col+'/'+id).set(data); }catch(e){ toast('Could not save. Check your access and connection.'); } } }
+async function delDoc(col,id,store){ delete store[id]; setTimeout(render,0); if(db){ try{ await db.doc(col+'/'+id).delete(); }catch(e){ toast('Could not delete. Check your access and connection.'); } } }
 async function resolveNames(){
   if(!userApi||!userApi.profiles) return;
   const ids=new Set(); Object.values(visits).forEach(v=>(v.history||[]).forEach(h=>h.by&&ids.add(h.by))); Object.values(parts).forEach(p=>p.by&&ids.add(p.by)); Object.keys(roles).forEach(i=>ids.add(i)); Object.keys(requests).forEach(i=>ids.add(i)); audit.forEach(e=>e.by&&ids.add(e.by)); Object.values(roles).forEach(r=>r.by&&ids.add(r.by));
@@ -638,7 +661,7 @@ function navHtml(){
   document.getElementById('nav').innerHTML=R2.map(([k,l])=>`<button data-route="${k}" ${route===k?'aria-current="page"':''}>${svg(k)}<span>${l}</span>${k==='review'&&n?`<span class="badge">${n}</span>`:''}</button>`).join('');
   document.getElementById('tabbar').style.gridTemplateColumns=`repeat(${Math.max(1,R2.length)},1fr)`;
   document.getElementById('tabbar').hidden=R2.length<2; document.body.classList.toggle('onetab',R2.length<2);
-  document.getElementById('tabbar').innerHTML=R2.map(([k,l])=>`<button data-route="${k}" ${route===k?'aria-current="page"':''}>${svg(k,20)}<span>${k==='parts'?'Parts':k==='review'?'Review':k==='admin'?'Admin':k==='dashboard'?'Home':k==='reports'?'Reports':l}</span>${k==='review'&&n?`<span class="badge">${n}</span>`:''}</button>`).join('');
+  document.getElementById('tabbar').innerHTML=R2.map(([k,l])=>`<button data-route="${k}" ${route===k?'aria-current="page"':''}>${svg(k,20)}<span>${k==='parts'?'Parts':k==='review'?'Review':k==='admin'?'Admin':k==='dashboard'?'Home':k==='reports'?'Reports':k==='finance'?'Finance':l}</span>${k==='review'&&n?`<span class="badge">${n}</span>`:''}</button>`).join('');
   const m=document.getElementById('mode'); m.textContent=!loaded?'Connecting…':demo?'Demo mode · changes stay in this tab':'Live · shared with your team'; m.className='mode'+(!loaded?' wait':demo?' demo':'');
   const a=access(); document.getElementById('me').innerHTML=me.name||ROLE_NAME[a]?`<span class="avatar">${esc(initials(me.name||'?'))}</span><span style="display:flex;flex-direction:column;min-width:0"><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(me.name||'Signed in')}</span>${ROLE_NAME[a]?`<span class="rolebadge" style="align-self:flex-start;margin-top:3px">${ROLE_NAME[a]}</span>`:''}</span>`:'';
   document.querySelectorAll('[data-act=newvisit]').forEach(b=>b.hidden=!isOffice());
@@ -1028,6 +1051,212 @@ async function reportPdf(){
   try{ await downloadsApi.save({filename:'ziar-imaar-kohler-service-report-'+m+'.pdf',data:doc.output('blob')}); toast('Report saved'); logAction('Downloaded monthly report',{detail:mlab(m)}); }catch(err){ if(!(err&&err.code==='declined')) toast('Could not save the report. Try again in a moment.'); }
 }
 
+/* ---------- finance (admin only; the store also limits these collections to admins) ---------- */
+const VAT_RATE=0.05;
+const r2=n=>Math.round((Number(n)||0)*100)/100;
+const money=n=>(Number(n)<0?'−':'')+'AED '+Math.abs(r2(n)).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});
+const BANK_CATS=['Uncategorised','Customer receipt','Kohler service income','Other income','Parts & materials','Subcontractor','Salaries & wages','Transport & fuel','Rent & utilities','Telephone & internet','Government, visa & licence','Bank charges','VAT payment','Partner capital in','Partner drawings','Loan in / out','Transfer between accounts','Other expense'];
+const INCOME_CATS=['Customer receipt','Kohler service income','Other income'];
+const NON_PL=['Partner capital in','Partner drawings','Loan in / out','Transfer between accounts','VAT payment'];
+const invKey=x=>String(x||'').replace(/[\s\-_]/g,'').toUpperCase();
+const invGross=i=>r2((+i.net||0)+(+i.vat||0));
+const invPaid=i=>r2(Object.values(bankTx).filter(t=>t.invoiceNo&&invKey(t.invoiceNo)===invKey(i.invoiceNo)&&+t.amount>0).reduce((a,t)=>a+(+t.amount),0)+(+i.paidOther||0));
+function invoiceState(i){ if(i.status==='void') return {k:'void',label:'Void',cls:'cancelled'}; if(i.status==='draft') return {k:'draft',label:'Draft',cls:'plain'}; const g=invGross(i), p=invPaid(i); if(!g) return {k:'noamt',label:'Amount missing',cls:'sla-risk'}; if(p>=g-0.005) return {k:'paid',label:'Paid',cls:'completed'}; if(i.dueDate&&new Date(i.dueDate+'T23:59:59+04:00')<new Date()) return {k:'overdue',label:p>0?'Part paid · overdue':'Overdue',cls:'sla-late'}; return {k:'open',label:p>0?'Part paid':'Issued',cls:'review'}; }
+const acctTx=id=>Object.values(bankTx).filter(t=>t.account===id);
+const acctBal=(a,upto)=>r2((+a.opening||0)+acctTx(a.id).filter(t=>!upto||t.date<=upto).reduce((s,t)=>s+(+t.amount||0),0));
+const ticketsForInv=i=>Object.values(visits).filter(v=>v.billingRef&&invKey(v.billingRef)===invKey(i.invoiceNo)).sort((a,b)=>a.id.localeCompare(b.id));
+const quarterOf=d=>{ const m=+d.slice(5,7); return d.slice(0,4)+'-Q'+Math.ceil(m/3); };
+function finTotals(){
+  const tx=Object.values(bankTx), inv=Object.values(invoices).filter(i=>!['draft','void'].includes(i.status));
+  const cash=Object.values(bankAccounts).reduce((s,a)=>s+acctBal(a),0);
+  const recv=inv.reduce((s,i)=>s+Math.max(0,invGross(i)-invPaid(i)),0);
+  const yr=String(new Date().getFullYear());
+  const rev=inv.filter(i=>(i.date||'').startsWith(yr)).reduce((s,i)=>s+(+i.net||0),0);
+  const exp=tx.filter(t=>+t.amount<0&&(t.date||'').startsWith(yr)&&!NON_PL.includes(t.category)).reduce((s,t)=>s-(+t.amount)+0,0)-tx.filter(t=>+t.amount<0&&(t.date||'').startsWith(yr)&&!NON_PL.includes(t.category)).reduce((s,t)=>s+(+t.vat||0),0);
+  const q=quarterOf(new Date(Date.now()+4*3600000).toISOString().slice(0,10));
+  const outV=inv.filter(i=>i.date&&quarterOf(i.date)===q).reduce((s,i)=>s+(+i.vat||0),0), inV=tx.filter(t=>t.date&&quarterOf(t.date)===q).reduce((s,t)=>s+(+t.vat||0),0);
+  return {cash:r2(cash),recv:r2(recv),rev:r2(rev),exp:r2(exp),profit:r2(rev-exp),vatQ:q,vat:r2(outV-inV),uncat:tx.filter(t=>!t.category||t.category==='Uncategorised').length};
+}
+function financeView(){
+  const T=finTotals(), tabs=[['overview','Overview'],['invoices','Invoices'],['bank','Bank'],['recon','Reconciliation'],['vat','VAT'],['partners','Partner capital'],['controls','Controls']];
+  const body={overview:finOverview,invoices:finInvoices,bank:finBank,recon:finRecon,vat:finVat,partners:finPartners,controls:finControls}[fui.tab]();
+  return `<div class="page"><div class="phead"><div><h1>Finance</h1><div class="sub">Ziar Imaar Technical Services · invoices, bank, VAT and partner capital · admins only</div></div>
+    <div class="actions">${downloadsApi?'<button class="btn" data-act="finxls">'+svg('doc',16)+'Export finance (.xlsx)</button>':''}</div></div>
+    <nav class="ftabs" aria-label="Finance sections">${tabs.map(([k,l])=>`<button data-ftab="${k}" aria-pressed="${fui.tab===k}">${l}${k==='controls'?'':''}</button>`).join('')}</nav>${body}</div>`;
+}
+function finOverview(){
+  const T=finTotals(); const kpi=(l,v,sub,cls='')=>`<div class="card kpi ${cls}"><span class="lbl">${l}</span><b style="font-size:22px">${v}</b><span class="sub">${sub}</span></div>`;
+  const tx=Object.values(bankTx); const months=[...new Set(tx.map(t=>(t.date||'').slice(0,7)).filter(Boolean))].sort().slice(-8);
+  const rows=months.map(m=>{ const xs=tx.filter(t=>(t.date||'').startsWith(m)&&t.category!=='Transfer between accounts'); return {m,inn:xs.filter(t=>+t.amount>0).reduce((a,t)=>a+(+t.amount),0),out:-xs.filter(t=>+t.amount<0).reduce((a,t)=>a+(+t.amount),0)}; });
+  const mx=Math.max(1,...rows.flatMap(r=>[r.inn,r.out]));
+  const cats={}; tx.filter(t=>+t.amount<0&&!NON_PL.includes(t.category)).forEach(t=>{ const k=t.category||'Uncategorised'; cats[k]=(cats[k]||0)-(+t.amount); });
+  const catRows=Object.entries(cats).map(([label,n])=>({label,n:Math.round(n)})).sort((a,b)=>b.n-a.n).slice(0,8);
+  const empty=!Object.keys(bankAccounts).length&&!Object.keys(invoices).length;
+  return `${empty?'<div class="notice">No finance data yet. Start with <b>Invoices → Create from tickets</b> (uses the Z invoice numbers already on your tickets), then add your bank accounts and import statements under <b>Bank</b>. When you send the main workbook, its figures are loaded here.</div>':''}
+    <div class="kpis">${kpi('Cash at bank',money(T.cash),Object.keys(bankAccounts).length+' accounts · book balance','hero')}${kpi('Receivables',money(T.recv),'issued invoices not yet paid')}${kpi('Revenue '+new Date().getFullYear(),money(T.rev),'net of VAT, issued invoices')}${kpi('Expenses '+new Date().getFullYear(),money(T.exp),'bank payments, net of VAT')}${kpi('Profit '+new Date().getFullYear(),money(T.profit),'revenue minus expenses',T.profit<0?'alert':'')}${kpi('VAT due '+T.vatQ.slice(5),money(T.vat),'output minus input VAT')}</div>
+    <div class="dgrid">
+      <div class="card"><div class="card-h"><div><h3>Cash in and out</h3><div class="sub">Bank receipts and payments per month, transfers excluded</div></div><div class="legend"><span><i style="background:var(--s-completed)"></i>In</span><span><i style="background:var(--bar)"></i>Out</span></div></div><div class="card-b">${rows.length?rows.map(r=>`<div class="cashrow" data-tip="${esc(mlab(r.m))}: in ${esc(money(r.inn))} · out ${esc(money(r.out))}"><span class="sub">${esc(mlab(r.m))}</span><span class="bars"><i style="width:${(r.inn/mx*100).toFixed(1)}%;background:var(--s-completed)"></i><i style="width:${(r.out/mx*100).toFixed(1)}%;background:var(--bar)"></i></span><span class="amt in">${esc(money(r.inn))}</span><span class="amt">${esc(money(-r.out))}</span></div>`).join(''):'<div class="empty">Import a bank statement to see cash movements.</div>'}</div></div>
+      <div class="card"><div class="card-h"><div><h3>Expenses by category</h3><div class="sub">All bank payments, excluding capital, transfers and VAT</div></div></div><div class="card-b">${catRows.length?hbars(catRows).replace(/ticket(s)?/g,'AED'):'<div class="empty">No categorised payments yet.</div>'}</div></div>
+    </div>`;
+}
+function finInvoices(){
+  const all=Object.values(invoices), q=fui.invQ.trim().toLowerCase();
+  const fromTickets={}; Object.values(visits).forEach(v=>{ if(!v.billingRef) return; const k=invKey(v.billingRef); if(!Object.values(invoices).some(i=>invKey(i.invoiceNo)===k)) (fromTickets[k]=fromTickets[k]||{no:v.billingRef.trim(),n:0}).n++; });
+  const pend=Object.values(fromTickets);
+  let list=all.filter(i=>fui.invStatus==='all'||invoiceState(i).k===fui.invStatus||(fui.invStatus==='open'&&['open','overdue','noamt'].includes(invoiceState(i).k))).filter(i=>!q||[i.invoiceNo,i.customer,i.notes].join(' ').toLowerCase().includes(q)).sort((a,b)=>(b.date||'').localeCompare(a.date||'')||String(b.invoiceNo).localeCompare(String(a.invoiceNo)));
+  const sel=fui.inv&&invoices[fui.inv]; const f=fui.form&&fui.form.kind==='inv'?fui.form:null;
+  const totals={gross:all.filter(i=>!['draft','void'].includes(i.status)).reduce((s,i)=>s+invGross(i),0),paid:all.reduce((s,i)=>s+invPaid(i),0)};
+  return `<div class="row" style="flex-wrap:wrap"><div class="tabs">${[['all','All'],['open','Unpaid'],['overdue','Overdue'],['noamt','Amount missing'],['paid','Paid'],['draft','Draft']].map(([k,l])=>`<button data-invst="${k}" aria-pressed="${fui.invStatus===k}">${l}</button>`).join('')}</div>
+    <div class="actions"><label class="search">${svg('search',16)}<input id="fi-q" class="field" type="search" placeholder="Search invoice no. or customer" value="${esc(fui.invQ)}"></label>${pend.length?`<button class="btn" data-act="invfromtix">Create from tickets (${pend.length})</button>`:''}<button class="btn primary" data-act="newinv2">+ New invoice</button></div></div>
+    ${f?invForm(f):''}
+    <div class="card"><div class="card-h"><h3>Invoice register</h3><span class="sub">${all.length} invoices · issued ${esc(money(totals.gross))} · received ${esc(money(totals.paid))}</span></div>
+    ${list.length?`<div class="tblwrap"><table class="tbl"><thead><tr><th>Invoice</th><th>Date</th><th>Customer</th><th>Tickets</th><th class="amt">Net</th><th class="amt">VAT</th><th class="amt">Gross</th><th class="amt">Paid</th><th>Status</th><th></th></tr></thead><tbody>${list.slice(0,fui.limit).map(i=>{ const st=invoiceState(i), tk=ticketsForInv(i); return `<tr${sel&&sel.id===i.id?' style="background:var(--goldSoft)"':''}><td><b>${esc(i.invoiceNo)}</b></td><td class="num" style="white-space:nowrap">${i.date?esc(dmy(i.date+'T08:00:00Z')):'—'}</td><td>${esc(i.customer||'—')}</td><td>${tk.length?tk.slice(0,4).map(v=>`<button class="linkbtn" data-open="${esc(v.id)}">#${esc(v.id)}</button>`).join(' ')+(tk.length>4?` <span class="sub">+${tk.length-4}</span>`:''):'<span class="sub">—</span>'}</td><td class="amt">${(+i.net)?esc(money(i.net)):'—'}</td><td class="amt">${(+i.vat)?esc(money(i.vat)):'—'}</td><td class="amt"><b>${invGross(i)?esc(money(invGross(i))):'—'}</b></td><td class="amt">${invPaid(i)?esc(money(invPaid(i))):'—'}</td><td><span class="chip ${st.cls}">${st.label}</span></td><td style="white-space:nowrap;text-align:right"><button class="linkbtn" data-invedit="${esc(i.id)}">Edit</button> <button class="linkbtn danger" data-invdel="${esc(i.id)}">${fui.del===i.id?'Confirm':'Delete'}</button></td></tr>`; }).join('')}</tbody></table></div>${list.length>fui.limit?`<div class="more"><button class="btn block" data-act="finmore">Show more</button></div>`:''}`:`<div class="empty">${all.length?'No invoices in this view.':pend.length?'No invoices yet. '+pend.length+' Z invoice numbers are on your tickets — use “Create from tickets”.':'No invoices yet. Add one with “New invoice”.'}</div>`}</div>`;
+}
+function invForm(f){
+  const v=k=>esc(f[k]??'');
+  return `<form id="finvform" class="card"><div class="card-h"><h3>${f.id?'Edit invoice '+esc(f.invoiceNo):'New invoice'}</h3><button type="button" class="btn ghost" data-act="closefin" aria-label="Close">${svg('x',18)}</button></div><div class="card-b"><div class="fgrid">
+    <label>Invoice number<input class="field" name="invoiceNo" required value="${v('invoiceNo')}" placeholder="e.g. ZRA1853"></label>
+    <label>Customer<input class="field" name="customer" required value="${v('customer')||'Kohler UAE'}"></label>
+    <label>Invoice date<input class="field" type="date" name="date" required value="${v('date')}"></label>
+    <label>Due date<input class="field" type="date" name="dueDate" value="${v('dueDate')}"></label>
+    <label>Net amount (AED)<input class="field" type="number" step="0.01" min="0" name="net" id="fin-net" value="${v('net')}"></label>
+    <label>VAT 5% (AED)<input class="field" type="number" step="0.01" min="0" name="vat" id="fin-vat" value="${v('vat')}" placeholder="Filled from net"></label>
+    <label>Status<select class="field" name="status">${[['issued','Issued'],['draft','Draft'],['void','Void']].map(([k,l])=>`<option value="${k}" ${(f.status||'issued')===k?'selected':''}>${l}</option>`).join('')}</select></label>
+    <label>Paid outside bank import (AED)<input class="field" type="number" step="0.01" min="0" name="paidOther" value="${v('paidOther')}" placeholder="Optional"></label>
+    <label class="span4">Notes<input class="field" name="notes" value="${v('notes')}" placeholder="Optional"></label>
+  </div>${f.id?`<div class="sub" style="margin-top:10px">Tickets on this invoice: ${ticketsForInv(f).map(t=>'#'+t.id).join(', ')||'none'} · Bank receipts matched: ${esc(money(invPaid(f)-(+f.paidOther||0)))}</div>`:''}
+  <div class="row" style="justify-content:flex-end;margin-top:14px"><button type="button" class="btn" data-act="closefin">Cancel</button><button class="btn primary" type="submit">Save invoice</button></div></div></form>`;
+}
+function finBank(){
+  const accts=Object.values(bankAccounts).sort((a,b)=>(a.name||'').localeCompare(b.name||''));
+  const q=fui.q.trim().toLowerCase();
+  let tx=Object.values(bankTx).filter(t=>fui.acct==='all'||t.account===fui.acct).filter(t=>fui.month==='all'||(t.date||'').startsWith(fui.month)).filter(t=>!q||[t.desc,t.ref,t.category,t.invoiceNo,String(t.amount)].join(' ').toLowerCase().includes(q)).sort((a,b)=>(b.date||'').localeCompare(a.date||'')||(b.seq||0)-(a.seq||0));
+  const months=[...new Set(Object.values(bankTx).map(t=>(t.date||'').slice(0,7)).filter(Boolean))].sort().reverse();
+  const openInv=Object.values(invoices).filter(i=>!['draft','void'].includes(i.status)&&invoiceState(i).k!=='paid').sort((a,b)=>String(a.invoiceNo).localeCompare(String(b.invoiceNo)));
+  const f=fui.form&&fui.form.kind==='acct'?fui.form:null;
+  return `<div class="pgrid" style="grid-template-columns:minmax(0,1fr) minmax(0,1.2fr)">
+    <div class="card"><div class="card-h"><h3>Bank accounts</h3><button class="btn primary" style="height:32px" data-act="newacct">+ Add account</button></div>
+      ${f?`<form id="facctform" class="card-b" style="border-bottom:1px solid var(--line)"><div class="fgrid" style="grid-template-columns:repeat(2,minmax(0,1fr))">
+        <label>Account name<input class="field" name="name" required value="${esc(f.name||'')}" placeholder="e.g. Wio current"></label><label>Bank<input class="field" name="bank" value="${esc(f.bank||'')}" placeholder="e.g. Wio, Mashreq"></label>
+        <label>Last 4 digits<input class="field" name="last4" maxlength="4" value="${esc(f.last4||'')}"></label><label>Opening balance (AED)<input class="field" type="number" step="0.01" name="opening" value="${esc(f.opening??'')}"></label>
+        <label>Opening date<input class="field" type="date" name="openingDate" value="${esc(f.openingDate||'')}"></label><label>Statement closing balance<input class="field" type="number" step="0.01" name="stmtClosing" value="${esc(f.stmtClosing??'')}" placeholder="From the latest statement"></label>
+        <label>Statement date<input class="field" type="date" name="stmtDate" value="${esc(f.stmtDate||'')}"></label></div>
+        <div class="row" style="justify-content:flex-end;margin-top:12px"><button type="button" class="btn" data-act="closefin">Cancel</button><button class="btn primary" type="submit">Save account</button></div></form>`:''}
+      ${accts.length?accts.map(a=>`<div class="entry"><div><b>${esc(a.name)}</b><div class="sub">${esc([a.bank,a.last4?'•••• '+a.last4:''].filter(Boolean).join(' · '))} · ${acctTx(a.id).length} transactions</div></div><div style="text-align:right"><div class="amt" style="font-weight:700">${esc(money(acctBal(a)))}</div><div style="display:flex;gap:10px;justify-content:flex-end"><button class="linkbtn" data-acctedit="${esc(a.id)}">Edit</button><button class="linkbtn danger" data-acctdel="${esc(a.id)}">${fui.del===a.id?'Confirm (deletes its transactions)':'Delete'}</button></div></div></div>`).join(''):'<div class="empty">Add your bank accounts (for example Wio and Mashreq) with their opening balances.</div>'}
+    </div>
+    <div class="card"><div class="card-h"><h3>Import a statement</h3><span class="sub">CSV or Excel from online banking</span></div><div class="card-b">
+      ${accts.length?`<label class="flabel">Into account<select class="field" id="imp-acct">${accts.map(a=>`<option value="${esc(a.id)}">${esc(a.name)}</option>`).join('')}</select></label>
+      <label class="drop" for="imp-file" style="margin-top:10px">${fui.imp&&fui.imp.busy?'<span class="spin"></span> Reading…':'⬆ Choose statement file (.csv, .xlsx, .xls)'}<input id="imp-file" type="file" accept=".csv,.txt,.xlsx,.xls"></label>
+      ${fui.imp&&fui.imp.rows?`<div class="notice" style="margin-top:10px">${fui.imp.rows.length} transactions read from <b>${esc(fui.imp.name)}</b> (${esc(fui.imp.cols)}). ${fui.imp.dupes} already imported and will be skipped.<div class="row" style="justify-content:flex-end;margin-top:8px"><button class="btn" data-act="impcancel">Cancel</button><button class="btn primary" data-act="impgo">Import ${fui.imp.rows.length-fui.imp.dupes}</button></div></div>`:''}
+      ${fui.imp&&fui.imp.err?`<div class="err" style="margin-top:8px">${esc(fui.imp.err)}</div>`:''}
+      <div class="sub" style="margin-top:8px">The file needs a date column, a description, and either an amount or separate debit and credit columns. Rows already imported (same date, amount and description) are skipped.</div>`:'<div class="empty">Add a bank account first.</div>'}
+    </div></div>
+  </div>
+  <div class="card"><div class="card-h" style="flex-wrap:wrap"><h3>Transactions</h3><div class="actions">
+      <select id="fb-acct" class="field" style="margin:0;width:auto;height:36px;padding:0 30px 0 10px"><option value="all">All accounts</option>${accts.map(a=>`<option value="${esc(a.id)}" ${fui.acct===a.id?'selected':''}>${esc(a.name)}</option>`).join('')}</select>
+      <select id="fb-month" class="field" style="margin:0;width:auto;height:36px;padding:0 30px 0 10px"><option value="all">All months</option>${months.map(m=>`<option value="${m}" ${fui.month===m?'selected':''}>${esc(mlab(m))}</option>`).join('')}</select>
+      <label class="search">${svg('search',16)}<input id="fb-q" class="field" type="search" placeholder="Search description, amount, invoice" value="${esc(fui.q)}"></label><button class="btn" data-act="newtx">+ Add transaction</button></div></div>
+    ${fui.form&&fui.form.kind==='tx'?txForm(fui.form,accts):''}
+    ${tx.length?`<div class="tblwrap"><table class="tbl" style="min-width:980px"><thead><tr><th>Date</th><th>Description</th><th class="amt">Amount</th><th>Category</th><th class="amt">Input VAT</th><th>Invoice (receipts)</th><th></th></tr></thead><tbody>${tx.slice(0,fui.limit).map(t=>`<tr><td class="num" style="white-space:nowrap">${esc(dm(t.date+'T08:00:00Z'))}<div class="sub">${esc((bankAccounts[t.account]||{}).name||'')}</div></td><td style="max-width:340px">${esc(t.desc)}${t.ref?`<div class="mono">${esc(t.ref)}</div>`:''}</td><td class="amt ${+t.amount>0?'in':'out'}"><b>${esc(money(t.amount))}</b></td>
+      <td><select class="field" data-txcat="${esc(t.id)}">${BANK_CATS.map(c=>`<option ${((t.category||'Uncategorised')===c)?'selected':''}>${esc(c)}</option>`).join('')}</select></td>
+      <td class="amt">${+t.amount<0?`<input class="field" data-txvat="${esc(t.id)}" type="number" step="0.01" min="0" value="${esc(t.vat||'')}" placeholder="0.00" style="width:90px;text-align:right">`:'<span class="sub">—</span>'}</td>
+      <td>${+t.amount>0?`<select class="field" data-txinv="${esc(t.id)}"><option value="">—</option>${[...(t.invoiceNo&&!openInv.some(i=>invKey(i.invoiceNo)===invKey(t.invoiceNo))?[{invoiceNo:t.invoiceNo}]:[]),...openInv].map(i=>`<option value="${esc(i.invoiceNo)}" ${invKey(i.invoiceNo)===invKey(t.invoiceNo)?'selected':''}>${esc(i.invoiceNo)}${i.net?' · '+esc(money(invGross(i))):''}</option>`).join('')}</select>`:'<span class="sub">—</span>'}</td>
+      <td style="text-align:right"><button class="linkbtn danger" data-txdel="${esc(t.id)}">${fui.del===t.id?'Confirm':'Delete'}</button></td></tr>`).join('')}</tbody></table></div>${tx.length>fui.limit?`<div class="more"><button class="btn block" data-act="finmore">Show more (${tx.length-fui.limit} left)</button></div>`:''}`:'<div class="empty">No transactions here yet. Import a statement or add one by hand.</div>'}
+  </div>`;
+}
+function txForm(f,accts){
+  return `<form id="ftxform" class="card-b" style="border-bottom:1px solid var(--line)"><div class="fgrid">
+    <label>Account<select class="field" name="account">${accts.map(a=>`<option value="${esc(a.id)}">${esc(a.name)}</option>`).join('')}</select></label><label>Date<input class="field" type="date" name="date" required value="${esc(f.date||new Date(Date.now()+4*3600000).toISOString().slice(0,10))}"></label>
+    <label>Direction<select class="field" name="dir"><option value="in">Money in (+)</option><option value="out">Money out (−)</option></select></label><label>Amount (AED)<input class="field" type="number" step="0.01" min="0" name="amount" required></label>
+    <label class="span2">Description<input class="field" name="desc" required></label><label>Reference<input class="field" name="ref"></label><label>Category<select class="field" name="category">${BANK_CATS.map(c=>`<option>${esc(c)}</option>`).join('')}</select></label>
+  </div><div class="row" style="justify-content:flex-end;margin-top:12px"><button type="button" class="btn" data-act="closefin">Cancel</button><button class="btn primary" type="submit">Add transaction</button></div></form>`;
+}
+function finRecon(){
+  const accts=Object.values(bankAccounts);
+  const recInv=Object.values(bankTx).filter(t=>+t.amount>0&&!t.invoiceNo&&INCOME_CATS.includes(t.category||''));
+  const unpaid=Object.values(invoices).filter(i=>['open','overdue'].includes(invoiceState(i).k)).sort((a,b)=>(a.dueDate||a.date||'').localeCompare(b.dueDate||b.date||''));
+  return `<div class="card"><div class="card-h"><h3>Book balance against bank statement</h3><span class="sub">Enter the statement closing balance under Bank → Edit account</span></div>
+    ${accts.length?`<div class="tblwrap"><table class="tbl"><thead><tr><th>Account</th><th class="amt">Opening</th><th class="amt">Money in</th><th class="amt">Money out</th><th>Statement date</th><th class="amt">Book balance</th><th class="amt">Statement balance</th><th class="amt">Difference</th></tr></thead><tbody>${accts.map(a=>{ const upto=a.stmtDate||null, xs=acctTx(a.id).filter(t=>!upto||t.date<=upto), inn=xs.filter(t=>+t.amount>0).reduce((s,t)=>s+(+t.amount),0), out=xs.filter(t=>+t.amount<0).reduce((s,t)=>s+(+t.amount),0), book=acctBal(a,upto), has=a.stmtClosing!==''&&a.stmtClosing!=null, diff=has?r2(book-(+a.stmtClosing)):null;
+      return `<tr><td><b>${esc(a.name)}</b></td><td class="amt">${esc(money(a.opening))}</td><td class="amt in">${esc(money(inn))}</td><td class="amt">${esc(money(out))}</td><td class="num">${a.stmtDate?esc(dmy(a.stmtDate+'T08:00:00Z')):'—'}</td><td class="amt"><b>${esc(money(book))}</b></td><td class="amt">${has?esc(money(a.stmtClosing)):'<span class="sub">not entered</span>'}</td><td class="amt ${diff===null?'':diff===0?'var-ok':'var-neg'}">${diff===null?'—':diff===0?'✓ 0.00':esc(money(diff))}</td></tr>`; }).join('')}</tbody></table></div>`:'<div class="empty">Add bank accounts under Bank first.</div>'}</div>
+  <div class="pgrid">
+    <div class="card"><div class="card-h"><h3>Receipts not matched to an invoice</h3><span class="sub">${recInv.length}</span></div>${recInv.length?recInv.slice(0,30).map(t=>`<div class="entry"><div style="min-width:0"><div>${esc(t.desc)}</div><div class="sub">${esc(dmy(t.date+'T08:00:00Z'))} · ${esc((bankAccounts[t.account]||{}).name||'')}</div></div><div class="amt in"><b>${esc(money(t.amount))}</b></div></div>`).join(''):'<div class="empty">Every customer receipt is matched.</div>'}</div>
+    <div class="card"><div class="card-h"><h3>Unpaid invoices</h3><span class="sub">${unpaid.length} · ${esc(money(unpaid.reduce((s,i)=>s+invGross(i)-invPaid(i),0)))}</span></div>${unpaid.length?unpaid.slice(0,30).map(i=>`<div class="entry"><div><b>${esc(i.invoiceNo)}</b><div class="sub">${esc(i.customer||'')} · ${i.dueDate?'due '+esc(dmy(i.dueDate+'T08:00:00Z')):'no due date'}</div></div><div style="text-align:right"><div class="amt"><b>${esc(money(invGross(i)-invPaid(i)))}</b></div><span class="chip ${invoiceState(i).cls}">${invoiceState(i).label}</span></div></div>`).join(''):'<div class="empty">No unpaid invoices with amounts.</div>'}</div>
+  </div>`;
+}
+function finVat(){
+  const qs=new Set(); Object.values(invoices).forEach(i=>i.date&&qs.add(quarterOf(i.date))); Object.values(bankTx).forEach(t=>t.date&&qs.add(quarterOf(t.date)));
+  const rows=[...qs].sort().reverse().map(q=>{ const inv=Object.values(invoices).filter(i=>i.date&&quarterOf(i.date)===q&&!['draft','void'].includes(i.status)); const tx=Object.values(bankTx).filter(t=>t.date&&quarterOf(t.date)===q);
+    const sales=inv.reduce((s,i)=>s+(+i.net||0),0), out=inv.reduce((s,i)=>s+(+i.vat||0),0), inp=tx.reduce((s,t)=>s+(+t.vat||0),0), paid=-tx.filter(t=>t.category==='VAT payment').reduce((s,t)=>s+(+t.amount||0),0);
+    return {q,sales,out,inp,net:out-inp,paid}; });
+  return `<div class="notice">VAT at 5%. Output VAT comes from issued invoices by invoice date; input VAT from the amounts you enter on bank payments. Quarters here are calendar quarters; check them against your FTA return periods before filing.</div>
+  <div class="card"><div class="card-h"><h3>VAT by quarter</h3></div>${rows.length?`<div class="tblwrap"><table class="tbl"><thead><tr><th>Quarter</th><th class="amt">Taxable sales</th><th class="amt">Output VAT</th><th class="amt">Input VAT</th><th class="amt">Net VAT due</th><th class="amt">VAT paid (bank)</th></tr></thead><tbody>${rows.map(r=>`<tr><td><b>${esc(r.q.replace('-',' '))}</b></td><td class="amt">${esc(money(r.sales))}</td><td class="amt">${esc(money(r.out))}</td><td class="amt">${esc(money(r.inp))}</td><td class="amt"><b>${esc(money(r.net))}</b></td><td class="amt">${esc(money(r.paid))}</td></tr>`).join('')}</tbody></table></div>`:'<div class="empty">No invoices or bank transactions yet.</div>'}</div>`;
+}
+function finPartners(){
+  const xs=Object.values(partnerTx).sort((a,b)=>(b.date||'').localeCompare(a.date||''));
+  const sum={}; xs.forEach(t=>{ const p=sum[t.partner]||(sum[t.partner]={cap:0,draw:0,loan:0}); const a=+t.amount||0; if(t.type==='Capital in') p.cap+=a; else if(t.type==='Drawing') p.draw+=a; else if(t.type==='Loan to company') p.loan+=a; else if(t.type==='Loan repaid') p.loan-=a; });
+  const f=fui.form&&fui.form.kind==='ptx'?fui.form:null;
+  return `<div class="pgrid"><div class="card"><div class="card-h"><h3>Partner balances</h3></div>${Object.keys(sum).length?`<div class="tblwrap"><table class="tbl"><thead><tr><th>Partner</th><th class="amt">Capital in</th><th class="amt">Drawings</th><th class="amt">Loans to company</th><th class="amt">Net position</th></tr></thead><tbody>${Object.entries(sum).map(([n,p])=>`<tr><td><b>${esc(n)}</b></td><td class="amt">${esc(money(p.cap))}</td><td class="amt">${esc(money(-p.draw))}</td><td class="amt">${esc(money(p.loan))}</td><td class="amt"><b>${esc(money(p.cap-p.draw+p.loan))}</b></td></tr>`).join('')}</tbody></table></div>`:'<div class="empty">No partner movements yet.</div>'}</div>
+  <div class="card"><div class="card-h"><h3>Record a movement</h3></div><form id="fptxform" class="card-b"><div class="fgrid" style="grid-template-columns:repeat(2,minmax(0,1fr))">
+    <label>Partner<input class="field" name="partner" required list="partners" value="${esc((f||{}).partner||'')}"></label><datalist id="partners">${Object.keys(sum).map(n=>`<option value="${esc(n)}">`).join('')}</datalist>
+    <label>Type<select class="field" name="type">${['Capital in','Drawing','Loan to company','Loan repaid'].map(t=>`<option>${t}</option>`).join('')}</select></label>
+    <label>Date<input class="field" type="date" name="date" required value="${new Date(Date.now()+4*3600000).toISOString().slice(0,10)}"></label><label>Amount (AED)<input class="field" type="number" step="0.01" min="0" name="amount" required></label>
+    <label class="span2">Note<input class="field" name="note" placeholder="Optional"></label></div><div class="row" style="justify-content:flex-end;margin-top:12px"><button class="btn primary" type="submit">Add</button></div></form></div></div>
+  <div class="card"><div class="card-h"><h3>Movements</h3><span class="sub">${xs.length}</span></div>${xs.length?`<div class="tblwrap"><table class="tbl"><thead><tr><th>Date</th><th>Partner</th><th>Type</th><th class="amt">Amount</th><th>Note</th><th></th></tr></thead><tbody>${xs.map(t=>`<tr><td class="num">${esc(dmy(t.date+'T08:00:00Z'))}</td><td>${esc(t.partner)}</td><td>${esc(t.type)}</td><td class="amt">${esc(money(t.amount))}</td><td>${esc(t.note||'')}</td><td style="text-align:right"><button class="linkbtn danger" data-ptxdel="${esc(t.id)}">${fui.del===t.id?'Confirm':'Delete'}</button></td></tr>`).join('')}</tbody></table></div>`:'<div class="empty">Capital, drawings and partner loans appear here.</div>'}</div>`;
+}
+function finControls(){
+  const accts=Object.values(bankAccounts), inv=Object.values(invoices), tx=Object.values(bankTx);
+  const done=Object.values(visits).filter(v=>v.status==='completed');
+  const noInv=done.filter(v=>!v.billingRef), invTk=new Set(inv.map(i=>invKey(i.invoiceNo))), tkNoReg=done.filter(v=>v.billingRef&&!invTk.has(invKey(v.billingRef)));
+  const noAmt=inv.filter(i=>!['draft','void'].includes(i.status)&&!invGross(i)), uncat=tx.filter(t=>!t.category||t.category==='Uncategorised'), unmatched=tx.filter(t=>+t.amount>0&&!t.invoiceNo&&INCOME_CATS.includes(t.category||''));
+  const noOpen=accts.filter(a=>a.opening===''||a.opening==null||!a.openingDate), stmt=accts.filter(a=>a.stmtClosing!==''&&a.stmtClosing!=null), diff=stmt.filter(a=>r2(acctBal(a,a.stmtDate||null)-(+a.stmtClosing))!==0);
+  const c=(ok,warn,t,d,go)=>`<div class="ctl"><span class="ic ${ok?'ok':warn?'warn':'bad'}">${ok?'✓':'!'}</span><div><div style="font-weight:600">${t}</div><div class="sub">${d}</div></div>${go?`<button class="linkbtn" data-ftab="${go}">Open →</button>`:''}</div>`;
+  return `<div class="card">${[
+    c(accts.length&&!noOpen.length,!accts.length,'Opening balances',accts.length?(noOpen.length?noOpen.length+' account(s) without an opening balance and date':'Set for all '+accts.length+' accounts'):'No bank accounts added yet','bank'),
+    c(stmt.length&&!diff.length&&stmt.length===accts.length,!stmt.length,'Bank statement agrees with book',!stmt.length?'No statement closing balances entered':diff.length?diff.length+' account(s) differ from the statement':stmt.length+' of '+accts.length+' accounts agree','recon'),
+    c(!uncat.length,tx.length===0,'Bank transactions categorised',tx.length?(uncat.length?uncat.length+' of '+tx.length+' still uncategorised':'All '+tx.length+' categorised'):'No transactions imported','bank'),
+    c(!unmatched.length,false,'Customer receipts matched to invoices',unmatched.length?unmatched.length+' receipt(s) not linked to an invoice':'All matched','recon'),
+    c(!noAmt.length&&inv.length,!inv.length,'Invoice amounts entered',inv.length?(noAmt.length?noAmt.length+' issued invoice(s) without an amount':'All issued invoices have amounts'):'No invoices in the register','invoices'),
+    c(!tkNoReg.length,false,'Ticket invoice numbers in the register',tkNoReg.length?tkNoReg.length+' completed ticket(s) carry a Z invoice number that is not in the register':'Every ticket invoice number is registered','invoices'),
+    c(!noInv.length,true,'Completed tickets invoiced',noInv.length?noInv.length+' completed ticket(s) have no Z invoice number':'All completed tickets have an invoice number',''),
+  ].join('')}</div><div class="sub">These checks show where the books need attention. They are not an audit and do not replace your accountant's review.</div>`;
+}
+async function importStatement(file){
+  fui.imp={busy:true}; render();
+  try{
+    let rows;
+    if(/\.(xlsx|xls)$/i.test(file.name)){ if(!window.XLSX) throw new Error('The Excel reader did not load. Save the statement as CSV and try again.'); const wb=XLSX.read(await file.arrayBuffer(),{type:'array',cellDates:true}); rows=XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]],{header:1,raw:false,dateNF:'yyyy-mm-dd'}); }
+    else rows=parseCsv(await file.text());
+    const hi=rows.findIndex(r=>r.some(c=>/date/i.test(String(c)))&&r.some(c=>/(desc|narrat|detail|particular|remark|beneficiary)/i.test(String(c))||(/transaction/i.test(String(c))&&!/date/i.test(String(c)))));
+    if(hi<0) throw new Error('Could not find a header row with Date and Description columns.');
+    const H=rows[hi].map(c=>String(c||'').trim().toLowerCase()), col=re=>H.findIndex(h=>re.test(h));
+    const cD=col(/date/), cDesc=(i=>i>=0?i:H.findIndex(h=>/transaction/.test(h)&&!/date|ref|type|amount/.test(h)))(col(/(desc|narrat|detail|particular|remark|beneficiary)/)), cAmt=col(/^amount|amount \(aed\)|^amt/), cDr=col(/(debit|withdraw|money out|paid out)/), cCr=col(/(credit|deposit|money in|paid in)/), cRef=col(/(ref|cheque|chq)/);
+    if(cD<0||cDesc<0||(cAmt<0&&cDr<0&&cCr<0)) throw new Error('Need Date, Description and Amount (or Debit and Credit) columns.');
+    const num=v=>{ const t=String(v??'').replace(/[,\s]|AED/gi,''); if(!t) return 0; const neg=/^\(.*\)$/.test(t)||/^-/.test(t)||/dr$/i.test(t); const n=parseFloat(t.replace(/[()]|dr$|cr$/gi,'').replace(/^-/,'')); return isNaN(n)?0:(neg?-n:n); };
+    const out=[]; rows.slice(hi+1).forEach((r,i)=>{ const d=parseDate(r[cD]); if(!d) return; let amt=cAmt>=0?num(r[cAmt]):r2(num(r[cCr])-Math.abs(num(r[cDr]))); if(!amt) return; out.push({date:d,desc:String(r[cDesc]||'').trim().replace(/\s+/g,' '),ref:cRef>=0?String(r[cRef]||'').trim():'',amount:r2(amt),seq:i}); });
+    if(!out.length) throw new Error('No transactions with a date and amount were found.');
+    const acct=document.getElementById('imp-acct').value, key=t=>t.date+'|'+r2(t.amount)+'|'+t.desc.toLowerCase().slice(0,40);
+    const have=new Set(acctTx(acct).map(key));
+    fui.imp={rows:out,acct,name:file.name,cols:[H[cD],H[cDesc],cAmt>=0?H[cAmt]:H[cDr]+'/'+H[cCr]].join(', '),dupes:out.filter(t=>have.has(key(t))).length,have};
+  }catch(e){ fui.imp={err:e.message||'Could not read this file.'}; }
+  render();
+}
+function parseCsv(text){ const rows=[]; let row=[], cur='', q=false; for(let i=0;i<text.length;i++){ const ch=text[i]; if(q){ if(ch==='"'){ if(text[i+1]==='"'){ cur+='"'; i++; } else q=false; } else cur+=ch; } else if(ch==='"') q=true; else if(ch===','||ch===';'||ch==='\t'){ row.push(cur); cur=''; } else if(ch==='\n'||ch==='\r'){ if(ch==='\r'&&text[i+1]==='\n') i++; row.push(cur); rows.push(row); row=[]; cur=''; } else cur+=ch; } if(cur||row.length){ row.push(cur); rows.push(row); } return rows; }
+function parseDate(v){ if(!v) return null; if(v instanceof Date&&!isNaN(v)) return v.toISOString().slice(0,10); const t=String(v).trim(); let m;
+  if(m=t.match(/^(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})/)) return m[1]+'-'+pad(m[2])+'-'+pad(m[3]);
+  if(m=t.match(/^(\d{1,2})[-/.](\d{1,2})[-/.](\d{2,4})/)) return (m[3].length===2?'20'+m[3]:m[3])+'-'+pad(m[2])+'-'+pad(m[1]);
+  if(m=t.match(/^(\d{1,2})[-\s]([A-Za-z]{3})[A-Za-z]*[-\s,]+(\d{2,4})/)){ const mi=MON.findIndex(x=>x.toLowerCase()===m[2].toLowerCase()); if(mi>=0) return (m[3].length===2?'20'+m[3]:m[3])+'-'+pad(mi+1)+'-'+pad(m[1]); }
+  return null; }
+async function finExport(){
+  if(!window.XLSX){ toast('The Excel writer did not load. Try again in a moment.'); return; }
+  const wb=XLSX.utils.book_new(), add=(name,rows)=>XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet(rows),name);
+  add('Invoices',Object.values(invoices).map(i=>({'Invoice no.':i.invoiceNo,Customer:i.customer,Date:i.date,'Due date':i.dueDate,Net:+i.net||0,VAT:+i.vat||0,Gross:invGross(i),Paid:invPaid(i),Status:invoiceState(i).label,Tickets:ticketsForInv(i).map(t=>'#'+t.id).join(' '),Notes:i.notes||''})));
+  add('Bank transactions',Object.values(bankTx).sort((a,b)=>(a.date||'').localeCompare(b.date||'')).map(t=>({Account:(bankAccounts[t.account]||{}).name,Date:t.date,Description:t.desc,Reference:t.ref,'Money in':+t.amount>0?+t.amount:'','Money out':+t.amount<0?-t.amount:'',Category:t.category||'Uncategorised','Input VAT':+t.vat||'',Invoice:t.invoiceNo||''})));
+  add('Bank accounts',Object.values(bankAccounts).map(a=>({Account:a.name,Bank:a.bank,'Last 4':a.last4,Opening:+a.opening||0,'Opening date':a.openingDate,'Book balance':acctBal(a),'Statement balance':a.stmtClosing,'Statement date':a.stmtDate})));
+  add('Partner capital',Object.values(partnerTx).map(t=>({Date:t.date,Partner:t.partner,Type:t.type,Amount:+t.amount||0,Note:t.note||''})));
+  const data=XLSX.write(wb,{bookType:'xlsx',type:'array'});
+  try{ await downloadsApi.save({filename:'ziar-imaar-finance-'+dayKey(new Date().toISOString())+'.xlsx',data:new Blob([data],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'})}); toast('Finance workbook saved'); logAction('Exported finance workbook'); }catch(err){ if(!(err&&err.code==='declined')) toast('Could not save the workbook.'); }
+}
+
 /* ---------- inventory ---------- */
 const invState=i=>(+i.stock||0)<=0?{cls:'cancelled',label:'Out of stock'}:(+i.stock||0)<=(+i.min||0)?{cls:'review',label:'Low stock'}:{cls:'completed',label:'In stock'};
 const aed=n=>'AED '+(Math.round(n*100)/100).toLocaleString('en-US',{minimumFractionDigits:0,maximumFractionDigits:2});
@@ -1117,7 +1346,7 @@ function adminView(){
         <div>${pend.length?pend.map(([id,q])=>personRow(id,[`<div class="sub">Requested ${esc(dmhm(q.at))}</div>`,`<span style="display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end"><button class="btn" style="height:32px" data-grant="${esc(id)}" data-r="office">Office</button><button class="btn" style="height:32px" data-grant="${esc(id)}" data-r="technician">Technician</button><button class="btn" style="height:32px" data-grant="${esc(id)}" data-r="viewer">Viewer</button><button class="linkbtn danger" data-dismiss="${esc(id)}">Dismiss</button></span>`])).join(''):'<div class="empty">No pending requests.</div>'}</div></div>
     </div></div>`;
   if(adminTab==='roles'){
-    const pages=[['dashboard','Dashboard'],['tickets','Tickets'],['review','Review queue · close visits'],['parts','Parts, inventory & stock'],['assets','Asset register'],['admin','Administration']];
+    const pages=[['dashboard','Dashboard'],['tickets','Tickets'],['review','Review queue · close visits'],['parts','Parts, inventory & stock'],['assets','Asset register'],['reports','Reports'],['finance','Finance (invoices, bank, VAT, partners)'],['admin','Administration']];
     const extra=[['See all tickets',['admin','office','viewer']],['Update any open ticket',['admin','office']],['Update tickets assigned to them',['admin','office','technician']],['Assign technicians',['admin','office']],['Create new visits',['admin','office']],['Export CSV',['admin','office']],['Download service reports',['admin','office','technician','viewer']],['Assign roles',['admin']],['Read the audit log',['admin']]];
     const yes=b=>b?'<span class="yes">✓</span>':'<span class="no">—</span>';
     body=`<div class="card"><div class="card-h"><h3>What each role can do</h3></div><div class="tblwrap"><table class="tbl matrix"><thead><tr><th>Permission</th><th>Admin</th><th>Office</th><th>Technician</th><th>Viewer</th></tr></thead><tbody>
@@ -1229,13 +1458,14 @@ function render(){
   document.body.classList.remove('locked');
   if(!listInit){ listInit=true; if(a==='technician') list.status='mine'; }
   if(!can(route)){ route=PERMS[a][0]; try{ history.replaceState(null,'','#'+(route==='tickets'&&sel?'t'+sel:route)); }catch(e){} }
-  $app.innerHTML=route==='tickets'?ticketsView():route==='review'?reviewView():route==='parts'?partsView():route==='admin'?adminView():route==='assets'?assetsView():route==='reports'?reportsView():dashView();
+  $app.innerHTML=route==='tickets'?ticketsView():route==='review'?reviewView():route==='parts'?partsView():route==='admin'?adminView():route==='assets'?assetsView():route==='reports'?reportsView():route==='finance'?financeView():dashView();
   document.getElementById('modal').innerHTML=modalHtml();
   if(route==='tickets'&&mode==='visit') initSig();
 }
 const typing=()=>{ const a=document.activeElement; return !!(a&&a.closest&&a.closest('#app,#modal')&&/^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName)); };
 // live updates never rebuild a screen while someone types in it or edits a visit; their next action renders the update
-function safeRender(){ if(typing()||mode!=='view'||modal){ navHtml(); return; } render(); }
+let srT=null; function safeRender(){ clearTimeout(srT); srT=setTimeout(safeRenderNow,0); }
+function safeRenderNow(){ if(typing()||mode!=='view'||modal){ navHtml(); return; } render(); }
 function go(r,id){
   route=r; if(r==='tickets'&&id!==undefined){ sel=id; mode='view'; draft=null; showCall=false; }
   const h=r==='tickets'&&sel?'t'+sel:r;
@@ -1268,6 +1498,10 @@ document.addEventListener('input',e=>{
   if(t.id==='o-inv'&&rev.edit) rev.edit.inv=t.value;
   if(t.id==='o-int'&&rev.edit) rev.edit.int=t.value;
   if(t.id==='p-q'){ psearch.q=t.value; clearTimeout(psearch.t); psearch.t=setTimeout(async()=>{ if(!userApi||!userApi.search||!psearch.q.trim()){ psearch.res=[]; } else { try{ psearch.res=(await userApi.search(psearch.q.trim())).slice(0,8); psearch.res.forEach(p=>{ if(p.name) names[p.id]=p.name; }); }catch(e){ psearch.res=[]; } } const el=document.getElementById('p-res'); if(el) el.innerHTML=resultsHtml(); },250); }
+  if(t.id==='fi-q'){ fui.invQ=t.value; clearTimeout(fui.t); fui.t=setTimeout(()=>{ const pos=t.selectionStart; render(); const el=document.getElementById('fi-q'); if(el){ el.focus(); try{ el.setSelectionRange(pos,pos); }catch(_){} } },250); }
+  if(t.id==='fb-q'){ fui.q=t.value; clearTimeout(fui.t); fui.t=setTimeout(()=>{ const pos=t.selectionStart; render(); const el=document.getElementById('fb-q'); if(el){ el.focus(); try{ el.setSelectionRange(pos,pos); }catch(_){} } },250); }
+  if(t.id==='fin-net'){ const v=document.getElementById('fin-vat'); if(v&&!v.dataset.touched) v.value=t.value?r2(+t.value*VAT_RATE).toFixed(2):''; }
+  if(t.id==='fin-vat') t.dataset.touched='1';
   if(t.id==='a-q'){ aui.q=t.value; clearTimeout(aui.t); aui.t=setTimeout(()=>{ const pos=t.selectionStart; render(); const el=document.getElementById('a-q'); if(el){ el.focus(); try{ el.setSelectionRange(pos,pos); }catch(_){} } },200); }
   if(t.id==='l-q'){ list.q=t.value; list.limit=60; document.getElementById('l-body').innerHTML=listBody(); }
   if(t.form&&t.form.id==='nvform'&&t.name) nform[t.name]=t.value;
@@ -1278,6 +1512,12 @@ document.addEventListener('change',async e=>{
   if(t.dataset&&t.dataset.tphone){ const id=t.dataset.tphone, r=roles[id]; if(!r||!db) return; try{ await db.doc('roles/'+id).set(Object.assign({},r,{phone:t.value.trim()})); logAction('Updated technician phone',{detail:nameOf(id)}); toast('Phone saved for '+(nameOf(id)||'technician')); }catch(e){ toast('Only admins can change this.'); } return; }
   if(t.dataset&&t.dataset.assign){ const ov=visits[t.dataset.assign]; if(!ov) return; const n=clone(ov); n.assignedTo=t.value; await save(n,t.value?'Assigned to '+(nameOf(t.value)||'technician'):'Unassigned technician'); toast(t.value?'#'+n.id+' assigned to '+(nameOf(t.value)||'technician'):'#'+n.id+' is unassigned'); return; }
   if(t.dataset&&t.dataset.setrole){ await setRole(t.dataset.setrole,t.value); return; }
+  if(t.dataset&&t.dataset.txcat){ const x=bankTx[t.dataset.txcat]; if(!x) return; const {id,...rest}=x; await saveDoc('bankTx',id,Object.assign(rest,{category:t.value}),bankTx); return; }
+  if(t.dataset&&t.dataset.txvat!==undefined&&t.dataset.txvat){ const x=bankTx[t.dataset.txvat]; if(!x) return; const {id,...rest}=x; await saveDoc('bankTx',id,Object.assign(rest,{vat:r2(t.value)}),bankTx); return; }
+  if(t.dataset&&t.dataset.txinv!==undefined&&t.dataset.txinv){ const x=bankTx[t.dataset.txinv]; if(!x) return; const {id,...rest}=x; await saveDoc('bankTx',id,Object.assign(rest,{invoiceNo:t.value,category:t.value&&(!rest.category||rest.category==='Uncategorised')?'Customer receipt':rest.category}),bankTx); if(t.value) logAction('Matched receipt to invoice',{detail:t.value+' · '+money(x.amount)}); return; }
+  if(t.id==='fb-acct'){ fui.acct=t.value; fui.limit=100; render(); return; }
+  if(t.id==='fb-month'){ fui.month=t.value; fui.limit=100; render(); return; }
+  if(t.id==='imp-file'){ const f=t.files&&t.files[0]; if(f) await importStatement(f); return; }
   if(t.id==='r-month'){ rui.month=t.value; render(); return; }
   if(t.id==='s-month'){ pui.month=t.value; render(); return; }
   if(t.id!=='f-evidence') return;
@@ -1334,6 +1574,16 @@ document.addEventListener('submit',async e=>{
       else{ f.count++; if(f.count>=5){ f.until=Date.now()+15*60000; f.count=0; logAction('Sign-in paused after 5 wrong PINs'); } else logAction('Failed sign-in'); setFails(f); signErr=f.until>Date.now()?'':'Wrong PIN.'; }
     }catch(e){ signErr='Could not check your PIN. Try again.'; }
     signBusy=false; render(); return; }
+  if(id==='finvform'){ const d={invoiceNo:g('invoiceNo'),customer:g('customer'),date:g('date'),dueDate:g('dueDate'),net:r2(g('net')),vat:g('vat')===''?r2(+g('net')*VAT_RATE):r2(g('vat')),status:g('status')||'issued',paidOther:r2(g('paidOther')),notes:g('notes'),at:new Date().toISOString()};
+    const dup=Object.values(invoices).find(i=>invKey(i.invoiceNo)===invKey(d.invoiceNo)&&i.id!==(fui.form&&fui.form.id)); if(dup){ toast('Invoice '+d.invoiceNo+' already exists.'); return; }
+    if(d.dueDate&&d.date&&d.dueDate<d.date){ toast('The due date must be on or after the invoice date.'); return; }
+    const iid=(fui.form&&fui.form.id)||'inv-'+invKey(d.invoiceNo).replace(/[^A-Z0-9]/g,''); logAction(fui.form&&fui.form.id?'Updated invoice':'Created invoice',{detail:d.invoiceNo+' · '+money(d.net+d.vat)}); fui.form=null; await saveDoc('invoices',iid,d,invoices); toast('Invoice saved'); return; }
+  if(id==='facctform'){ const d={name:g('name'),bank:g('bank'),last4:g('last4'),opening:g('opening')===''?'':r2(g('opening')),openingDate:g('openingDate'),stmtClosing:g('stmtClosing')===''?'':r2(g('stmtClosing')),stmtDate:g('stmtDate'),at:new Date().toISOString()};
+    const aid=(fui.form&&fui.form.id)||newId('a'); logAction(fui.form&&fui.form.id?'Updated bank account':'Added bank account',{detail:d.name}); fui.form=null; await saveDoc('bankAccounts',aid,d,bankAccounts); toast('Account saved'); return; }
+  if(id==='ftxform'){ const amt=r2(g('amount'))*(g('dir')==='out'?-1:1); const d={account:g('account'),date:g('date'),desc:g('desc'),ref:g('ref'),amount:amt,category:g('category'),vat:0,invoiceNo:'',source:'Entered by hand',at:new Date().toISOString()};
+    logAction('Added bank transaction',{detail:d.date+' '+money(amt)}); fui.form=null; await saveDoc('bankTx',newId('t'),d,bankTx); toast('Transaction added'); return; }
+  if(id==='fptxform'){ const d={partner:g('partner'),type:g('type'),date:g('date'),amount:r2(g('amount')),note:g('note'),at:new Date().toISOString()};
+    logAction('Recorded partner movement',{detail:d.partner+' · '+d.type+' '+money(d.amount)}); await saveDoc('partnerTx',newId('p'),d,partnerTx); e.target.reset(); toast('Partner movement recorded'); return; }
   if(id==='iform'){ const d={partNo:g('partNo'),description:g('description'),location:g('location'),stock:Math.max(0,Number(g('stock'))||0),min:Math.max(0,Number(g('min'))||0),unitValue:Number(g('unitValue'))||0,supplier:g('supplier'),at:new Date().toISOString()};
     const iid=(iui.form&&iui.form.id)||newId('i'); logAction(iui.form&&iui.form.id?'Updated inventory part':'Added inventory part',{detail:d.partNo+' '+d.description+' · stock '+d.stock}); iui.form=null; await saveDoc('inventory',iid,d,inventory); toast('Part saved'); return; }
   if(id==='aform'){ const d={site:g('site'),location:g('location'),product:g('product'),model:g('model'),serial:g('serial'),category:g('category'),installed:g('installed'),warranty:g('warranty'),notes:g('notes'),at:new Date().toISOString()}; if(me.id) d.by=me.id;
@@ -1378,6 +1628,26 @@ document.addEventListener('click',async e=>{
   if(ds.aedit){ aui.form=clone(assetReg[ds.aedit]); render(); window.scrollTo(0,0); return; }
   if(ds.adel){ if(aui.del!==ds.adel){ aui.del=ds.adel; render(); return; } const a=assetReg[ds.adel]; aui.del=null; logAction('Deleted asset',{detail:(a.model||'')+' at '+(a.site||'')}); await delDoc('assets',ds.adel,assetReg); toast('Asset deleted'); return; }
   if(ds.areg!==undefined){ const tr=b.closest('tr'); const cells=tr.querySelectorAll('td'); aui.form={product:cells[0].querySelector('b').textContent,model:cells[0].querySelector('.mono').textContent,site:cells[1].textContent==='—'?'':cells[1].textContent}; const v=Object.values(visits).find(x=>x.model===aui.form.model&&akey(x.site,x.model)===akey(aui.form.site,aui.form.model)); if(v&&v.category) aui.form.category=v.category; render(); window.scrollTo(0,0); return; }
+  if(ds.ftab){ fui.tab=ds.ftab; fui.form=null; fui.del=null; fui.limit=100; render(); return; }
+  if(ds.invst){ fui.invStatus=ds.invst; render(); return; }
+  if(ds.invedit){ fui.form=Object.assign({kind:'inv'},clone(invoices[ds.invedit])); fui.inv=ds.invedit; render(); window.scrollTo(0,0); return; }
+  if(ds.invdel){ if(fui.del!==ds.invdel){ fui.del=ds.invdel; render(); return; } const i=invoices[ds.invdel]; fui.del=null; logAction('Deleted invoice',{detail:i.invoiceNo}); await delDoc('invoices',ds.invdel,invoices); toast('Invoice deleted'); return; }
+  if(ds.acctedit){ fui.form=Object.assign({kind:'acct'},clone(bankAccounts[ds.acctedit])); render(); return; }
+  if(ds.acctdel){ if(fui.del!==ds.acctdel){ fui.del=ds.acctdel; render(); return; } const a=bankAccounts[ds.acctdel]; fui.del=null; for(const t of acctTx(a.id)) await delDoc('bankTx',t.id,bankTx); logAction('Deleted bank account',{detail:a.name}); await delDoc('bankAccounts',a.id,bankAccounts); toast('Account deleted'); return; }
+  if(ds.txdel){ if(fui.del!==ds.txdel){ fui.del=ds.txdel; render(); return; } const t=bankTx[ds.txdel]; fui.del=null; logAction('Deleted bank transaction',{detail:t.date+' '+money(t.amount)}); await delDoc('bankTx',ds.txdel,bankTx); return; }
+  if(ds.ptxdel){ if(fui.del!==ds.ptxdel){ fui.del=ds.ptxdel; render(); return; } fui.del=null; logAction('Deleted partner movement'); await delDoc('partnerTx',ds.ptxdel,partnerTx); return; }
+  if(ds.act==='newinv2'){ fui.form={kind:'inv',status:'issued',customer:'Kohler UAE',date:new Date(Date.now()+4*3600000).toISOString().slice(0,10)}; render(); return; }
+  if(ds.act==='newacct'){ fui.form={kind:'acct'}; render(); return; }
+  if(ds.act==='newtx'){ fui.form={kind:'tx'}; render(); return; }
+  if(ds.act==='closefin'){ fui.form=null; render(); return; }
+  if(ds.act==='finmore'){ fui.limit+=100; render(); return; }
+  if(ds.act==='finxls'){ await finExport(); return; }
+  if(ds.act==='impcancel'){ fui.imp=null; render(); return; }
+  if(ds.act==='impgo'){ const im=fui.imp; if(!im||!im.rows) return; const key=t=>t.date+'|'+r2(t.amount)+'|'+t.desc.toLowerCase().slice(0,40); const add=im.rows.filter(t=>!im.have.has(key(t))); fui.imp={busy:true}; render(); let n=0; for(const t of add){ const inc=t.amount>0; await saveDoc('bankTx',newId('t'),Object.assign({account:im.acct,category:'Uncategorised',vat:0,invoiceNo:'',source:im.name,at:new Date().toISOString()},t),bankTx); n++; }
+    logAction('Imported bank statement',{detail:im.name+' · '+n+' transactions into '+((bankAccounts[im.acct]||{}).name||'')}); fui.imp=null; render(); toast(n+' transactions imported'); return; }
+  if(ds.act==='invfromtix'){ const g={}; Object.values(visits).forEach(v=>{ if(!v.billingRef) return; const k=invKey(v.billingRef); if(Object.values(invoices).some(i=>invKey(i.invoiceNo)===k)) return; const d=(v.finished||v.scheduled||'').slice(0,10); const x=g[k]||(g[k]={invoiceNo:v.billingRef.trim(),date:d}); if(d>x.date) x.date=d; });
+    const list=Object.values(g); toast('Creating '+list.length+' invoices…'); for(const x of list){ await saveDoc('invoices','inv-'+invKey(x.invoiceNo).replace(/[^A-Z0-9]/g,''),{invoiceNo:x.invoiceNo,customer:'Kohler UAE',date:x.date||'',dueDate:'',net:0,vat:0,status:'issued',paidOther:0,notes:'Created from service tickets — enter the amount',at:new Date().toISOString()},invoices); }
+    logAction('Created invoices from tickets',{detail:list.length+' invoices'}); toast(list.length+' invoices created — enter their amounts'); return; }
   if(ds.atab){ adminTab=ds.atab; render(); return; }
   if(ds.grant){ if(ds.nm) names[ds.grant]=ds.nm; await setRole(ds.grant,ds.r,ds.nm); return; }
   if(ds.resetpin){ try{ await db.doc('pins/'+ds.resetpin).delete(); logAction('Reset sign-in (PIN and authenticator)',{detail:ds.resetpin===uid()?'Own sign-in':nameOf(ds.resetpin)||'Person'}); if(ds.resetpin===uid()){ toast('Your sign-in was reset. Set it up again now.'); signOut(); } else toast('Sign-in reset. '+(nameOf(ds.resetpin)||'They')+' will set up a new PIN and authenticator at next sign-in.'); }catch(e){ toast('Only admins can reset PINs.'); } return; }
@@ -1490,8 +1760,10 @@ function goDemo(){ if(loaded) return; demo=true; loaded=true; visits=demoData();
   use('sample').then(s=>{ sampleApi=s; safeRender(); });
   use('downloads').then(d=>{ downloadsApi=d; safeRender(); });
   if(!db) return;
-  const sub=(col,store)=>db.collection(col).onSnapshot(snap=>{ for(const k in store) delete store[k]; snap.docs.forEach(d=>{ const x=d.data(); if(x) store[d.id]=Object.assign({id:d.id},x); }); if(route==='parts'||route==='assets'||route==='tickets') safeRender(); resolveNames(); },()=>{});
+  const sub=(col,store)=>db.collection(col).onSnapshot(snap=>{ for(const k in store) delete store[k]; snap.docs.forEach(d=>{ const x=d.data(); if(x) store[d.id]=Object.assign({id:d.id},x); }); if(['parts','assets','tickets','finance'].includes(route)) safeRender(); resolveNames(); },()=>{});
   sub('parts',parts); sub('stock',stock); sub('assets',assetReg); sub('inventory',inventory);
+  const fsub=(col,store)=>db.collection(col).onSnapshot(snap=>{ for(const k in store) delete store[k]; snap.docs.forEach(d=>{ const x=d.data(); if(x) store[d.id]=Object.assign({id:d.id},x); }); if(route==='finance'||route==='dashboard') safeRender(); },()=>{});
+  fsub('bankAccounts',bankAccounts); fsub('bankTx',bankTx); fsub('invoices',invoices); fsub('partnerTx',partnerTx);
   db.collection('roles').onSnapshot(snap=>{ roles={}; snap.docs.forEach(d=>{ const x=d.data(); if(x) roles[d.id]=x; }); rolesLoaded=true; render(); resolveNames(); },()=>{ rolesLoaded=true; render(); });
   db.collection('requests').onSnapshot(snap=>{ requests={}; snap.docs.forEach(d=>{ const x=d.data(); if(x) requests[d.id]=x; }); if(route==='admin'||access()==='none') safeRender(); resolveNames(); },()=>{});
   db.collection('audit').onSnapshot(snap=>{ audit=snap.docs.flatMap(d=>(((d.data()||{}).entries)||[]).map(x=>Object.assign({by:d.id},x))).sort((a,b)=>(b.at||'').localeCompare(a.at||'')).slice(0,300); if(route==='admin') safeRender(); resolveNames(); },()=>{});
