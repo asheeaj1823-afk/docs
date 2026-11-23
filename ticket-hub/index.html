@@ -1117,7 +1117,7 @@ function invForm(f){
   const v=k=>esc(f[k]??'');
   return `<form id="finvform" class="card"><div class="card-h"><h3>${f.id?'Edit invoice '+esc(f.invoiceNo):'New invoice'}</h3><button type="button" class="btn ghost" data-act="closefin" aria-label="Close">${svg('x',18)}</button></div><div class="card-b"><div class="fgrid">
     <label>Invoice number<input class="field" name="invoiceNo" required value="${v('invoiceNo')}" placeholder="e.g. ZRA1853"></label>
-    <label>Customer<input class="field" name="customer" required value="${v('customer')||'Kohler UAE'}"></label>
+    <label>Customer<input class="field" name="customer" required value="${v('customer')||esc(FS().customer)}"></label>
     <label>Invoice date<input class="field" type="date" name="date" required value="${v('date')}"></label>
     <label>Due date<input class="field" type="date" name="dueDate" value="${v('dueDate')}"></label>
     <label>Net amount (AED)<input class="field" type="number" step="0.01" min="0" name="net" id="fin-net" value="${v('net')}"></label>
@@ -1260,7 +1260,7 @@ async function finExport(){
 }
 
 /* ---------- finance automation: invoices from tickets and monthly statements ---------- */
-const FS=()=>Object.assign({autoInvoice:true,rate:0,terms:30,customer:'Kohler UAE',stmtDay:1,autoStatement:true},finSettings.main||{});
+const FS=()=>Object.assign({autoInvoice:true,rate:0,terms:30,customer:'Easy Renovations LLC',endClient:'Kohler UAE',stmtDay:1,autoStatement:true},finSettings.main||{});
 const addDays=(d,n)=>{ const x=new Date(d+'T00:00:00Z'); x.setUTCDate(x.getUTCDate()+(+n||0)); return x.toISOString().slice(0,10); };
 const monthEnd=m=>m+'-'+String(new Date(Date.UTC(+m.slice(0,4),+m.slice(5,7),0)).getUTCDate()).padStart(2,'0');
 const nextMonth=m=>{ const y=+m.slice(0,4), mo=+m.slice(5,7); return mo===12?(y+1)+'-01':y+'-'+String(mo+1).padStart(2,'0'); };
@@ -1276,13 +1276,14 @@ function dueStatementMonths(){
 function buildStatement(m){
   const s=FS(), start=m+'-01', end=monthEnd(m);
   const inv=Object.values(invoices).filter(i=>!['draft','void'].includes(i.status)&&i.date);
-  const rec=Object.values(bankTx).filter(t=>t.invoiceNo&&+t.amount>0&&t.date);
-  const before=inv.filter(i=>i.date<start).reduce((a,i)=>a+invGross(i)-(+i.paidOther||0),0)-rec.filter(t=>t.date<start).reduce((a,t)=>a+(+t.amount),0);
-  const lines=[...inv.filter(i=>i.date>=start&&i.date<=end).map(i=>({date:i.date,type:'Invoice',ref:i.invoiceNo,desc:ticketsForInv(i).length+' service ticket(s)',debit:invGross(i),credit:(+i.paidOther||0)})),
+  const invC=inv.filter(i=>(i.customer||'')===s.customer), cKeys=new Set(invC.map(i=>invKey(i.invoiceNo)));
+  const rec=Object.values(bankTx).filter(t=>t.invoiceNo&&+t.amount>0&&t.date&&cKeys.has(invKey(t.invoiceNo)));
+  const before=invC.filter(i=>i.date<start).reduce((a,i)=>a+invGross(i)-(+i.paidOther||0),0)-rec.filter(t=>t.date<start).reduce((a,t)=>a+(+t.amount),0);
+  const lines=[...invC.filter(i=>i.date>=start&&i.date<=end).map(i=>({date:i.date,type:'Invoice',ref:i.invoiceNo,desc:ticketsForInv(i).length+' service ticket(s)',debit:invGross(i),credit:(+i.paidOther||0)})),
     ...rec.filter(t=>t.date>=start&&t.date<=end).map(t=>({date:t.date,type:'Payment',ref:t.invoiceNo,desc:t.desc||'',debit:0,credit:r2(t.amount)}))].sort((a,b)=>a.date.localeCompare(b.date)||(a.type==='Invoice'?-1:1));
   let bal=r2(before); lines.forEach(l=>{ bal=r2(bal+l.debit-l.credit); l.balance=bal; });
   const aging={current:0,d30:0,d60:0,d90:0,over90:0}, open=[];
-  inv.filter(i=>i.date<=end).forEach(i=>{ const paid=rec.filter(t=>t.date<=end&&invKey(t.invoiceNo)===invKey(i.invoiceNo)).reduce((a,t)=>a+(+t.amount),0)+(+i.paidOther||0); const o=r2(invGross(i)-paid); if(o<=0.005) return;
+  invC.filter(i=>i.date<=end).forEach(i=>{ const paid=rec.filter(t=>t.date<=end&&invKey(t.invoiceNo)===invKey(i.invoiceNo)).reduce((a,t)=>a+(+t.amount),0)+(+i.paidOther||0); const o=r2(invGross(i)-paid); if(o<=0.005) return;
     const due=i.dueDate||addDays(i.date,s.terms); const late=Math.floor((new Date(end+'T00:00:00Z')-new Date(due+'T00:00:00Z'))/864e5);
     aging[late<=0?'current':late<=30?'d30':late<=60?'d60':late<=90?'d90':'over90']+=o; open.push({ref:i.invoiceNo,date:i.date,due,outstanding:o,late:Math.max(0,late)}); });
   Object.keys(aging).forEach(k=>aging[k]=r2(aging[k]));
@@ -1290,7 +1291,7 @@ function buildStatement(m){
   const cats={}; tx.filter(t=>+t.amount<0&&!NON_PL.includes(t.category)).forEach(t=>{ const c=t.category||'Uncategorised'; cats[c]=r2((cats[c]||0)-(+t.amount)-(+t.vat||0)); });
   const income=r2(inv.filter(i=>i.date>=start&&i.date<=end).reduce((a,i)=>a+(+i.net||0),0)), expenses=r2(Object.values(cats).reduce((a,b)=>a+b,0));
   const vs=Object.values(visits).filter(v=>(v.scheduled||'').slice(0,10)>=start&&(v.scheduled||'').slice(0,10)<=end);
-  return {month:m,start,end,customer:s.customer,opening:r2(before),closing:bal,lines,aging,open:open.sort((a,b)=>a.date.localeCompare(b.date)),
+  return {month:m,start,end,customer:s.customer,endClient:s.endClient,opening:r2(before),closing:bal,lines,aging,open:open.sort((a,b)=>a.date.localeCompare(b.date)),
     pl:{income,expenses,profit:r2(income-expenses),cats},
     cash:{in:r2(tx.filter(t=>+t.amount>0&&t.category!=='Transfer between accounts').reduce((a,t)=>a+(+t.amount),0)),out:r2(-tx.filter(t=>+t.amount<0&&t.category!=='Transfer between accounts').reduce((a,t)=>a+(+t.amount),0))},
     banks:Object.values(bankAccounts).map(a=>({name:a.name,balance:acctBal(a,end)})),
@@ -1310,8 +1311,9 @@ async function finAuto(force){
       for(const [k,x] of Object.entries(g)){
         const ex=Object.values(invoices).find(i=>invKey(i.invoiceNo)===k);
         const net=s.rate>0?r2(x.n*s.rate):0;
-        if(!ex){ await saveDoc('invoices','inv-'+k.replace(/[^A-Z0-9]/g,''),{invoiceNo:x.invoiceNo,customer:s.customer,date:x.date,dueDate:x.date?addDays(x.date,s.terms):'',net,vat:r2(net*VAT_RATE),status:'issued',paidOther:0,tickets:x.n,amountAuto:true,auto:true,notes:'Raised automatically from '+x.n+' service ticket(s)'+(net?'':' — enter the amount'),at:new Date().toISOString()},invoices); made++; continue; }
+        if(!ex){ await saveDoc('invoices','inv-'+k.replace(/[^A-Z0-9]/g,''),{invoiceNo:x.invoiceNo,customer:s.customer,endClient:s.endClient,date:x.date,dueDate:x.date?addDays(x.date,s.terms):'',net,vat:r2(net*VAT_RATE),status:'issued',paidOther:0,tickets:x.n,amountAuto:true,auto:true,notes:'Raised automatically from '+x.n+' service ticket(s)'+(net?'':' — enter the amount'),at:new Date().toISOString()},invoices); made++; continue; }
         const isAuto=ex.amountAuto||(!(+ex.net)&&/^Created from service tickets/.test(ex.notes||''));
+        if(isAuto&&ex.customer!==s.customer&&!(+ex.net&&!ex.amountAuto)){ const d=Object.assign({},ex,{customer:s.customer,endClient:s.endClient}); delete d.id; await saveDoc('invoices',ex.id,d,invoices); upd++; ex.customer=s.customer; }
         if(isAuto&&ex.status==='issued'&&s.rate>0&&(r2(ex.net)!==net||ex.tickets!==x.n||!ex.dueDate)){
           const d=Object.assign({},ex,{net,vat:r2(net*VAT_RATE),tickets:x.n,amountAuto:true,dueDate:ex.dueDate||(ex.date?addDays(ex.date,s.terms):''),notes:'Raised automatically from '+x.n+' service ticket(s)'}); delete d.id; await saveDoc('invoices',ex.id,d,invoices); upd++; }
       }
@@ -1339,7 +1341,8 @@ function finStatements(){
    <label class="chk"><input type="checkbox" name="autoInvoice" ${s.autoInvoice?'checked':''}> Raise invoices automatically from tickets with a Z invoice number</label>
    <label>Charge per ticket, net of VAT (AED)<input class="field" name="rate" type="number" min="0" step="0.01" value="${s.rate||''}" placeholder="0 = enter amounts yourself"></label>
    <label>Payment terms (days)<input class="field" name="terms" type="number" min="0" max="180" value="${s.terms}"></label>
-   <label>Customer on automatic invoices<input class="field" name="customer" value="${esc(s.customer)}"></label>
+   <label>Contract customer (billed)<input class="field" name="customer" value="${esc(s.customer)}"></label>
+   <label>End client (sites)<input class="field" name="endClient" value="${esc(s.endClient)}"></label>
    <label class="chk"><input type="checkbox" name="autoStatement" ${s.autoStatement?'checked':''}> Prepare the monthly statement automatically</label>
    <label>Statement day each month<input class="field" name="stmtDay" type="number" min="1" max="28" value="${s.stmtDay}"></label>
    <div class="sub" style="font-size:12px">The hub prepares these the first time an administrator opens it on or after the statement day. Invoices you edit by hand are never changed.</div>
@@ -1354,7 +1357,7 @@ async function statementPdf(m){
   const row=(cells,bold)=>{ if(y>H-60){ doc.addPage(); header(); } doc.setFont('helvetica',bold?'bold':'normal'); doc.setFontSize(8.8); doc.setTextColor(...ink); cells.forEach(([t,xx,al])=>doc.text(doc.splitTextToSize(String(t),al==='right'?110:200)[0]||'',xx,y,al?{align:al}:undefined)); y+=14; };
   const kv=(k,v,b)=>row([[k,M],[v,W-M,'right']],b);
   header();
-  h2('Statement of account · '+x.customer);
+  h2('Statement of account · '+x.customer); if(x.endClient){ doc.setFont('helvetica','normal'); doc.setFontSize(9); doc.setTextColor(...muted); doc.text('Service contract for '+x.endClient+' sites · amounts in AED',M,y-4); y+=12; }
   const C=[M,M+62,M+120,M+200]; const R=[W-M-150,W-M-75,W-M];
   doc.setFont('helvetica','bold'); doc.setFontSize(7.5); doc.setTextColor(...muted); [['DATE',C[0]],['TYPE',C[1]],['REFERENCE',C[2]],['DETAILS',C[3]]].forEach(([t,xx])=>doc.text(t,xx,y)); [['CHARGES',R[0]],['PAYMENTS',R[1]],['BALANCE',R[2]]].forEach(([t,xx])=>doc.text(t,xx,y,{align:'right'})); y+=14;
   row([[fd(x.start),C[0]],['Opening balance',C[1]],['',C[2]],['',C[3]],['',R[0],'right'],['',R[1],'right'],[amt(x.opening),R[2],'right']],true);
@@ -1689,7 +1692,7 @@ document.addEventListener('submit',async e=>{
       else{ f.count++; if(f.count>=5){ f.until=Date.now()+15*60000; f.count=0; logAction('Sign-in paused after 5 wrong PINs'); } else logAction('Failed sign-in'); setFails(f); signErr=f.until>Date.now()?'':'Wrong PIN.'; }
     }catch(e){ signErr='Could not check your PIN. Try again.'; }
     signBusy=false; render(); return; }
-  if(id==='finvform'){ const d={invoiceNo:g('invoiceNo'),customer:g('customer'),date:g('date'),dueDate:g('dueDate'),net:r2(g('net')),vat:g('vat')===''?r2(+g('net')*VAT_RATE):r2(g('vat')),status:g('status')||'issued',paidOther:r2(g('paidOther')),notes:g('notes'),at:new Date().toISOString()};
+  if(id==='finvform'){ const d={invoiceNo:g('invoiceNo'),customer:g('customer'),date:g('date'),dueDate:g('dueDate'),net:r2(g('net')),vat:g('vat')===''?r2(+g('net')*VAT_RATE):r2(g('vat')),status:g('status')||'issued',paidOther:r2(g('paidOther')),notes:g('notes'),endClient:(fui.form&&invoices[fui.form.id]&&invoices[fui.form.id].endClient)||FS().endClient,at:new Date().toISOString()};
     const dup=Object.values(invoices).find(i=>invKey(i.invoiceNo)===invKey(d.invoiceNo)&&i.id!==(fui.form&&fui.form.id)); if(dup){ toast('Invoice '+d.invoiceNo+' already exists.'); return; }
     if(d.dueDate&&d.date&&d.dueDate<d.date){ toast('The due date must be on or after the invoice date.'); return; }
     const iid=(fui.form&&fui.form.id)||'inv-'+invKey(d.invoiceNo).replace(/[^A-Z0-9]/g,''); logAction(fui.form&&fui.form.id?'Updated invoice':'Created invoice',{detail:d.invoiceNo+' · '+money(d.net+d.vat)}); fui.form=null; await saveDoc('invoices',iid,d,invoices); toast('Invoice saved'); return; }
@@ -1697,7 +1700,7 @@ document.addEventListener('submit',async e=>{
     const aid=(fui.form&&fui.form.id)||newId('a'); logAction(fui.form&&fui.form.id?'Updated bank account':'Added bank account',{detail:d.name}); fui.form=null; await saveDoc('bankAccounts',aid,d,bankAccounts); toast('Account saved'); return; }
   if(id==='ftxform'){ const amt=r2(g('amount'))*(g('dir')==='out'?-1:1); const d={account:g('account'),date:g('date'),desc:g('desc'),ref:g('ref'),amount:amt,category:g('category'),vat:0,invoiceNo:'',source:'Entered by hand',at:new Date().toISOString()};
     logAction('Added bank transaction',{detail:d.date+' '+money(amt)}); fui.form=null; await saveDoc('bankTx',newId('t'),d,bankTx); toast('Transaction added'); return; }
-  if(id==='fsetform'){ const el=e.target.elements; const d={autoInvoice:el.autoInvoice.checked,rate:Math.max(0,r2(el.rate.value)),terms:Math.min(180,Math.max(0,parseInt(el.terms.value,10)||0)),customer:(el.customer.value||'').trim()||'Kohler UAE',autoStatement:el.autoStatement.checked,stmtDay:Math.min(28,Math.max(1,parseInt(el.stmtDay.value,10)||1)),at:new Date().toISOString()};
+  if(id==='fsetform'){ const el=e.target.elements; const d={autoInvoice:el.autoInvoice.checked,rate:Math.max(0,r2(el.rate.value)),terms:Math.min(180,Math.max(0,parseInt(el.terms.value,10)||0)),customer:(el.customer.value||'').trim()||'Easy Renovations LLC',endClient:(el.endClient.value||'').trim(),autoStatement:el.autoStatement.checked,stmtDay:Math.min(28,Math.max(1,parseInt(el.stmtDay.value,10)||1)),at:new Date().toISOString()};
     await saveDoc('finSettings','main',d,finSettings); logAction('Updated finance automation',{detail:(d.autoInvoice?'auto invoices on':'auto invoices off')+' · '+money(d.rate)+' per ticket · statements day '+d.stmtDay}); toast('Automation saved'); scheduleFinAuto(); return; }
   if(id==='fptxform'){ const d={partner:g('partner'),type:g('type'),date:g('date'),amount:r2(g('amount')),note:g('note'),at:new Date().toISOString()};
     logAction('Recorded partner movement',{detail:d.partner+' · '+d.type+' '+money(d.amount)}); await saveDoc('partnerTx',newId('p'),d,partnerTx); e.target.reset(); toast('Partner movement recorded'); return; }
@@ -1753,7 +1756,7 @@ document.addEventListener('click',async e=>{
   if(ds.acctdel){ if(fui.del!==ds.acctdel){ fui.del=ds.acctdel; render(); return; } const a=bankAccounts[ds.acctdel]; fui.del=null; for(const t of acctTx(a.id)) await delDoc('bankTx',t.id,bankTx); logAction('Deleted bank account',{detail:a.name}); await delDoc('bankAccounts',a.id,bankAccounts); toast('Account deleted'); return; }
   if(ds.txdel){ if(fui.del!==ds.txdel){ fui.del=ds.txdel; render(); return; } const t=bankTx[ds.txdel]; fui.del=null; logAction('Deleted bank transaction',{detail:t.date+' '+money(t.amount)}); await delDoc('bankTx',ds.txdel,bankTx); return; }
   if(ds.ptxdel){ if(fui.del!==ds.ptxdel){ fui.del=ds.ptxdel; render(); return; } fui.del=null; logAction('Deleted partner movement'); await delDoc('partnerTx',ds.ptxdel,partnerTx); return; }
-  if(ds.act==='newinv2'){ fui.form={kind:'inv',status:'issued',customer:'Kohler UAE',date:new Date(Date.now()+4*3600000).toISOString().slice(0,10)}; render(); return; }
+  if(ds.act==='newinv2'){ fui.form={kind:'inv',status:'issued',customer:FS().customer,date:new Date(Date.now()+4*3600000).toISOString().slice(0,10)}; render(); return; }
   if(ds.act==='newacct'){ fui.form={kind:'acct'}; render(); return; }
   if(ds.act==='newtx'){ fui.form={kind:'tx'}; render(); return; }
   if(ds.act==='closefin'){ fui.form=null; render(); return; }
@@ -1766,7 +1769,7 @@ document.addEventListener('click',async e=>{
   if(ds.act==='impgo'){ const im=fui.imp; if(!im||!im.rows) return; const key=t=>t.date+'|'+r2(t.amount)+'|'+t.desc.toLowerCase().slice(0,40); const add=im.rows.filter(t=>!im.have.has(key(t))); fui.imp={busy:true}; render(); let n=0; for(const t of add){ const inc=t.amount>0; await saveDoc('bankTx',newId('t'),Object.assign({account:im.acct,category:'Uncategorised',vat:0,invoiceNo:'',source:im.name,at:new Date().toISOString()},t),bankTx); n++; }
     logAction('Imported bank statement',{detail:im.name+' · '+n+' transactions into '+((bankAccounts[im.acct]||{}).name||'')}); fui.imp=null; render(); toast(n+' transactions imported'); return; }
   if(ds.act==='invfromtix'){ const g={}; Object.values(visits).forEach(v=>{ if(!v.billingRef) return; const k=invKey(v.billingRef); if(Object.values(invoices).some(i=>invKey(i.invoiceNo)===k)) return; const d=(v.finished||v.scheduled||'').slice(0,10); const x=g[k]||(g[k]={invoiceNo:v.billingRef.trim(),date:d}); if(d>x.date) x.date=d; });
-    const list=Object.values(g); toast('Creating '+list.length+' invoices…'); for(const x of list){ await saveDoc('invoices','inv-'+invKey(x.invoiceNo).replace(/[^A-Z0-9]/g,''),{invoiceNo:x.invoiceNo,customer:'Kohler UAE',date:x.date||'',dueDate:'',net:0,vat:0,status:'issued',paidOther:0,notes:'Created from service tickets — enter the amount',at:new Date().toISOString()},invoices); }
+    const list=Object.values(g); toast('Creating '+list.length+' invoices…'); for(const x of list){ await saveDoc('invoices','inv-'+invKey(x.invoiceNo).replace(/[^A-Z0-9]/g,''),{invoiceNo:x.invoiceNo,customer:FS().customer,endClient:FS().endClient,date:x.date||'',dueDate:'',net:0,vat:0,status:'issued',paidOther:0,notes:'Created from service tickets — enter the amount',at:new Date().toISOString()},invoices); }
     logAction('Created invoices from tickets',{detail:list.length+' invoices'}); toast(list.length+' invoices created — enter their amounts'); return; }
   if(ds.atab){ adminTab=ds.atab; render(); return; }
   if(ds.grant){ if(ds.nm) names[ds.grant]=ds.nm; await setRole(ds.grant,ds.r,ds.nm); return; }
