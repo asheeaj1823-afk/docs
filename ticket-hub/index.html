@@ -58,6 +58,20 @@ h1,h2,h3{margin:0;font-family:var(--display);letter-spacing:-.01em;text-wrap:bal
 .nav button[aria-current="page"]{background:var(--navy2);color:#fff;font-weight:600}
 .nav button[aria-current="page"]::before{content:"";position:absolute;left:-14px;top:9px;bottom:9px;width:3px;border-radius:0 3px 3px 0;background:var(--gold)}
 .nav .badge{margin-left:auto}
+.nav .ngrp{display:flex;flex-direction:column;gap:1px;margin-bottom:2px}
+.nav .nsec{font-weight:600;font-size:13.5px}
+.nav .nsec small{opacity:.55;font-weight:600;font-size:10.5px;margin-right:2px}
+.nav .nsec .chev{margin-left:auto;font-style:normal;opacity:.6;font-size:11px}
+.nav .ngrp.cur .nsec{color:#fff}
+.nav .nitems{display:flex;flex-direction:column;gap:1px;margin:0 0 6px 0}
+.nav .nitems button{height:34px;padding-left:40px;font-size:13px}
+.nav .soon{margin-left:auto;font-size:10px;letter-spacing:.04em;text-transform:uppercase;opacity:.55;border:1px solid currentColor;border-radius:4px;padding:0 4px}
+.side{overflow-y:auto}
+#msheet .msheet-bg{position:fixed;inset:0;background:rgba(10,20,40,.45);z-index:80}
+#msheet .msheet{position:fixed;left:0;right:0;bottom:0;max-height:85vh;overflow-y:auto;background:var(--navy);color:#fff;border-radius:16px 16px 0 0;padding:12px 14px calc(18px + env(safe-area-inset-bottom,0px));z-index:81}
+#msheet .msheet-h{display:flex;align-items:center;justify-content:space-between;padding:4px 4px 10px}
+#msheet .msheet-h .btn{color:#fff}
+#msheet .nav button[aria-current="page"]::before{display:none}
 .badge{min-width:20px;height:20px;padding:0 6px;border-radius:10px;background:var(--gold);color:var(--navy);font-size:11px;font-weight:700;display:inline-grid;place-items:center}
 .newbtn{height:42px;border-radius:10px;background:var(--gold);color:var(--navy);font-weight:700;display:flex;align-items:center;justify-content:center;gap:8px;margin:0 2px}
 .newbtn:hover{filter:brightness(1.05)}
@@ -419,6 +433,8 @@ const DM_AREAS=["(1,13 ) 1st Floor – P5 High-End Male 13 toilets/cubicles", "(
 const areaShort=a=>String(a).replace(/^\([^)]*\)\s*/,'').replace(/\s+\d+\s+toilets\/cubicles$/,'');
 const areasOf=v=>String(v.washroom||'').split('\n').map(x=>x.trim()).filter(Boolean);
 const ICON={
+  menu:'<path d="M4 6h16M4 12h16M4 18h16"/>',
+  company:'<path d="M3 21h18M5 21V7l7-4 7 4v14M9 21v-6h6v6M9 10h.01M15 10h.01"/>',
   dashboard:'<path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/>',
   tickets:'<path d="M4 5h16v4a2 2 0 0 0 0 4v4H4v-4a2 2 0 0 0 0-4z"/><path d="M9 9h6M9 13h4"/>',
   review:'<path d="M4 4h16v12H4z"/><path d="M8 10l3 3 5-5"/><path d="M8 20h8"/>',
@@ -438,7 +454,8 @@ const ICON={
 const svg=(k,s=18)=>`<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICON[k]}</svg>`;
 const ROUTES=[['dashboard','Dashboard'],['tickets','Tickets'],['review','Review queue'],['parts','Parts & stock'],['assets','Assets'],['reports','Reports'],['finance','Finance'],['admin','Administration']];
 const ROLE_NAME={admin:'Admin',office:'Office',technician:'Technician',viewer:'Viewer'};
-const PERMS={admin:['dashboard','tickets','review','parts','assets','reports','finance','admin'],office:['dashboard','tickets','review','parts','assets','reports'],technician:['tickets'],viewer:['dashboard','tickets','reports']};
+const PERMS={admin:['dashboard','tickets','review','parts','assets','reports','finance','admin','tasks','customers','documents','quality','company','integrations','backup','planned'],office:['dashboard','tickets','review','parts','assets','reports','tasks','customers','documents','quality'],technician:['tickets','tasks'],viewer:['dashboard','tickets','reports','tasks','customers']};
+const ROUTES_X=['tasks','customers','documents','quality','company','integrations','backup','planned'];
 const ESC_TO=['','Technician','Office supervisor','Administrator'];
 
 let visits={}, parts={}, stock={};
@@ -655,14 +672,205 @@ function checksHtml(v){
   return checks(v).map(c=>`<div class="ck"><div><div>${c.f}</div><div class="v">${esc(c.val)}</div></div><span class="st ${c.ok?'ok':c.req?'miss':'opt'}">${c.ok?'✓ Done':c.req?'Missing':'Optional'}</span></div>`).join('');
 }
 
+
+/* ---------- unified menu: 8 sections ---------- */
+const NAV=[
+ ['01','Dashboard','dashboard',[['Executive Overview',{r:'dashboard'}],['My Tasks',{r:'tasks',t:'mine'}],['Notifications',{r:'tasks',t:'notes'}]]],
+ ['02','Service Management','tickets',[['Service Tickets',{r:'tickets',f:'all'}],['Technician Workspace',{r:'tickets',f:'mine'}],['Office Review',{r:'review'}],['Service Reports',{r:'reports'}],['Service Analytics',{r:'dashboard',h:'Charts'}]]],
+ ['03','Customers & Assets','assets',[['Customer Directory',{r:'customers',t:'dir'}],['Customer Sites',{r:'customers',t:'sites'}],['Asset Register',{r:'assets'}],['Asset 360°',{r:'assets'}],['Document Center',{r:'documents'}]]],
+ ['04','Inventory','parts',[['Parts Catalog',{r:'parts',h:'Inventory'}],['Stock Movements',{r:'parts',h:'Part entries'}],['Warehouse',{r:'parts',h:'Monthly stock check'}],['Procurement',{r:'planned',t:'Procurement'}]]],
+ ['05','Finance & Accounting','finance',[['Finance Dashboard',{r:'finance',t:'overview'}],['Billing Workbench',{r:'finance',t:'invoices'}],['Invoices',{r:'finance',t:'invoices'}],['Customer Receipts',{r:'finance',t:'bank'}],['General Ledger',{r:'planned',t:'General Ledger'}],['Banking & Reconciliation',{r:'finance',t:'recon'}],['Partner Accounts',{r:'finance',t:'partners'}],['VAT & Tax',{r:'finance',t:'vat'}],['Financial Reports',{r:'finance',t:'statements'}]]],
+ ['06','Company Management','company',[['Legal Entities',{r:'company',t:'entities'}],['Company Profiles',{r:'company',t:'profile'}],['Bank Accounts',{r:'finance',t:'bank'}],['Accounting Settings',{r:'finance',t:'statements',h:'Automation'}]]],
+ ['07','Reports & Analytics','reports',[['Operations Reports',{r:'reports'}],['Financial Reports',{r:'finance',t:'statements'}],['Customer Reports',{r:'customers',t:'dir'}],['Data Quality Reports',{r:'quality'}]]],
+ ['08','Administration','admin',[['Users & Roles',{r:'admin',t:'users'}],['Permissions',{r:'admin',t:'roles'}],['Audit Logs',{r:'admin',t:'audit'}],['Integrations',{r:'integrations'}],['Backup & Recovery',{r:'backup'}],['System Settings',{r:'company',t:'system'}]]]
+];
+let navCur=null, navOpen=null, cui={tab:'dir',q:''}, tui={tab:'mine'}, coui={tab:'profile'}, plannedName='', bk=null;
+const navItemOk=o=>o.r==='planned'?can(o.t==='General Ledger'?'finance':'parts'):can(o.r);
+function curNavKey(){ if(navCur){ const [si,ii]=navCur.split('.'); const it=NAV[si]&&NAV[si][3][ii]; if(it&&it[1].r===route) return navCur; }
+  for(let si=0;si<NAV.length;si++) for(let ii=0;ii<NAV[si][3].length;ii++){ const o=NAV[si][3][ii][1]; if(o.r===route&&(!o.t||(route==='finance'&&o.t===fui.tab)||(route==='admin'&&o.t===adminTab)||(route==='customers'&&o.t===cui.tab)||(route==='tasks'&&o.t===tui.tab)||(route==='company'&&o.t===coui.tab))) return si+'.'+ii; }
+  return null; }
+function navGroupsHtml(){
+  const cur=curNavKey(), curSec=cur?+cur.split('.')[0]:-1, n=reviewQueue().length;
+  if(navOpen===null) navOpen=new Set([curSec]);
+  return NAV.map(([no,label,icon,items],si)=>{ const vis=items.map((it,ii)=>[it,ii]).filter(([it])=>navItemOk(it[1])); if(!vis.length) return '';
+    const open=navOpen.has(si)||si===curSec;
+    return `<div class="ngrp${si===curSec?' cur':''}"><button class="nsec" data-nsec="${si}" aria-expanded="${open}">${svg(icon)}<span><small>${no}</small> ${label}</span>${si===2-1&&n?`<span class="badge">${n}</span>`:''}<i class="chev">${open?'▾':'▸'}</i></button>
+      ${open?`<div class="nitems">${vis.map(([[l,o],ii])=>`<button data-nav="${si}.${ii}" ${cur===si+'.'+ii?'aria-current="page"':''}>${esc(l)}${o.r==='planned'?'<span class="soon">planned</span>':''}${o.r==='review'&&n?`<span class="badge">${n}</span>`:''}</button>`).join('')}</div>`:''}</div>`; }).join('');
+}
+function mnavShow(on){ let el=document.getElementById('msheet'); if(!on){ if(el) el.remove(); return; }
+  if(!el){ el=document.createElement('div'); el.id='msheet'; document.body.appendChild(el); }
+  const keep=navOpen; navOpen=new Set(NAV.map((x,i)=>i)); const html=navGroupsHtml(); navOpen=keep;
+  el.innerHTML=`<div class="msheet-bg" data-act="mnavclose"></div><div class="msheet" role="dialog" aria-label="Menu"><div class="msheet-h"><b>Menu</b><button class="btn ghost" data-act="mnavclose" aria-label="Close">${svg('x',18)}</button></div><nav class="nav">${html}</nav></div>`; }
+function scrollToHeading(txt){ setTimeout(()=>{ const h=[...document.querySelectorAll('#app h3, #app h2')].find(x=>x.textContent.trim().toLowerCase().startsWith(txt.toLowerCase())); if(h) h.closest('.card,form,section')?.scrollIntoView({behavior:'smooth',block:'start'}); },60); }
+function openNav(key){
+  const [si,ii]=key.split('.'); const [l,o]=NAV[si][3][ii]; navCur=key; if(navOpen) navOpen.add(+si);
+  if(o.r==='finance'){ fui.tab=o.t||'overview'; fui.form=null; fui.del=null; if(['recon','vat','partners','controls'].includes(fui.tab)) fui.more=true; if(o.q!==undefined) fui.q=o.q; else if(fui.tab==='bank') fui.q=''; }
+  if(o.r==='admin') adminTab=o.t||'users';
+  if(o.r==='customers') cui.tab=o.t||'dir';
+  if(o.r==='tasks') tui.tab=o.t||'mine';
+  if(o.r==='company') coui.tab=o.t||'profile';
+  if(o.r==='planned') plannedName=o.t;
+  if(o.r==='tickets'&&o.f){ list.status=o.f==='mine'?'mine':'open'; sel=null; mode='view'; draft=null; }
+  go(o.r); if(o.h) scrollToHeading(o.h);
+}
+
+/* ---------- My tasks & notifications ---------- */
+function tasksView(){
+  const a=access(), items=[], mineT=Object.values(visits).filter(v=>v.assignedTo&&v.assignedTo===me.id&&!['completed','cancelled'].includes(v.status));
+  mineT.forEach(v=>items.push(['warn','#'+v.id+' · '+(v.site||'Site'),(v.scheduled?dmhm(v.scheduled)+' · ':'')+(v.issue||v.type||''),`<button class="btn" data-open="${esc(v.id)}">Open</button>`]));
+  if(isOffice()){
+    const rq=reviewQueue(); if(rq.length) items.push(['warn',rq.length+' ticket'+(rq.length>1?'s':'')+' waiting for office review','Approve or send back for recheck.',`<button class="btn" data-route="review">Review</button>`]);
+    const late=Object.values(visits).filter(v=>!['completed','cancelled'].includes(v.status)&&sla(v).late); if(late.length) items.push(['bad',late.length+' ticket'+(late.length>1?'s':'')+' past the response time',late.slice(0,5).map(v=>'#'+v.id).join(', '),`<button class="btn" data-open="${esc(late[0].id)}">Open #${esc(late[0].id)}</button>`]);
+    const un=Object.values(visits).filter(v=>v.status==='new'&&!v.assignedTo); if(un.length) items.push(['warn',un.length+' new ticket'+(un.length>1?'s':'')+' with no technician',un.slice(0,6).map(v=>'#'+v.id).join(', '),`<button class="btn" data-open="${esc(un[0].id)}">Assign</button>`]);
+    const dq=qualityIssues().reduce((s,g)=>s+g.list.length,0); if(dq) items.push(['warn',dq+' data issue'+(dq>1?'s':'')+' to fix','Missing dates, emirates, invoice numbers and more.',`<button class="btn" data-route="quality">See them</button>`]);
+  }
+  if(can('finance')) finTodo().filter(t=>t[0]!=='plain').forEach(t=>items.push(t));
+  const notes=can('admin')?audit.slice(0,40):[];
+  const row=([k,t,d,btn])=>`<div class="ctl"><span class="ic ${k==='ok'?'ok':k==='bad'?'bad':'warn'}">${k==='ok'?'✓':'!'}</span><div><div style="font-weight:600">${esc(t)}</div><div class="sub">${esc(d)}</div></div><div style="margin-left:auto">${btn||''}</div></div>`;
+  return `<div class="page"><div class="phead"><div><h1>${tui.tab==='notes'?'Notifications':'My tasks'}</h1><div class="sub">${tui.tab==='notes'?'Latest activity across the hub':'Everything waiting for you, most urgent first'}</div></div>
+    <div class="tabs" role="group"><button data-tui="mine" aria-pressed="${tui.tab==='mine'}">My tasks</button><button data-tui="notes" aria-pressed="${tui.tab==='notes'}">Notifications</button></div></div>
+    ${tui.tab==='mine'?`<div class="card"><div>${items.length?items.map(row).join(''):'<div class="empty">Nothing waiting for you. 🎉</div>'}</div></div>`
+    :`<div class="card">${notes.length?`<div class="tblwrap"><table class="tbl"><thead><tr><th>When</th><th>Who</th><th>What</th><th>Ticket</th><th>Detail</th></tr></thead><tbody>${notes.map(e=>`<tr><td class="num" style="white-space:nowrap">${esc(dmy(e.at))} · ${esc(hm(e.at))}</td><td>${esc(nameOf(e.by)||'')}</td><td>${esc(e.action||'')}</td><td>${e.ticket?`<button class="linkbtn" data-open="${esc(e.ticket)}">#${esc(e.ticket)}</button>`:''}</td><td class="sub">${esc(e.detail||'')}</td></tr>`).join('')}</tbody></table></div>`:`<div class="empty">${can('admin')?'No activity yet.':'Notifications show here for administrators. Your tasks are under “My tasks”.'}</div>`}</div>`}</div>`;
+}
+
+/* ---------- Customers & sites (from the tickets) ---------- */
+const custOf=v=>{ const s=(v.site||'').split('|')[0].trim(); return s||'Unknown customer'; };
+const contactOf=v=>{ const p=(v.site||'').split('|'); return (p[1]||'').trim(); };
+function customersView(){
+  const q=cui.q.trim().toLowerCase(), by={}, sites={};
+  Object.values(visits).forEach(v=>{ const c=custOf(v); const x=by[c]||(by[c]={name:c,tickets:[],contacts:new Set(),phones:new Set(),regions:new Set()}); x.tickets.push(v); if(contactOf(v)) x.contacts.add(contactOf(v)); if(v.contact) x.phones.add(String(v.contact).trim()); if(v.region) x.regions.add(v.region);
+    const addr=(v.address||'').split('\n')[0].replace(/https?:\/\/\S+/g,'').trim()||'Address not recorded', k=c+'|'+addr; const s=sites[k]||(sites[k]={customer:c,addr,region:v.region||'',tickets:[]}); s.tickets.push(v); });
+  const last=xs=>xs.map(v=>v.scheduled||'').sort().pop()||'';
+  const money2=xs=>can('finance')&&pricingOn()?money(xs.reduce((a,v)=>a+ticketCharge(v).net,0)):'';
+  const cl=Object.values(by).filter(x=>!q||[x.name,...x.contacts,...x.regions].join(' ').toLowerCase().includes(q)).sort((a,b)=>b.tickets.length-a.tickets.length);
+  const sl=Object.values(sites).filter(x=>!q||[x.customer,x.addr,x.region].join(' ').toLowerCase().includes(q)).sort((a,b)=>b.tickets.length-a.tickets.length);
+  return `<div class="page"><div class="phead"><div><h1>${cui.tab==='sites'?'Customer sites':'Customer directory'}</h1><div class="sub">Built from the site and address on your ${Object.keys(visits).length} tickets · billing customer ${esc(FS().customer)}, end client ${esc(FS().endClient)}</div></div>
+   <div class="actions"><label class="search">${svg('search',16)}<input id="c-q" class="field" type="search" placeholder="Search customer, contact or emirate" value="${esc(cui.q)}"></label></div></div>
+   <div class="tabs" role="group"><button data-cui="dir" aria-pressed="${cui.tab==='dir'}">Customers (${Object.keys(by).length})</button><button data-cui="sites" aria-pressed="${cui.tab==='sites'}">Sites (${Object.keys(sites).length})</button></div>
+   <div class="card">${cui.tab==='dir'?`<div class="tblwrap"><table class="tbl"><thead><tr><th>Customer / site name</th><th>Contacts</th><th>Phone</th><th>Emirates</th><th class="amt">Tickets</th><th class="amt">Open</th><th>Last visit</th>${can('finance')&&pricingOn()?'<th class="amt">Charges</th>':''}</tr></thead><tbody>
+     ${cl.map(x=>{ const open=x.tickets.filter(v=>!['completed','cancelled'].includes(v.status)); return `<tr><td><b>${esc(x.name)}</b></td><td class="sub">${esc([...x.contacts].slice(0,3).join(', ')||'—')}</td><td class="num">${[...x.phones].slice(0,2).map(p=>esc(p)).join('<br>')||'—'}</td><td>${esc([...x.regions].join(', ')||'—')}</td><td class="amt">${x.tickets.length}</td><td class="amt">${open.length?`<button class="linkbtn" data-open="${esc(open[0].id)}">${open.length}</button>`:'0'}</td><td class="num">${esc(last(x.tickets)?dmy(last(x.tickets)):'—')}</td>${can('finance')&&pricingOn()?`<td class="amt">${esc(money2(x.tickets))}</td>`:''}</tr>`; }).join('')}</tbody></table></div>`
+   :`<div class="tblwrap"><table class="tbl"><thead><tr><th>Site / address</th><th>Customer</th><th>Emirate</th><th class="amt">Tickets</th><th>Last visit</th><th>Latest ticket</th></tr></thead><tbody>
+     ${sl.map(x=>{ const lt=x.tickets.slice().sort((a,b)=>b.id.localeCompare(a.id))[0]; return `<tr><td style="max-width:340px">${esc(x.addr)}</td><td>${esc(x.customer)}</td><td>${esc(x.region||'—')}</td><td class="amt">${x.tickets.length}</td><td class="num">${esc(last(x.tickets)?dmy(last(x.tickets)):'—')}</td><td><button class="linkbtn" data-open="${esc(lt.id)}">#${esc(lt.id)}</button></td></tr>`; }).join('')}</tbody></table></div>`}</div>
+   <div class="sub" style="font-size:12.5px">Names come from the tickets as typed, so the same customer written two ways shows twice. Fix the site name on the ticket to merge them.</div></div>`;
+}
+
+/* ---------- Document center ---------- */
+let dui={q:'',kind:'all'};
+function documentsView(){
+  const q=dui.q.trim().toLowerCase(); const all=[]; Object.values(visits).forEach(v=>evItems(v).forEach((e,i)=>all.push({v,e,i})));
+  const xs=all.filter(({v,e})=>(dui.kind==='all'||(dui.kind==='pdf')===isPdf(e))&&(!q||[v.id,v.site,v.product,e.name].join(' ').toLowerCase().includes(q))).sort((a,b)=>b.v.id.localeCompare(a.v.id));
+  return `<div class="page"><div class="phead"><div><h1>Document center</h1><div class="sub">${all.length} photos and documents attached to tickets</div></div>
+   <div class="actions"><label class="search">${svg('search',16)}<input id="d-q" class="field" type="search" placeholder="Search ticket, site or file" value="${esc(dui.q)}"></label></div></div>
+   <div class="tabs" role="group">${[['all','All'],['photo','Photos'],['pdf','PDFs']].map(([k,l])=>`<button data-dui="${k}" aria-pressed="${dui.kind===k}">${l}</button>`).join('')}</div>
+   ${xs.length?`<div class="card"><div class="card-b"><div class="thumbs" style="grid-template-columns:repeat(auto-fill,minmax(150px,1fr))">${xs.slice(0,300).map(({v,e})=>{ const u=safeUrl(e.url); return `<a class="thumb" ${u?`href="${esc(u)}" target="_blank" rel="noopener"`:''} title="${esc(e.name)}">${u&&!isPdf(e)?`<img src="${esc(u)}" alt="${esc(e.name)}" loading="lazy">`:`<span style="padding:8px;text-align:center">${isPdf(e)?'PDF · ':''}${esc(e.name)}</span>`}<span class="tag">#${esc(v.id)}</span></a>`; }).join('')}</div></div></div>`
+   :`<div class="card"><div class="empty">${all.length?'No documents match.':'No photos or documents yet. They are added on each ticket’s “Complete visit” step.'}</div></div>`}
+   <div class="sub" style="font-size:12.5px">Each file is stored once and shown on its ticket. Open a ticket to add or remove files.</div></div>`;
+}
+
+/* ---------- Data quality ---------- */
+function qualityIssues(){
+  const V=Object.values(visits), out=[];
+  const add=(t,d,list)=>{ if(list.length) out.push({t,d,list}); };
+  add('Marked New but work is already recorded','Has arrival time or work notes. Submit it for review or correct the status.',V.filter(v=>v.status==='new'&&(v.arrived||(v.work||'').trim())));
+  add('No visit date','The ticket has no scheduled date.',V.filter(v=>!v.scheduled&&v.status!=='cancelled'));
+  add('Emirate not on the rate card','The ticket cannot be priced.',V.filter(v=>v.status!=='cancelled'&&rateRows()&&ticketCharge(v).missing));
+  add('Completed but not invoiced','No Z invoice number yet.',V.filter(v=>v.status==='completed'&&!(v.billingRef||'').trim()&&billKindOf(v)!=='none'));
+  add('Completed without in/out times','Time in and out were not stamped.',V.filter(v=>v.status==='completed'&&!(v.arrived&&v.finished)));
+  add('Completed without a technician','No technician name recorded.',V.filter(v=>v.status==='completed'&&!(v.technician||'').trim()));
+  add('Cancelled but has an invoice number','A cancelled ticket should not be billed.',V.filter(v=>v.status==='cancelled'&&(v.billingRef||'').trim()));
+  const inv=Object.values(invoices); const noT=inv.filter(i=>!['void','draft'].includes(i.status)&&!ticketsForInv(i).length);
+  if(noT.length) out.push({t:'Invoice with no tickets',d:'The ticket numbers were removed. Void the invoice if it is no longer needed.',inv:noT,list:noT});
+  return out;
+}
+function qualityView(){
+  const qs=qualityIssues(), n=qs.reduce((a,g)=>a+g.list.length,0);
+  return `<div class="page"><div class="phead"><div><h1>Data quality</h1><div class="sub">${n?n+' item'+(n>1?'s':'')+' to check':'Everything looks complete'} · checked live from your tickets and invoices</div></div></div>
+   ${qs.length?qs.map(g=>`<div class="card"><div class="card-h"><div><h3>${esc(g.t)} <span class="chip sla-risk">${g.list.length}</span></h3><div class="sub">${esc(g.d)}</div></div></div><div class="card-b" style="display:flex;flex-wrap:wrap;gap:8px">
+     ${g.inv?g.list.map(i=>`<button class="btn" data-gofin="invoices">${esc(i.invoiceNo)}</button>`).join(''):g.list.slice(0,60).map(v=>`<button class="btn" data-open="${esc(v.id)}">#${esc(v.id)}${v.site?' · '+esc(String(v.site).split('|')[0].trim().slice(0,22)):''}</button>`).join('')+(g.list.length>60?`<span class="sub">+${g.list.length-60} more</span>`:'')}</div></div>`).join('')
+   :'<div class="card"><div class="empty">No data problems found.</div></div>'}</div>`;
+}
+
+/* ---------- Company ---------- */
+const CO=()=>Object.assign({legalName:'Ziar Imaar Technical Services L.L.C.',tradeName:'Ziar Imaar',licence:'',trn:'',address:'',phone:'',email:'',bankName:'',accountName:'',iban:'',swift:''},FS().company||{});
+function companyView(){
+  const c=CO(), f=(k,l,ph='')=>`<label>${l}<input class="field" name="${k}" value="${esc(c[k]||'')}" placeholder="${esc(ph)}"></label>`;
+  const tabs=[['entities','Legal entities'],['profile','Company profile'],['system','System settings']];
+  let body='';
+  if(coui.tab==='entities') body=`<div class="card"><div class="tblwrap"><table class="tbl"><thead><tr><th>Legal entity</th><th>Trade licence</th><th>TRN (VAT)</th><th>Bank accounts</th><th>Invoices</th></tr></thead><tbody><tr><td><b>${esc(c.legalName)}</b><div class="sub">${esc(c.address||'')}</div></td><td>${esc(c.licence||'—')}</td><td>${esc(c.trn||'—')}</td><td>${Object.keys(bankAccounts).length}</td><td>${Object.keys(invoices).length}</td></tr></tbody></table></div>
+    <div class="card-b sub" style="font-size:12.5px">The hub keeps one company's books. If you run a second company, its invoices and bank accounts must be kept separately — tell me and I will add it as its own entity.</div></div>`;
+  if(coui.tab==='profile') body=`<form id="fcoform" class="card"><div class="card-h"><h3>Company profile</h3><span class="sub">Printed on statements</span></div><div class="card-b"><div class="fgrid">
+    ${f('legalName','Legal name')}${f('tradeName','Trade name')}${f('licence','Trade licence no.')}${f('trn','TRN (VAT registration no.)','15 digits')}${f('address','Address','Office, area, emirate')}${f('phone','Phone')}${f('email','Email')}
+    ${f('bankName','Bank name','e.g. Wio Bank')}${f('accountName','Account name')}${f('iban','IBAN','AE…')}${f('swift','SWIFT / BIC')}</div>
+    <div class="formfoot" style="padding:12px 0 0"><button class="btn primary" type="submit">Save company profile</button></div></div></form>`;
+  if(coui.tab==='system'){ const s=FS(); body=`<div class="card"><div>${[
+    ['Sign-in','PIN + authenticator code · sessions end after 8 hours, or 30 minutes idle',`<button class="btn" data-nav="7.0">Users</button>`],
+    ['Billing cycle',{off:'Invoice numbers typed on tickets',ticket:'One invoice per ticket',weekly:'Weekly',half:'Twice a month (1–15, 16–end)',monthly:'Monthly'}[s.autoNumber||'off']+' · payment terms '+s.terms+' days',`<button class="btn" data-nav="5.3">Change</button>`],
+    ['Rate card',rateRows()?Object.keys(rateRows()).length+' emirates'+(FS().rateCard.effectiveFrom?' · from '+FS().rateCard.effectiveFrom:''):'Not set',`<button class="btn" data-nav="5.3">Edit</button>`],
+    ['Statements',s.autoStatement?'Prepared automatically':'Off',`<button class="btn" data-nav="4.8">Open</button>`],
+    ['Customer',s.customer+' · end client '+s.endClient,`<button class="btn" data-nav="5.3">Change</button>`],
+    ['Time zone','Dubai (UTC+4) for all dates and times',''],
+    ['Backup','Download a full copy of the data',`<button class="btn" data-nav="7.4">Backup</button>`]].map(([t,d,b])=>`<div class="ctl"><span class="ic ok">✓</span><div><div style="font-weight:600">${esc(t)}</div><div class="sub">${esc(d)}</div></div><div style="margin-left:auto">${b}</div></div>`).join('')}</div></div>`; }
+  return `<div class="page"><div class="phead"><div><h1>Company management</h1><div class="sub">${esc(c.legalName)}</div></div>
+   <div class="tabs" role="group">${tabs.map(([k,l])=>`<button data-coui="${k}" aria-pressed="${coui.tab===k}">${l}</button>`).join('')}</div></div>${body}</div>`;
+}
+
+/* ---------- Integrations ---------- */
+function integrationsView(){
+  const r=[['Shared live database','Connected','ok','Every phone and computer sees the same tickets and finance, instantly.'],
+   ['Phone reminders','On','ok','On the 1st and 16th at 8:32 (Dubai): invoice and statement reminder.'],
+   ['WhatsApp','Links only','plain','Ticket pages open WhatsApp with the customer number. Nothing is sent automatically.'],
+   ['Bank','Upload statements','plain','No live bank feed. Upload the Excel or CSV statement under Finance → Bank; lines are sorted automatically.'],
+   ['Accounting software (Xero, QuickBooks)','Not connected','plain','Export finance to Excel for your accountant.'],
+   ['Airtable','Off','plain','Not connected, as you asked.'],
+   ['Main Excel workbook','Waiting','warn','Send the 43-sheet workbook to load opening balances and history.']];
+  return `<div class="page"><div class="phead"><div><h1>Integrations</h1><div class="sub">What the hub is connected to</div></div></div>
+   <div class="card"><div>${r.map(([t,s,k,d])=>`<div class="ctl"><span class="ic ${k==='ok'?'ok':k==='warn'?'warn':'ok'}" style="${k==='plain'?'background:var(--surface2);color:var(--muted)':''}">${k==='ok'?'✓':k==='warn'?'!':'–'}</span><div><div style="font-weight:600">${esc(t)}</div><div class="sub">${esc(d)}</div></div><span class="chip ${k==='ok'?'completed':k==='warn'?'review':'plain'}" style="margin-left:auto">${esc(s)}</span></div>`).join('')}</div></div></div>`;
+}
+
+/* ---------- Backup & recovery ---------- */
+const BK_COLS=()=>({visits:Object.fromEntries(Object.entries(visits).map(([k,v])=>[k,(({id,...r})=>r)(v)])),parts,stock,assets:assetReg,inventory,invoices,bankAccounts,bankTx,partnerTx,finSettings,statements,roles});
+const stripId=o=>Object.fromEntries(Object.entries(o||{}).map(([k,v])=>[k,(({id,...r})=>r)(v||{})]));
+async function backupDownload(){
+  const cols=BK_COLS(), data={app:'ziar-imaar-hub',version:1,at:new Date().toISOString(),collections:{}};
+  Object.entries(cols).forEach(([k,v])=>data.collections[k]=k==='visits'?v:stripId(v));
+  const counts=Object.fromEntries(Object.entries(data.collections).map(([k,v])=>[k,Object.keys(v).length]));
+  try{ await downloadsApi.save({filename:'ziar-imaar-backup-'+todayDxb()+'.json',data:new Blob([JSON.stringify(data)],{type:'application/json'})}); logAction('Downloaded full backup',{detail:Object.entries(counts).map(([k,n])=>k+' '+n).join(', ')}); toast('Backup saved'); }catch(e){ if(!(e&&e.code==='declined')) toast('Could not save the backup.'); }
+}
+const BK_STORE={visits:null,parts:()=>parts,stock:()=>stock,assets:()=>assetReg,inventory:()=>inventory,invoices:()=>invoices,bankAccounts:()=>bankAccounts,bankTx:()=>bankTx,partnerTx:()=>partnerTx,finSettings:()=>finSettings,statements:()=>statements,roles:()=>roles};
+function backupView(){
+  const live=BK_COLS(); const rows=Object.keys(BK_STORE).map(k=>{ const have=Object.keys(live[k]||{}).length, f=bk&&bk.data.collections[k]?Object.keys(bk.data.collections[k]):[]; const miss=f.filter(id=>!(live[k]||{})[id]); return {k,have,file:f.length,miss:miss.length}; });
+  const totalMiss=rows.reduce((a,r)=>a+r.miss,0);
+  return `<div class="page"><div class="phead"><div><h1>Backup &amp; recovery</h1><div class="sub">A full copy of tickets, parts, assets, invoices, bank, statements, settings and roles</div></div></div>
+   <div class="card"><div class="card-h"><h3>Download a backup</h3></div><div class="card-b"><p class="sub" style="margin-top:0">Saves everything as one file. Keep it somewhere safe, for example your email or Google Drive. Sign-in PINs are never included. Photos stay in the hub; the backup keeps their links.</p>
+    ${downloadsApi?'<button class="btn primary" data-act="bkdl">'+svg('doc',16)+'Download full backup</button>':'<span class="sub">Downloads are not available here.</span>'}</div></div>
+   <div class="card"><div class="card-h"><h3>Restore from a backup</h3></div><div class="card-b">
+    <p class="sub" style="margin-top:0">Choose a backup file to compare it with the hub. Restoring only <b>adds records that are missing</b> — nothing in the hub is overwritten or deleted.</p>
+    <input type="file" id="bk-file" accept=".json,application/json" class="field" style="height:auto;padding:8px">
+    ${bk?`<div class="sub" style="margin:12px 0 6px">Backup from <b>${esc(dmhm(bk.data.at))}</b> · ${esc(bk.name)}</div>
+     <div class="tblwrap"><table class="tbl"><thead><tr><th>Data</th><th class="amt">In the hub</th><th class="amt">In the backup</th><th class="amt">Missing from the hub</th></tr></thead><tbody>${rows.map(r=>`<tr><td>${esc(r.k)}</td><td class="amt">${r.have}</td><td class="amt">${r.file}</td><td class="amt">${r.miss?'<b>'+r.miss+'</b>':'0'}</td></tr>`).join('')}</tbody></table></div>
+     <div style="display:flex;gap:10px;margin-top:12px">${totalMiss?`<button class="btn primary" data-act="bkgo">${bk.confirm?'Confirm — add '+totalMiss+' missing records':'Restore '+totalMiss+' missing records'}</button>`:'<span class="sub">Nothing is missing. The hub already has every record in this backup.</span>'}<button class="btn" data-act="bkcancel">Cancel</button></div>`:''}
+   </div></div></div>`;
+}
+async function backupRestore(){
+  if(!bk) return; let n=0;
+  for(const k of Object.keys(BK_STORE)){ const f=bk.data.collections[k]||{}; const live=k==='visits'?visits:BK_STORE[k]();
+    for(const [id,d] of Object.entries(f)){ if(live[id]) continue; if(k==='visits'){ const v=Object.assign({id,history:[],parts:[],evidence:[]},d); visits[id]=v; if(db) try{ await db.doc('visits/'+id).set(d); }catch(e){} } else await saveDoc(k,id,d,live); n++; } }
+  logAction('Restored from backup',{detail:n+' missing records added from '+bk.name}); bk=null; toast(n+' records restored'); render();
+}
+function plannedView(){
+  const why={'General Ledger':'Double-entry journals, chart of accounts and trial balance. This will be built after your main workbook is loaded, so the opening balances are right. Until then your accountant keeps the ledger; use Finance → Export for the figures.','Procurement':'Purchase requests, supplier bills and approvals. Until then, record parts received under Inventory and supplier payments under Finance → Bank.'}[plannedName]||'';
+  return `<div class="page"><div class="phead"><div><h1>${esc(plannedName)}</h1><div class="sub">Planned · not built yet</div></div></div><div class="card"><div class="card-b"><p style="margin-top:0">${esc(why)}</p></div></div></div>`;
+}
+
 /* ---------- nav ---------- */
 function navHtml(){
   const n=reviewQueue().length;
   const R2=ROUTES.filter(r=>can(r[0]));
-  document.getElementById('nav').innerHTML=R2.map(([k,l])=>`<button data-route="${k}" ${route===k?'aria-current="page"':''}>${svg(k)}<span>${l}</span>${k==='review'&&n?`<span class="badge">${n}</span>`:''}</button>`).join('');
-  document.getElementById('tabbar').style.gridTemplateColumns=`repeat(${Math.max(1,R2.length)},1fr)`;
-  document.getElementById('tabbar').hidden=R2.length<2; document.body.classList.toggle('onetab',R2.length<2);
-  document.getElementById('tabbar').innerHTML=R2.map(([k,l])=>`<button data-route="${k}" ${route===k?'aria-current="page"':''}>${svg(k,20)}<span>${k==='parts'?'Parts':k==='review'?'Review':k==='admin'?'Admin':k==='dashboard'?'Home':k==='reports'?'Reports':k==='finance'?'Finance':l}</span>${k==='review'&&n?`<span class="badge">${n}</span>`:''}</button>`).join('');
+  document.getElementById('nav').innerHTML=navGroupsHtml();
+  const T2=R2.filter(r=>['dashboard','tickets','review','finance'].includes(r[0])), more=R2.length>T2.length||ROUTES_X.some(r=>can(r)&&r!=='planned');
+  document.getElementById('tabbar').style.gridTemplateColumns=`repeat(${Math.max(1,T2.length+(more?1:0))},1fr)`;
+  document.getElementById('tabbar').hidden=T2.length+(more?1:0)<2; document.body.classList.toggle('onetab',T2.length+(more?1:0)<2);
+  document.getElementById('tabbar').innerHTML=T2.map(([k,l])=>`<button data-route="${k}" ${route===k?'aria-current="page"':''}>${svg(k,20)}<span>${k==='parts'?'Parts':k==='review'?'Review':k==='admin'?'Admin':k==='dashboard'?'Home':k==='reports'?'Reports':k==='finance'?'Finance':l}</span>${k==='review'&&n?`<span class="badge">${n}</span>`:''}</button>`).join('')+(more?`<button data-act="mnav" ${!['dashboard','tickets','review','finance'].includes(route)?'aria-current="page"':''}>${svg('menu',20)}<span>More</span></button>`:'');
   const m=document.getElementById('mode'); m.textContent=!loaded?'Connecting…':demo?'Demo mode · changes stay in this tab':'Live · shared with your team'; m.className='mode'+(!loaded?' wait':demo?' demo':'');
   const a=access(); document.getElementById('me').innerHTML=me.name||ROLE_NAME[a]?`<span class="avatar">${esc(initials(me.name||'?'))}</span><span style="display:flex;flex-direction:column;min-width:0"><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(me.name||'Signed in')}</span>${ROLE_NAME[a]?`<span class="rolebadge" style="align-self:flex-start;margin-top:3px">${ROLE_NAME[a]}</span>`:''}</span>`:'';
   document.querySelectorAll('[data-act=newvisit]').forEach(b=>b.hidden=!isOffice());
@@ -1481,7 +1689,7 @@ async function statementPdf(m){
   const x=statements[m]; if(!x||!canPdf()) return;
   const {jsPDF}=window.jspdf; const doc=new jsPDF({unit:'pt',format:'a4'}); const W=595.28,H=841.89,M=42; let y; const ink=[13,27,62], muted=[103,114,140];
   const fd=d=>d?d.split('-').reverse().join('/'):'—', amt=n=>(n<0?'-':'')+Math.abs(r2(n)).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});
-  const header=()=>{ doc.setFillColor(10,31,77); doc.rect(0,0,W,84,'F'); doc.setFillColor(201,151,47); doc.rect(0,84,W,3,'F'); doc.setTextColor(255,255,255); doc.setFont('helvetica','bold'); doc.setFontSize(19); doc.text('ZIAR  IMAAR',M,40); doc.setFont('helvetica','normal'); doc.setFontSize(7.5); doc.setTextColor(201,211,234); doc.text('T E C H N I C A L   S E R V I C E S   L . L . C .',M,55); doc.setFontSize(10); doc.setTextColor(241,210,127); doc.text(/-H[12]$/.test(m)?'Statement · billing period':'Monthly statement',W-M,38,{align:'right'}); doc.setFontSize(9); doc.setTextColor(255,255,255); doc.text(stLabel(m)+'  ·  '+fd(x.start)+' – '+fd(x.end),W-M,54,{align:'right'}); y=116; };
+  const header=()=>{ doc.setFillColor(10,31,77); doc.rect(0,0,W,84,'F'); doc.setFillColor(201,151,47); doc.rect(0,84,W,3,'F'); doc.setTextColor(255,255,255); doc.setFont('helvetica','bold'); doc.setFontSize(19); doc.text('ZIAR  IMAAR',M,40); doc.setFont('helvetica','normal'); doc.setFontSize(7.5); doc.setTextColor(201,211,234); doc.text('T E C H N I C A L   S E R V I C E S   L . L . C .',M,55); if(CO().trn){ doc.setFontSize(7.5); doc.text('TRN '+CO().trn,M,68); } doc.setFontSize(10); doc.setTextColor(241,210,127); doc.text(/-H[12]$/.test(m)?'Statement · billing period':'Monthly statement',W-M,38,{align:'right'}); doc.setFontSize(9); doc.setTextColor(255,255,255); doc.text(stLabel(m)+'  ·  '+fd(x.start)+' – '+fd(x.end),W-M,54,{align:'right'}); y=116; };
   const h2=t=>{ if(y>H-120){ doc.addPage(); header(); } doc.setFont('helvetica','bold'); doc.setFontSize(12.5); doc.setTextColor(...ink); doc.text(t,M,y); y+=8; doc.setDrawColor(201,151,47); doc.setLineWidth(1); doc.line(M,y,M+40,y); y+=16; };
   const row=(cells,bold)=>{ if(y>H-60){ doc.addPage(); header(); } doc.setFont('helvetica',bold?'bold':'normal'); doc.setFontSize(8.8); doc.setTextColor(...ink); cells.forEach(([t,xx,al])=>doc.text(doc.splitTextToSize(String(t),al==='right'?110:200)[0]||'',xx,y,al?{align:al}:undefined)); y+=14; };
   const kv=(k,v,b)=>row([[k,M],[v,W-M,'right']],b);
@@ -1500,6 +1708,7 @@ async function statementPdf(m){
   kv('Output VAT on invoices',amt(x.vat.output)); kv('Input VAT on payments',amt(x.vat.input)); kv('Net VAT for the month',amt(x.vat.output-x.vat.input),true); y+=6;
   kv('Service visits scheduled',String(x.service.visits)); kv('Visits completed',String(x.service.completed)); kv('Visits with an invoice number',String(x.service.invoiced));
   if(x.uncategorised) kv('Bank lines still uncategorised',String(x.uncategorised));
+  { const c=CO(); if(c.iban||c.trn||c.bankName){ y+=6; h2('Payment details'); if(c.legalName) kv('Pay to',c.legalName); if(c.bankName) kv('Bank',c.bankName); if(c.accountName) kv('Account name',c.accountName); if(c.iban) kv('IBAN',c.iban.replace(/(.{4})/g,'$1 ').trim()); if(c.swift) kv('SWIFT',c.swift); if(c.trn) kv('Our TRN',c.trn); } }
   const pages=doc.getNumberOfPages(); for(let i=1;i<=pages;i++){ doc.setPage(i); doc.setFont('helvetica','normal'); doc.setFontSize(8); doc.setTextColor(...muted); doc.text('Prepared '+dmhm(x.generatedAt)+(x.auto?' (automatic)':'')+' · Ziar Imaar Technical Services L.L.C. · management figures, not audited',M,H-28); doc.text('Page '+i+' of '+pages,W-M,H-28,{align:'right'}); }
   try{ await downloadsApi.save({filename:'ziar-imaar-statement-'+m+'.pdf',data:doc.output('blob')}); toast('Statement saved'); logAction('Downloaded statement',{detail:stLabel(m)}); }catch(err){ if(!(err&&err.code==='declined')) toast('Could not save the statement.'); }
 }
@@ -1705,7 +1914,7 @@ function render(){
   document.body.classList.remove('locked');
   if(!listInit){ listInit=true; if(a==='technician') list.status='mine'; }
   if(!can(route)){ route=PERMS[a][0]; try{ history.replaceState(null,'','#'+(route==='tickets'&&sel?'t'+sel:route)); }catch(e){} }
-  $app.innerHTML=route==='tickets'?ticketsView():route==='review'?reviewView():route==='parts'?partsView():route==='admin'?adminView():route==='assets'?assetsView():route==='reports'?reportsView():route==='finance'?financeView():dashView();
+  $app.innerHTML=route==='tickets'?ticketsView():route==='review'?reviewView():route==='parts'?partsView():route==='admin'?adminView():route==='assets'?assetsView():route==='reports'?reportsView():route==='finance'?financeView():route==='tasks'?tasksView():route==='customers'?customersView():route==='documents'?documentsView():route==='quality'?qualityView():route==='company'?companyView():route==='integrations'?integrationsView():route==='backup'?backupView():route==='planned'?plannedView():dashView();
   document.getElementById('modal').innerHTML=modalHtml();
   if(route==='tickets'&&mode==='visit') initSig();
 }
@@ -1719,7 +1928,7 @@ function go(r,id){
   try{ history.replaceState(null,'','#'+h); }catch(e){} try{ localStorage.setItem('zi-route',r); }catch(e){}
   render(); window.scrollTo(0,0);
 }
-function fromHash(){ const h=location.hash.slice(1); if(/^t\d{4}$/.test(h)){ route='tickets'; sel=h.slice(1); return true; } if(ROUTES.some(r=>r[0]===h)){ route=h; return true; } return false; }
+function fromHash(){ const h=location.hash.slice(1); if(/^t\d{4}$/.test(h)){ route='tickets'; sel=h.slice(1); return true; } if(ROUTES.some(r=>r[0]===h)||(ROUTES_X.includes(h)&&h!=='planned')){ route=h; return true; } return false; }
 window.addEventListener('hashchange',()=>{ if(fromHash()) render(); });
 
 /* ---------- signature pad ---------- */
@@ -1741,6 +1950,8 @@ function initSig(){
 document.addEventListener('input',e=>{
   const t=e.target, d=draft;
   if(d){ if(t.id==='f-findings') d.findings=t.value; if(t.id==='f-work') d.work=t.value; if(t.id==='f-next') d.nextAction=t.value; if(t.id==='f-tech') d.technician=t.value; if(t.id==='f-serial') d.serial=t.value; if(t.id==='f-fb') d.customerFeedback=t.value; if(t.id==='f-signer') d.signerName=t.value; if(t.id==='f-bill') d.billingRef=t.value.trim(); if(t.id==='f-billkind'){ d.billKind=t.value; render(); } if(t.id==='f-wait') d.waitMins=Math.max(0,parseInt(t.value,10)||0); }
+  if(t.id==='c-q'){ cui.q=t.value; clearTimeout(cui.t); cui.t=setTimeout(()=>{ const pos=t.selectionStart; render(); const el=document.getElementById('c-q'); if(el){ el.focus(); try{ el.setSelectionRange(pos,pos); }catch(e){} } },250); return; }
+  if(t.id==='d-q'){ dui.q=t.value; clearTimeout(dui.t); dui.t=setTimeout(()=>{ const pos=t.selectionStart; render(); const el=document.getElementById('d-q'); if(el){ el.focus(); try{ el.setSelectionRange(pos,pos); }catch(e){} } },250); return; }
   if(t.id==='o-note'){ rev.note=t.value; const er=document.getElementById('o-err'); if(er) er.textContent=''; }
   if(t.id==='o-inv'&&rev.edit) rev.edit.inv=t.value;
   if(t.id==='o-int'&&rev.edit) rev.edit.int=t.value;
@@ -1764,6 +1975,7 @@ document.addEventListener('change',async e=>{
   if(t.dataset&&t.dataset.txinv!==undefined&&t.dataset.txinv){ const x=bankTx[t.dataset.txinv]; if(!x) return; const {id,...rest}=x; await saveDoc('bankTx',id,Object.assign(rest,{invoiceNo:t.value,category:t.value&&(!rest.category||rest.category==='Uncategorised')?'Customer receipt':rest.category}),bankTx); if(t.value) logAction('Matched receipt to invoice',{detail:t.value+' · '+money(x.amount)}); return; }
   if(t.id==='fb-acct'){ fui.acct=t.value; fui.limit=100; render(); return; }
   if(t.id==='fb-month'){ fui.month=t.value; fui.limit=100; render(); return; }
+  if(t.id==='bk-file'){ const f=t.files&&t.files[0]; if(!f) return; try{ const data=JSON.parse(await f.text()); if(!data||data.app!=='ziar-imaar-hub'||!data.collections) throw 0; bk={name:f.name,data,confirm:false}; }catch(e){ bk=null; toast('That file is not a hub backup.'); } render(); return; }
   if(t.id==='imp-file'){ const f=t.files&&t.files[0]; if(f) await importStatement(f); return; }
   if(t.id==='r-month'){ rui.month=t.value; render(); return; }
   if(t.id==='s-month'){ pui.month=t.value; render(); return; }
@@ -1839,6 +2051,8 @@ document.addEventListener('submit',async e=>{
     if(fui.bulkConfirm!==xs.length||fui.bulkUpto!==upto){ fui.bulkConfirm=xs.length; fui.bulkUpto=upto; render(); return; }
     let tot=0; for(const i of xs){ const due=r2(invGross(i)-invPaid(i)); tot+=due; const d=Object.assign({},i,{paidOther:r2((+i.paidOther||0)+due),paidDate:on,locked:true}); delete d.id; await saveDoc('invoices',i.id,d,invoices); }
     logAction('Marked invoices paid in bulk',{detail:xs.length+' invoices up to '+upto+' · '+money(tot)}); fui.bulkConfirm=null; toast(xs.length+' invoices marked paid ('+money(tot)+')'); return; }
+  if(id==='fcoform'){ const el=e.target.elements, c={}; ['legalName','tradeName','licence','trn','address','phone','email','bankName','accountName','iban','swift'].forEach(k=>c[k]=(el[k].value||'').trim()); c.iban=c.iban.replace(/\s+/g,'').toUpperCase(); if(c.iban&&!/^AE\d{21}$/.test(c.iban)){ toast('A UAE IBAN is AE followed by 21 digits. Please check it.'); return; } if(c.trn&&!/^\d{15}$/.test(c.trn.replace(/\s/g,''))){ toast('A UAE TRN has 15 digits. Please check it.'); return; }
+    const d=Object.assign({},finSettings.main||{},{company:c}); delete d.id; await saveDoc('finSettings','main',d,finSettings); logAction('Updated company profile'); toast('Company profile saved'); return; }
   if(id==='fsetform'){ const el=e.target.elements; const d={autoInvoice:el.autoInvoice.checked,rate:Math.max(0,r2(el.rate.value)),terms:Math.min(180,Math.max(0,parseInt(el.terms.value,10)||0)),autoNumber:el.autoNumber.value,halfFrom:el.autoNumber.value==='half'?(FS().halfFrom||todayDxb().slice(0,7)):(FS().halfFrom||''),invPrefix:((el.nextNoTxt.value.match(/^\s*([A-Za-z]+[\s\-]?)/)||[,'ZRA '])[1].replace('-',' ').replace(/([A-Za-z])$/,'$1 ').toUpperCase()),nextNo:parseInt((el.nextNoTxt.value.match(/(\d+)\s*$/)||[,0])[1],10)||0,customer:(el.customer.value||'').trim()||'Easy Renovations LLC',endClient:(el.endClient.value||'').trim(),autoStatement:el.autoStatement.checked,stmtDay:Math.min(28,Math.max(1,parseInt(el.stmtDay.value,10)||1)),at:new Date().toISOString()};
     if(FS().rateCard) d.rateCard=FS().rateCard; if(FS().rateHistory) d.rateHistory=FS().rateHistory; await saveDoc('finSettings','main',d,finSettings); logAction('Updated finance automation',{detail:(d.autoInvoice?'auto invoices on':'auto invoices off')+' · '+money(d.rate)+' per ticket · statements day '+d.stmtDay}); toast('Automation saved'); scheduleFinAuto(); return; }
   if(id==='fptxform'){ const d={partner:g('partner'),type:g('type'),date:g('date'),amount:r2(g('amount')),note:g('note'),at:new Date().toISOString()};
@@ -1866,6 +2080,17 @@ document.addEventListener('click',async e=>{
   if(e.target.matches&&e.target.matches('[data-uball]')){ fui.ub=e.target.checked?new Set(unbilled().map(v=>v.id)):new Set(); render(); return; }
   const b=e.target.closest('button,[data-act]'); if(!b) return;
   const ds=b.dataset, v=sel&&visits[sel];
+  if(ds.nsec!==undefined){ const i=+ds.nsec; if(!navOpen) navOpen=new Set(); navOpen.has(i)?navOpen.delete(i):navOpen.add(i); navHtml(); return; }
+  if(ds.act==='mnav'){ mnavShow(true); return; }
+  if(ds.act==='mnavclose'){ mnavShow(false); return; }
+  if(ds.nav){ mnavShow(false); openNav(ds.nav); return; }
+  if(ds.tui){ tui.tab=ds.tui; render(); return; }
+  if(ds.cui){ cui.tab=ds.cui; render(); return; }
+  if(ds.coui){ coui.tab=ds.coui; render(); return; }
+  if(ds.dui){ dui.kind=ds.dui; render(); return; }
+  if(ds.act==='bkdl'){ await backupDownload(); return; }
+  if(ds.act==='bkcancel'){ bk=null; render(); return; }
+  if(ds.act==='bkgo'){ if(!bk) return; if(!bk.confirm){ bk.confirm=true; render(); return; } await backupRestore(); return; }
   if(ds.act==='closemodal'){ if(b.classList.contains('overlay')&&e.target!==b) return; modal=null; render(); return; }
   if(ds.act==='newvisit'&&!isOffice()) return;
   if(ds.act==='newvisit'){ modal='new'; render(); const i=document.querySelector('#nvform input'); if(i) i.focus(); return; }
@@ -2001,7 +2226,7 @@ $app.addEventListener('focusout',()=>tipEl.hidden=true);
 setInterval(()=>{ if(!unlock||!me.id) return; if(unlock.until<=Date.now()) signOut('Your 8-hour session ended. Sign in again.'); else if(Date.now()-lastAct>IDLE_MS) signOut('Signed out after 30 minutes without activity.'); },30000);
 
 /* ---------- boot ---------- */
-if(!fromHash()){ let saved=null; try{ saved=localStorage.getItem('zi-route'); }catch(e){} if(ROUTES.some(r=>r[0]===saved)) route=saved; }
+if(!fromHash()){ let saved=null; try{ saved=localStorage.getItem('zi-route'); }catch(e){} if(ROUTES.some(r=>r[0]===saved)||(ROUTES_X.includes(saved)&&saved!=='planned')) route=saved; }
 render();
 
 function demoData(){ // only used when the shared store is unavailable; the sidebar labels this as demo mode
