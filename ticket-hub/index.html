@@ -272,13 +272,23 @@ kbd{font-family:var(--mono);font-size:11px;border:1px solid var(--line2);border-
 .linkbtn{color:var(--navy3);font-size:12.5px;font-weight:600;white-space:nowrap}
 .linkbtn.danger{color:var(--bad)}
 
+/* ---------- logo watermark (emblem redrawn as vector, transparent) ---------- */
+.wmark{position:fixed;top:0;bottom:0;left:248px;right:0;z-index:15;display:grid;place-items:center;pointer-events:none;opacity:.05;color:var(--navy)}
+.wmark .em{width:min(620px,72%);display:flex;flex-direction:column;align-items:center;gap:18px}
+.wmark svg{width:100%;height:auto}
+.wmark .wt{font-family:var(--display);font-weight:700;font-size:clamp(28px,5vw,64px);letter-spacing:.1em;color:var(--navy);white-space:nowrap}
+.locked .wmark{display:none}
+.side .logo{width:34px;height:auto;color:#fff;flex:none}
+.signin .bigemblem{position:absolute;right:-30px;bottom:30px;width:min(440px,70%);color:#fff;opacity:.16;z-index:0}
+@media (max-width:900px){.wmark{left:0}.wmark .em{width:86%}}
+
 /* ---------- sign-in ---------- */
 .locked .side,.locked .topbar,.locked .tabbar{display:none!important}
 .locked .shell{grid-template-columns:1fr}
 .signin{min-height:100vh;min-height:100dvh;display:grid;grid-template-columns:minmax(0,1.1fr) minmax(0,1fr)}
 .signin .brandpane{background:var(--navy);color:#fff;padding:48px max(32px,env(safe-area-inset-left,0px));display:flex;flex-direction:column;justify-content:space-between;position:relative;overflow:hidden}
-.signin .brandpane::after{content:"";position:absolute;right:-120px;bottom:-120px;width:420px;height:420px;border:2px solid rgba(201,151,47,.35);border-radius:50%}
-.signin .brandpane::before{content:"";position:absolute;right:-40px;bottom:-40px;width:260px;height:260px;border:2px solid rgba(201,151,47,.2);border-radius:50%}
+.signin .brandpane::after{display:none;content:"";position:absolute;right:-120px;bottom:-120px;width:420px;height:420px;border:2px solid rgba(201,151,47,.35);border-radius:50%}
+.signin .brandpane::before{display:none;content:"";position:absolute;right:-40px;bottom:-40px;width:260px;height:260px;border:2px solid rgba(201,151,47,.2);border-radius:50%}
 .bigwm b{font-family:var(--display);font-weight:700;font-size:40px;letter-spacing:.08em;display:flex;align-items:center;gap:14px;line-height:1}
 .bigwm b i{display:inline-block;width:42px;height:3px;background:var(--gold);border-radius:2px}
 .bigwm small{display:block;font-family:var(--display);font-weight:500;font-size:12px;letter-spacing:.42em;color:var(--navyInk);margin-top:12px}
@@ -290,6 +300,12 @@ kbd{font-family:var(--mono);font-size:11px;border:1px solid var(--line2);border-
 .pin{font-size:24px;letter-spacing:.5em;text-align:center;font-variant-numeric:tabular-nums;height:54px}
 .check{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--ink2)}
 .check input{width:16px;height:16px;accent-color:var(--navy)}
+.qrbox{display:flex;gap:16px;align-items:center;padding:14px;border:1px solid var(--line);border-radius:12px;background:var(--surface);flex-wrap:wrap}
+#qr{width:168px;height:168px;flex:none;background:#fff;padding:6px;border-radius:8px;border:1px solid var(--line)}
+#qr img,#qr canvas{width:156px!important;height:156px!important}
+.secret{font-family:var(--mono);font-size:13px;letter-spacing:.08em;word-break:break-all;background:var(--surface2);border:1px dashed var(--line2);border-radius:8px;padding:8px 10px;user-select:all}
+.steps3{display:flex;gap:6px;align-items:center;font-size:12px;color:var(--muted)}
+.steps3 b{color:var(--navy)}
 @media (max-width:900px){.signin{grid-template-columns:1fr;grid-template-rows:auto 1fr}.signin .brandpane{padding:28px 20px 32px;padding-top:calc(28px + env(safe-area-inset-top,0px))}.bigwm b{font-size:28px}.signin .brandpane .hide-sm{display:none}}
 
 /* ---------- access & admin ---------- */
@@ -349,9 +365,10 @@ kbd{font-family:var(--mono);font-size:11px;border:1px solid var(--line2);border-
 @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
 </style>
 
+<div class="wmark" aria-hidden="true"><div class="em"><svg viewBox="0 0 400 300" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><g fill="#c9972f"><rect x="174" y="22" width="15" height="150" rx="1.5"/><rect x="193" y="0" width="15" height="172" rx="1.5"/><rect x="212" y="12" width="15" height="160" rx="1.5"/><rect x="186" y="214" width="12" height="12"/><rect x="202" y="214" width="12" height="12"/><rect x="186" y="230" width="12" height="12"/><rect x="202" y="230" width="12" height="12"/></g><g stroke="currentColor" stroke-width="10" stroke-linejoin="miter" stroke-linecap="square"><path d="M162 200V64l14-14"/><path d="M238 200V64l-14-14"/><path d="M128 238A92 92 0 0 1 156 108"/><path d="M272 238A92 92 0 0 0 244 108"/></g><path fill="currentColor" d="M64 262 200 160l136 102-15 12L200 183 79 274z"/></svg><div class="wt">ZIAR IMAAR</div></div></div>
 <div class="shell">
   <aside class="side" aria-label="Main navigation">
-    <div class="wm" aria-label="Ziar Imaar Technical Services"><b>ZIAR <i></i> IMAAR</b><small>TECHNICAL SERVICES</small></div>
+    <div style="display:flex;align-items:center;gap:10px;padding-left:6px"><span class="logo"><svg viewBox="0 0 400 300" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><g fill="#c9972f"><rect x="174" y="22" width="15" height="150" rx="1.5"/><rect x="193" y="0" width="15" height="172" rx="1.5"/><rect x="212" y="12" width="15" height="160" rx="1.5"/><rect x="186" y="214" width="12" height="12"/><rect x="202" y="214" width="12" height="12"/><rect x="186" y="230" width="12" height="12"/><rect x="202" y="230" width="12" height="12"/></g><g stroke="currentColor" stroke-width="10" stroke-linejoin="miter" stroke-linecap="square"><path d="M162 200V64l14-14"/><path d="M238 200V64l-14-14"/><path d="M128 238A92 92 0 0 1 156 108"/><path d="M272 238A92 92 0 0 0 244 108"/></g><path fill="currentColor" d="M64 262 200 160l136 102-15 12L200 183 79 274z"/></svg></span><div class="wm" style="padding:0" aria-label="Ziar Imaar Technical Services"><b>ZIAR <i></i> IMAAR</b><small>TECHNICAL SERVICES</small></div></div>
     <div class="client"><b>Kohler UAE</b>Service ticket hub</div>
     <button class="newbtn" data-act="newvisit" type="button"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>New visit</button>
     <nav class="nav" id="nav"></nav>
@@ -367,6 +384,7 @@ kbd{font-family:var(--mono);font-size:11px;border:1px solid var(--line2);border-
 <div id="toast" class="toast" role="status" hidden></div>
 <div id="tip" hidden></div>
 <script defer src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script defer src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 
 <script>
 (() => {
@@ -409,7 +427,7 @@ const thisMonth=()=>new Date(Date.now()+4*3600000).toISOString().slice(0,7);
 let pui={type:'Parts Needed',dmOnly:true,month:thisMonth(),del:null};
 let modal=null, nform={};
 let rui={month:null};
-let pinDoc, signErr='', signBusy=false, lastAct=Date.now();
+let pinDoc, signErr='', signBusy=false, lastAct=Date.now(), signStep='pin', pendKeep=false, pendSecret='';
 const UNLOCK_KEY='zi-signin', FAIL_KEY='zi-signin-fails', SESSION_MS=8*3600000, IDLE_MS=30*60000;
 const stores2=()=>{ const out=[]; try{ out.push(sessionStorage); }catch(e){} try{ out.push(localStorage); }catch(e){} return out; };
 function readUnlock(){ for(const st of stores2()){ try{ const u=JSON.parse(st.getItem(UNLOCK_KEY)||'null'); if(u&&u.until>Date.now()) return u; }catch(e){} } return null; }
@@ -455,7 +473,14 @@ const siteOf=v=>v.site||'Site not recorded';
 const chip=v=>`<span class="chip ${v.status}">${STATUS[v.status]}</span>`;
 function toast(msg){ const t=document.getElementById('toast'); t.textContent=msg; t.hidden=false; clearTimeout(toast.t); toast.t=setTimeout(()=>t.hidden=true,2800); }
 
-/* ---------- sign-in (personal PIN on top of the claude.ai account) ---------- */
+/* ---------- authenticator codes (TOTP, RFC 6238: SHA-1, 6 digits, 30 s) ---------- */
+const B32='ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
+const b32enc=bytes=>{let bits=0,val=0,out='';for(const b of bytes){val=(val<<8)|b;bits+=8;while(bits>=5){out+=B32[(val>>>(bits-5))&31];bits-=5;}val&=(1<<bits)-1;}if(bits>0)out+=B32[(val<<(5-bits))&31];return out;};
+const b32dec=s=>{s=String(s).replace(/[\s=]+/g,'').toUpperCase();let bits=0,val=0;const out=[];for(const c of s){const i=B32.indexOf(c);if(i<0)continue;val=(val<<5)|i;bits+=5;if(bits>=8){out.push((val>>>(bits-8))&255);bits-=8;}val&=(1<<bits)-1;}return new Uint8Array(out);};
+async function totpAt(secret,counter){const key=await crypto.subtle.importKey('raw',b32dec(secret),{name:'HMAC',hash:'SHA-1'},false,['sign']);const buf=new ArrayBuffer(8);const dv=new DataView(buf);dv.setUint32(0,Math.floor(counter/4294967296));dv.setUint32(4,counter>>>0);const h=new Uint8Array(await crypto.subtle.sign('HMAC',key,buf));const o=h[19]&15;const n=((h[o]&127)<<24)|(h[o+1]<<16)|(h[o+2]<<8)|h[o+3];return String(n%1000000).padStart(6,'0');}
+async function totpCheck(secret,code,last){ const c=Math.floor(Date.now()/30000); for(const d of [0,-1,1]){ const k=c+d; if(last&&k<=last) continue; if(await totpAt(secret,k)===code) return k; } return null; }
+
+/* ---------- sign-in (personal PIN + authenticator code on top of the claude.ai account) ---------- */
 // The PIN is stored only as a salted PBKDF2-SHA256 hash in pins/<user id>: each person reads and writes their own, admins can reset it.
 const b64=a=>btoa(String.fromCharCode(...new Uint8Array(a)));
 const unb64=s=>Uint8Array.from(atob(s),c=>c.charCodeAt(0));
@@ -466,7 +491,7 @@ function fails(){ try{ const f=JSON.parse(localStorage.getItem(FAIL_KEY)||'null'
 function setFails(f){ try{ localStorage.setItem(FAIL_KEY,JSON.stringify(f)); }catch(e){} }
 async function loadPin(){ try{ const sn=await db.doc('pins/'+me.id).get(); pinDoc=sn.exists?sn.data():null; }catch(e){ pinDoc=null; } render(); }
 function startSession(keep){ unlock={id:me.id,until:Date.now()+SESSION_MS}; lastAct=Date.now(); for(const st of stores2()){ try{ st.removeItem(UNLOCK_KEY); }catch(e){} } try{ (keep?localStorage:sessionStorage).setItem(UNLOCK_KEY,JSON.stringify(unlock)); }catch(e){} }
-function signOut(reason){ if(signedIn()) logAction('Signed out',reason?{detail:reason}:{}); unlock=null; for(const st of stores2()){ try{ st.removeItem(UNLOCK_KEY); }catch(e){} } signErr=reason||''; pinDoc=undefined; modal=null; render(); }
+function signOut(reason){ if(signedIn()) logAction('Signed out',reason?{detail:reason}:{}); unlock=null; signStep='pin'; pendSecret=''; for(const st of stores2()){ try{ st.removeItem(UNLOCK_KEY); }catch(e){} } signErr=reason||''; pinDoc=undefined; modal=null; render(); }
 function signinHtml(){
   if(pinDoc===undefined&&!loadPin.busy){ loadPin.busy=true; loadPin().finally(()=>{ loadPin.busy=false; }); }
   const f=fails(), lockedFor=f.until>Date.now()?Math.ceil((f.until-Date.now())/60000):0;
@@ -474,26 +499,35 @@ function signinHtml(){
   const a=access();
   const who=`<div class="who2"><span class="avatar">${esc(initials(me.name||'?'))}</span><div style="min-width:0"><div style="font-weight:600">${esc(me.name||'Your account')}</div><div class="sub">${ROLE_NAME[a]?ROLE_NAME[a]+' · ':''}Signed in to Claude</div></div></div>`;
   let form;
-  if(pinDoc===undefined) form='<div class="sub"><span class="spin"></span> Checking your sign-in…</div>';
+  const otpName=encodeURIComponent('Ziar Imaar:'+(me.name||'user'));
+  if(signStep==='setup'&&pendSecret&&!lockedFor){ form=`<div class="steps3"><b>Step 2 of 2</b> · Set up your authenticator app</div>
+      <div class="qrbox"><div id="qr" aria-label="QR code for your authenticator app"></div><div style="flex:1;min-width:170px;display:flex;flex-direction:column;gap:8px;font-size:13px;color:var(--ink2)"><div>1. Open <b>Google Authenticator</b> or <b>Microsoft Authenticator</b> on your phone.</div><div>2. Add an account and scan this QR code.</div><div class="sub">Can't scan? Enter this key instead (time-based):</div><div class="secret">${esc(pendSecret.replace(/(.{4})/g,'$1 ').trim())}</div></div></div>
+      <form id="otpsetup" style="display:flex;flex-direction:column;gap:12px"><label class="flabel">3. Enter the 6-digit code the app shows<input class="field pin" id="otp" inputmode="numeric" autocomplete="one-time-code" maxlength="6" pattern="[0-9]{6}" required></label>
+      <div class="err" role="alert">${esc(signErr)}</div><button class="btn primary lg" type="submit" ${signBusy?'disabled':''}>${signBusy?'<span class="spin"></span>':''}Confirm and sign in</button><button class="btn ghost" type="button" data-act="signout">Cancel</button></form>`; }
+  else if(signStep==='otp'&&!lockedFor){ form=`<div class="steps3"><b>Step 2 of 2</b> · Authenticator code</div><form id="otplogin" style="display:flex;flex-direction:column;gap:12px">
+      <label class="flabel">Enter the 6-digit code from your authenticator app<input class="field pin" id="otp" inputmode="numeric" autocomplete="one-time-code" maxlength="6" pattern="[0-9]{6}" required></label>
+      <div class="err" role="alert">${esc(signErr)}</div><button class="btn primary lg" type="submit" ${signBusy?'disabled':''}>${signBusy?'<span class="spin"></span>':''}Verify and sign in</button>
+      <div class="sub">Lost your phone? Ask an administrator to reset your sign-in.</div><button class="btn ghost" type="button" data-act="signout">Start again</button></form>`; }
+  else if(pinDoc===undefined) form='<div class="sub"><span class="spin"></span> Checking your sign-in…</div>';
   else if(lockedFor) form=`<div class="banner bad"><div><b>Too many wrong PINs</b>Sign-in is paused on this device for ${lockedFor} more minute${lockedFor>1?'s':''}. Ask an administrator to reset your PIN if you have forgotten it.</div></div>`;
   else if(creating) form=`<form id="pincreate" style="display:flex;flex-direction:column;gap:12px">
-      <label class="flabel">Create a 6-digit PIN<input class="field pin" id="pin1" type="password" inputmode="numeric" autocomplete="new-password" maxlength="8" pattern="[0-9]{6,8}" required></label>
+      <label class="flabel"><span class="steps3" style="margin-bottom:4px"><b>Step 1 of 2</b> · Personal PIN</span>Create a 6-digit PIN<input class="field pin" id="pin1" type="password" inputmode="numeric" autocomplete="new-password" maxlength="8" pattern="[0-9]{6,8}" required></label>
       <label class="flabel">Enter it again<input class="field pin" id="pin2" type="password" inputmode="numeric" autocomplete="new-password" maxlength="8" required></label>
       <label class="check"><input type="checkbox" id="keep"> Keep me signed in on this device for 8 hours</label>
       <div class="err" role="alert">${esc(signErr)}</div>
-      <button class="btn primary lg" type="submit" ${signBusy?'disabled':''}>${signBusy?'<span class="spin"></span>':''}Create PIN and sign in</button>
+      <button class="btn primary lg" type="submit" ${signBusy?'disabled':''}>${signBusy?'<span class="spin"></span>':''}Continue</button>
       <div class="sub">Use 6 to 8 digits that others cannot guess. Do not share it.</div></form>`;
   else form=`<form id="pinlogin" style="display:flex;flex-direction:column;gap:12px">
-      <label class="flabel">PIN<input class="field pin" id="pin" type="password" inputmode="numeric" autocomplete="current-password" maxlength="8" required autofocus></label>
+      <span class="steps3"><b>Step 1 of 2</b> · Personal PIN</span><label class="flabel">PIN<input class="field pin" id="pin" type="password" inputmode="numeric" autocomplete="current-password" maxlength="8" required autofocus></label>
       <label class="check"><input type="checkbox" id="keep"> Keep me signed in on this device for 8 hours</label>
       <div class="err" role="alert">${esc(signErr)}${f.count&&!signErr?esc(f.count+' wrong attempt'+(f.count>1?'s':'')+'. '+(5-f.count)+' left before a 15-minute pause.'):''}</div>
-      <button class="btn primary lg" type="submit" ${signBusy?'disabled':''}>${signBusy?'<span class="spin"></span>':''}Sign in</button>
-      <div class="sub">Forgot your PIN? Ask an administrator to reset it, then create a new one here.</div></form>`;
+      <button class="btn primary lg" type="submit" ${signBusy?'disabled':''}>${signBusy?'<span class="spin"></span>':''}Continue</button>
+      <div class="sub">Forgot your PIN or lost your phone? Ask an administrator to reset your sign-in.</div></form>`;
   return `<div class="signin">
-    <div class="brandpane"><div class="bigwm" aria-label="Ziar Imaar Technical Services"><b>ZIAR <i></i> IMAAR</b><small>TECHNICAL SERVICES L.L.C.</small></div>
+    <div class="brandpane"><div class="bigemblem"><svg viewBox="0 0 400 300" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><g fill="#c9972f"><rect x="174" y="22" width="15" height="150" rx="1.5"/><rect x="193" y="0" width="15" height="172" rx="1.5"/><rect x="212" y="12" width="15" height="160" rx="1.5"/><rect x="186" y="214" width="12" height="12"/><rect x="202" y="214" width="12" height="12"/><rect x="186" y="230" width="12" height="12"/><rect x="202" y="230" width="12" height="12"/></g><g stroke="currentColor" stroke-width="10" stroke-linejoin="miter" stroke-linecap="square"><path d="M162 200V64l14-14"/><path d="M238 200V64l-14-14"/><path d="M128 238A92 92 0 0 1 156 108"/><path d="M272 238A92 92 0 0 0 244 108"/></g><path fill="currentColor" d="M64 262 200 160l136 102-15 12L200 183 79 274z"/></svg></div><div class="bigwm" style="position:relative;z-index:1" aria-label="Ziar Imaar Technical Services"><b>ZIAR <i></i> IMAAR</b><small>TECHNICAL SERVICES L.L.C.</small></div>
       <div class="hide-sm" style="position:relative;z-index:1;max-width:420px"><div style="font-family:var(--display);font-size:22px;font-weight:600;line-height:1.3">Kohler UAE service ticket hub</div><div style="color:var(--navyInk);margin-top:8px">Visits, reviews, parts and reports for the Kohler UAE service contract, in one place for the office and the field.</div></div>
       <div class="sub hide-sm" style="color:var(--navyInk);position:relative;z-index:1">Ziar Imaar Technical Services L.L.C.</div></div>
-    <div class="formpane"><div class="signcard"><div><h1>${creating?'Set up your sign-in':'Sign in'}</h1><div class="sub" style="margin-top:4px">${creating?'Create a personal PIN to protect this hub on shared and lost devices.':'Enter your personal PIN to open the hub.'}</div></div>${who}${form}
+    <div class="formpane"><div class="signcard"><div><h1>${creating||signStep==='setup'?'Set up your sign-in':'Sign in'}</h1><div class="sub" style="margin-top:4px">${signStep==='setup'?'Link your phone so every sign-in needs a code from it.':signStep==='otp'?'Open your authenticator app for the current code.':creating?'Create a personal PIN, then link your authenticator app.':'Enter your personal PIN, then the code from your authenticator app.'}</div></div>${who}${form}
       <div class="sub" style="border-top:1px solid var(--line);padding-top:12px">Not you? Switch to your own Claude account, then open this page again.</div></div></div>
   </div>`;
 }
@@ -1057,8 +1091,8 @@ function adminView(){
   let body='';
   if(adminTab==='users') body=`<div class="pgrid">
     <div class="card"><div class="card-h"><h3>People with access</h3><span class="sub">${assigned.length} assigned</span></div>
-      <div class="banner gold" style="margin:12px 16px 4px;border-radius:9px"><div style="flex:1"><b>Admins</b>The owner and anyone given Editor access from the Share menu are admins automatically. Every person signs in with their own PIN; Reset PIN makes them create a new one at their next sign-in.</div><button class="btn" style="height:32px" data-resetpin="${esc(me.id||'')}">Reset my PIN</button></div>
-      <div>${assigned.length?assigned.map(([id,r])=>personRow(id,[`<div class="sub">Assigned ${esc(dm(r.at))}${r.by?' by '+esc(nameOf(r.by)):''}</div>${r.role==='technician'?`<input class="field" data-tphone="${esc(id)}" value="${esc(r.phone||'')}" placeholder="WhatsApp number, e.g. 050 123 4567" style="margin-top:6px;max-width:260px;padding:6px 10px" inputmode="tel">`:''}`,`<span style="display:flex;gap:8px;align-items:center"><select class="field" data-setrole="${esc(id)}" style="margin:0;width:auto;padding:6px 30px 6px 10px">${['office','technician','viewer'].map(x=>`<option value="${x}" ${r.role===x?'selected':''}>${ROLE_NAME[x]}</option>`).join('')}</select><button class="linkbtn" data-resetpin="${esc(id)}">Reset PIN</button><button class="linkbtn danger" data-unrole="${esc(id)}">Remove</button></span>`])).join(''):'<div class="empty">No Office, Technician or Viewer users yet. Add people on the right, or approve access requests.</div>'}</div></div>
+      <div class="banner gold" style="margin:12px 16px 4px;border-radius:9px"><div style="flex:1"><b>Admins</b>The owner and anyone given Editor access from the Share menu are admins automatically. Everyone signs in with their own PIN and authenticator app. Reset sign-in clears both, for a forgotten PIN or a lost phone; they set them up again at their next sign-in.</div><button class="btn" style="height:32px" data-resetpin="${esc(me.id||'')}">Reset my sign-in</button></div>
+      <div>${assigned.length?assigned.map(([id,r])=>personRow(id,[`<div class="sub">Assigned ${esc(dm(r.at))}${r.by?' by '+esc(nameOf(r.by)):''}</div>${r.role==='technician'?`<input class="field" data-tphone="${esc(id)}" value="${esc(r.phone||'')}" placeholder="WhatsApp number, e.g. 050 123 4567" style="margin-top:6px;max-width:260px;padding:6px 10px" inputmode="tel">`:''}`,`<span style="display:flex;gap:8px;align-items:center"><select class="field" data-setrole="${esc(id)}" style="margin:0;width:auto;padding:6px 30px 6px 10px">${['office','technician','viewer'].map(x=>`<option value="${x}" ${r.role===x?'selected':''}>${ROLE_NAME[x]}</option>`).join('')}</select><button class="linkbtn" data-resetpin="${esc(id)}">Reset sign-in</button><button class="linkbtn danger" data-unrole="${esc(id)}">Remove</button></span>`])).join(''):'<div class="empty">No Office, Technician or Viewer users yet. Add people on the right, or approve access requests.</div>'}</div></div>
     <div style="display:flex;flex-direction:column;gap:16px">
       <div class="card"><div class="card-h"><h3>Add a person</h3><span class="sub">From your organization</span></div><div class="card-b">
         <label class="search" style="max-width:none">${svg('search',16)}<input id="p-q" class="field" type="search" placeholder="Search by name" value="${esc(psearch.q)}" autocomplete="off" aria-label="Search people"></label>
@@ -1175,7 +1209,7 @@ function render(){
   const a=access();
   if(a==='loading'){ $app.innerHTML='<div class="gate"><div class="card"><span class="spin" style="color:var(--navy)"></span><div class="sub">Checking your access…</div></div></div>'; return; }
   if(a==='none'){ document.body.classList.remove('locked'); $app.innerHTML=gateHtml(); document.getElementById('modal').innerHTML=''; return; }
-  if(needsSignIn()){ document.body.classList.add('locked'); $app.innerHTML=signinHtml(); document.getElementById('modal').innerHTML=''; const pf=document.getElementById('pin')||document.getElementById('pin1'); if(pf&&!typing()) pf.focus(); return; }
+  if(needsSignIn()){ document.body.classList.add('locked'); $app.innerHTML=signinHtml(); document.getElementById('modal').innerHTML=''; const qr=document.getElementById('qr'); if(qr&&window.QRCode){ try{ new QRCode(qr,{text:'otpauth://totp/'+encodeURIComponent('Ziar Imaar:'+(me.name||'user'))+'?secret='+pendSecret+'&issuer='+encodeURIComponent('Ziar Imaar')+'&algorithm=SHA1&digits=6&period=30',width:156,height:156,colorDark:'#0a1f4d',colorLight:'#ffffff',correctLevel:QRCode.CorrectLevel.M}); }catch(e){} } else if(qr){ qr.innerHTML='<div class="sub" style="padding:20px 8px;text-align:center">QR code unavailable here. Use the key.</div>'; } const of=document.getElementById('otp'); if(of&&!typing()){ of.focus(); return; } const pf=document.getElementById('pin')||document.getElementById('pin1'); if(pf&&!typing()) pf.focus(); return; }
   document.body.classList.remove('locked');
   if(!listInit){ listInit=true; if(a==='technician') list.status='mine'; }
   if(!can(route)){ route=PERMS[a][0]; try{ history.replaceState(null,'','#'+(route==='tickets'&&sel?'t'+sel:route)); }catch(e){} }
@@ -1255,6 +1289,17 @@ document.addEventListener('submit',async e=>{
     const v={id:vid,ref:refFor(vid),site:g('site'),region:g('region')||'Dubai',contact:g('contact'),address:g('address'),product:g('product'),model:g('model'),category:g('category'),type:g('type')||'Inspection',priority:g('priority')||'Normal',issue:g('issue'),scheduled:sched.toISOString(),rate:Number(g('rate'))||0,assignedTo:g('assignedTo'),
       status:'new',prepared:false,contactedAt:null,arrived:null,finished:null,findings:'',work:'',nextAction:'',outcome:'',returnVisit:'No',technician:'',internalNotes:'',parts:[],evidence:[],billingRef:'',history:[hist('new')]};
     modal=null; nform={}; list.status='open'; route='tickets'; sel=vid; mode='view'; await save(v); logAction('Created visit',{ticket:vid}); go('tickets',vid); toast('Visit #'+vid+' created'); return; }
+  if(id==='otpsetup'||id==='otplogin'){
+    if(signBusy) return; const code=(document.getElementById('otp').value||'').replace(/\D/g,''); const f=fails(); if(f.until>Date.now()){ render(); return; }
+    if(code.length!==6){ signErr='Enter the 6 digits shown in the app.'; render(); return; }
+    signBusy=true; render();
+    try{
+      const secret=id==='otpsetup'?pendSecret:pinDoc.totp.secret;
+      const k=await totpCheck(secret,code,id==='otplogin'?pinDoc.totp.last:0);
+      if(k!=null){ const totp={secret,enabled:true,at:(pinDoc.totp&&pinDoc.totp.at)||new Date().toISOString(),last:k}; const docv=Object.assign({},pinDoc,{totp}); await db.doc('pins/'+me.id).set(docv); pinDoc=docv; setFails({id:me.id,count:0,until:0}); signErr=''; pendSecret=''; signStep='pin'; startSession(pendKeep); logAction(id==='otpsetup'?'Set up authenticator and signed in':'Signed in'); }
+      else{ f.count++; if(f.count>=5){ f.until=Date.now()+15*60000; f.count=0; signStep='pin'; logAction('Sign-in paused after 5 wrong codes'); } else logAction('Wrong authenticator code'); setFails(f); signErr=f.until>Date.now()?'':'That code is not right or has expired. Check the time on your phone and try the newest code.'; }
+    }catch(e){ signErr='Could not check the code. Try again.'; }
+    signBusy=false; render(); return; }
   if(id==='pincreate'||id==='pinlogin'){
     if(signBusy) return; const keep=!!(document.getElementById('keep')||{}).checked;
     if(id==='pincreate'){ const a1=document.getElementById('pin1').value, a2=document.getElementById('pin2').value;
@@ -1262,14 +1307,14 @@ document.addEventListener('submit',async e=>{
       if(/^(\d)\1+$/.test(a1)||'0123456789'.includes(a1)||'9876543210'.includes(a1)){ signErr='That PIN is too easy to guess. Avoid repeated or sequential digits.'; render(); return; }
       if(a1!==a2){ signErr='The two PINs do not match.'; render(); return; }
       signBusy=true; render();
-      try{ const salt=b64(crypto.getRandomValues(new Uint8Array(16))), iter=150000; const hash=await pinHash(a1,salt,iter); await db.doc('pins/'+me.id).set({salt,hash,iter,alg:'PBKDF2-SHA256',at:new Date().toISOString()}); pinDoc={salt,hash,iter}; signErr=''; setFails({id:me.id,count:0,until:0}); startSession(keep); logAction('Created PIN and signed in'); }
+      try{ const salt=b64(crypto.getRandomValues(new Uint8Array(16))), iter=150000; const hash=await pinHash(a1,salt,iter); await db.doc('pins/'+me.id).set({salt,hash,iter,alg:'PBKDF2-SHA256',at:new Date().toISOString()}); pinDoc={salt,hash,iter}; signErr=''; setFails({id:me.id,count:0,until:0}); logAction('Created PIN'); pendKeep=keep; pendSecret=b32enc(crypto.getRandomValues(new Uint8Array(20))); signStep='setup'; }
       catch(e){ signErr='Could not save your PIN. Check your connection and try again.'; }
       signBusy=false; render(); return; }
     const f=fails(); if(f.until>Date.now()){ render(); return; }
     const pin=document.getElementById('pin').value; if(!pin) return;
     signBusy=true; render();
     try{ const h=await pinHash(pin,pinDoc.salt,pinDoc.iter||150000);
-      if(h===pinDoc.hash){ setFails({id:me.id,count:0,until:0}); signErr=''; startSession(keep); logAction('Signed in'); }
+      if(h===pinDoc.hash){ signErr=''; pendKeep=keep; if(pinDoc.totp&&pinDoc.totp.secret){ signStep='otp'; } else { pendSecret=b32enc(crypto.getRandomValues(new Uint8Array(20))); signStep='setup'; } }
       else{ f.count++; if(f.count>=5){ f.until=Date.now()+15*60000; f.count=0; logAction('Sign-in paused after 5 wrong PINs'); } else logAction('Failed sign-in'); setFails(f); signErr=f.until>Date.now()?'':'Wrong PIN.'; }
     }catch(e){ signErr='Could not check your PIN. Try again.'; }
     signBusy=false; render(); return; }
@@ -1319,7 +1364,7 @@ document.addEventListener('click',async e=>{
   if(ds.areg!==undefined){ const tr=b.closest('tr'); const cells=tr.querySelectorAll('td'); aui.form={product:cells[0].querySelector('b').textContent,model:cells[0].querySelector('.mono').textContent,site:cells[1].textContent==='—'?'':cells[1].textContent}; const v=Object.values(visits).find(x=>x.model===aui.form.model&&akey(x.site,x.model)===akey(aui.form.site,aui.form.model)); if(v&&v.category) aui.form.category=v.category; render(); window.scrollTo(0,0); return; }
   if(ds.atab){ adminTab=ds.atab; render(); return; }
   if(ds.grant){ if(ds.nm) names[ds.grant]=ds.nm; await setRole(ds.grant,ds.r,ds.nm); return; }
-  if(ds.resetpin){ try{ await db.doc('pins/'+ds.resetpin).delete(); logAction('Reset PIN',{detail:ds.resetpin===me.id?'Own PIN':nameOf(ds.resetpin)||'Person'}); if(ds.resetpin===me.id){ toast('Your PIN was reset. Create a new one now.'); signOut(); } else toast('PIN reset. '+(nameOf(ds.resetpin)||'They')+' will create a new one at next sign-in.'); }catch(e){ toast('Only admins can reset PINs.'); } return; }
+  if(ds.resetpin){ try{ await db.doc('pins/'+ds.resetpin).delete(); logAction('Reset sign-in (PIN and authenticator)',{detail:ds.resetpin===me.id?'Own sign-in':nameOf(ds.resetpin)||'Person'}); if(ds.resetpin===me.id){ toast('Your sign-in was reset. Set it up again now.'); signOut(); } else toast('Sign-in reset. '+(nameOf(ds.resetpin)||'They')+' will set up a new PIN and authenticator at next sign-in.'); }catch(e){ toast('Only admins can reset PINs.'); } return; }
   if(ds.unrole){ await setRole(ds.unrole,null); return; }
   if(ds.dismiss){ try{ await db.doc('requests/'+ds.dismiss).delete(); }catch(e){ toast('Could not dismiss the request.'); } return; }
   if(ds.act==='reqaccess'){ if(!db||!me.id) return; try{ await db.doc('requests/'+me.id).set({at:new Date().toISOString()}); requested=true; render(); }catch(e){ toast('Could not send the request. Try again.'); } return; }
