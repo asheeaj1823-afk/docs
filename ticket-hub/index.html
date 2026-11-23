@@ -359,6 +359,8 @@ const ICON={
   tickets:'<path d="M4 5h16v4a2 2 0 0 0 0 4v4H4v-4a2 2 0 0 0 0-4z"/><path d="M9 9h6M9 13h4"/>',
   review:'<path d="M4 4h16v12H4z"/><path d="M8 10l3 3 5-5"/><path d="M8 20h8"/>',
   parts:'<path d="M3 7l9-4 9 4-9 4-9-4z"/><path d="M3 7v10l9 4 9-4V7"/><path d="M12 11v10"/>',
+  reports:'<path d="M4 4h16v16H4z"/><path d="M8 16v-4M12 16V8M16 16v-6"/>',
+  wa:'<path d="M4 20l1.3-3.9A8 8 0 1 1 8 19z"/><path d="M9 9.5c0 3 2.5 5.5 5.5 5.5l1-1.5-2-1-1 1a4 4 0 0 1-2-2l1-1-1-2z"/>',
   assets:'<rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 7h8M8 11h8M8 15h5"/>',
   admin:'<path d="M12 3l8 3v6c0 4.5-3.4 8.3-8 9-4.6-.7-8-4.5-8-9V6z"/><path d="M9 12l2 2 4-4"/>',
   search:'<circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/>',
@@ -369,9 +371,9 @@ const ICON={
   x:'<path d="M6 6l12 12M18 6L6 18"/>'
 };
 const svg=(k,s=18)=>`<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICON[k]}</svg>`;
-const ROUTES=[['dashboard','Dashboard'],['tickets','Tickets'],['review','Review queue'],['parts','Parts & stock'],['assets','Assets'],['admin','Administration']];
+const ROUTES=[['dashboard','Dashboard'],['tickets','Tickets'],['review','Review queue'],['parts','Parts & stock'],['assets','Assets'],['reports','Reports'],['admin','Administration']];
 const ROLE_NAME={admin:'Admin',office:'Office',technician:'Technician',viewer:'Viewer'};
-const PERMS={admin:['dashboard','tickets','review','parts','assets','admin'],office:['dashboard','tickets','review','parts','assets'],technician:['tickets'],viewer:['dashboard','tickets']};
+const PERMS={admin:['dashboard','tickets','review','parts','assets','reports','admin'],office:['dashboard','tickets','review','parts','assets','reports'],technician:['tickets'],viewer:['dashboard','tickets','reports']};
 const ESC_TO=['','Technician','Office supervisor','Administrator'];
 
 let visits={}, parts={}, stock={};
@@ -386,6 +388,7 @@ let rev={id:null,note:'',edit:null,confirm:null,drafting:false};
 const thisMonth=()=>new Date(Date.now()+4*3600000).toISOString().slice(0,7);
 let pui={type:'Parts Needed',dmOnly:true,month:thisMonth(),del:null};
 let modal=null, nform={};
+let rui={month:null};
 let inventory={}, iui={form:null,del:null};
 let assetReg={}, aui={q:'',open:null,form:null,del:null}, listInit=false;
 let roles={}, requests={}, audit=[], rolesLoaded=false, canEditLvl=null, adminTab='users', psearch={q:'',res:[]}, requested=false;
@@ -416,6 +419,10 @@ const canSubmit=v=>!!(v.arrived&&(v.work||'').trim());
 const editable=v=>v.status==='new'||v.status==='recheck';
 const createdAt=v=>(v.history&&v.history[0]&&v.history[0].at)||v.scheduled;
 const phoneOf=v=>v.phone||(((v.contact||'').match(/\+?\d[\d\s-]{6,}\d/)||[])[0]||'');
+// WhatsApp links open wa.me in a new tab with a pre-written message; UAE numbers written 05x… become 9715x…
+const waNum=ph=>{ let d=String(ph||'').replace(/\D/g,''); if(d.startsWith('00')) d=d.slice(2); if(d.startsWith('0')) d='971'+d.slice(1); return d.length>=9?d:''; };
+const waLink=(ph,text)=>{ const n=waNum(ph); return n?'https://wa.me/'+n+'?text='+encodeURIComponent(text):''; };
+const techPhone=id=>(roles[id]&&roles[id].phone)||'';
 const nameOf=id=>id?(id===me.id?'You':(names[id]||'Team member')):'';
 const initials=n=>(n||'?').split(/\s+/).filter(Boolean).map(w=>w[0]).slice(0,2).join('').toUpperCase();
 const isDM=v=>(v&&v.site||'').trim().toLowerCase()==='dubai mall';
@@ -522,7 +529,7 @@ function navHtml(){
   document.getElementById('nav').innerHTML=R2.map(([k,l])=>`<button data-route="${k}" ${route===k?'aria-current="page"':''}>${svg(k)}<span>${l}</span>${k==='review'&&n?`<span class="badge">${n}</span>`:''}</button>`).join('');
   document.getElementById('tabbar').style.gridTemplateColumns=`repeat(${Math.max(1,R2.length)},1fr)`;
   document.getElementById('tabbar').hidden=R2.length<2; document.body.classList.toggle('onetab',R2.length<2);
-  document.getElementById('tabbar').innerHTML=R2.map(([k,l])=>`<button data-route="${k}" ${route===k?'aria-current="page"':''}>${svg(k,20)}<span>${k==='parts'?'Parts':k==='review'?'Review':k==='admin'?'Admin':k==='dashboard'?'Home':l}</span>${k==='review'&&n?`<span class="badge">${n}</span>`:''}</button>`).join('');
+  document.getElementById('tabbar').innerHTML=R2.map(([k,l])=>`<button data-route="${k}" ${route===k?'aria-current="page"':''}>${svg(k,20)}<span>${k==='parts'?'Parts':k==='review'?'Review':k==='admin'?'Admin':k==='dashboard'?'Home':k==='reports'?'Reports':l}</span>${k==='review'&&n?`<span class="badge">${n}</span>`:''}</button>`).join('');
   const m=document.getElementById('mode'); m.textContent=!loaded?'Connecting…':demo?'Demo mode · changes stay in this tab':'Live · shared with your team'; m.className='mode'+(!loaded?' wait':demo?' demo':'');
   const a=access(); document.getElementById('me').innerHTML=me.name||ROLE_NAME[a]?`<span class="avatar">${esc(initials(me.name||'?'))}</span><span style="display:flex;flex-direction:column;min-width:0"><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(me.name||'Signed in')}</span>${ROLE_NAME[a]?`<span class="rolebadge" style="align-self:flex-start;margin-top:3px">${ROLE_NAME[a]}</span>`:''}</span>`:'';
   document.querySelectorAll('[data-act=newvisit]').forEach(b=>b.hidden=!isOffice());
@@ -663,6 +670,8 @@ function headCard(v,opts={}){
       <button class="btn" data-act="call">${svg('phone',16)}Call</button>
       <a class="btn" href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent((v.address||v.site||'')+', '+(v.region||'Dubai')+', UAE')}" target="_blank" rel="noopener">${svg('map',16)}Directions</a>
       <span style="margin-left:auto;display:flex;align-items:center;gap:8px" class="sub">Assigned to ${isOffice()&&editable(v)?`<select class="field" data-assign="${esc(v.id)}" style="margin:0;width:auto;padding:7px 30px 7px 10px"><option value="">Unassigned</option>${[...new Set([...techIds(),...(v.assignedTo?[v.assignedTo]:[])])].map(id=>`<option value="${esc(id)}" ${v.assignedTo===id?'selected':''}>${esc(nameOf(id)||'Technician')}</option>`).join('')}</select>`:`<b style="color:var(--ink)">${esc(assigneeName(v)||'Nobody yet')}</b>`}</span>
+      ${(()=>{ const out=[]; const sl=waLink(phoneOf(v),`Hello, this is Ziar Imaar Technical Services, Kohler UAE service partner. Your service visit #${v.id} for ${v.product||'your Kohler product'} is scheduled for ${dayLong(v.scheduled)}${v.assignedTo?' with our technician '+assigneeName(v):''}. Please reply here if the time needs to change.`); if(sl&&editable(v)) out.push(`<a class="btn" href="${esc(sl)}" target="_blank" rel="noopener">${svg('wa',16)}WhatsApp site</a>`);
+        const tl=v.assignedTo&&isOffice()?waLink(techPhone(v.assignedTo),`Ziar Imaar · Ticket #${v.id}\n${siteOf(v)}${v.address?' · '+v.address:''}\n${v.product||''} ${v.model||''}\nVisit: ${dayLong(v.scheduled)}\nIssue: ${v.issue||'—'}\nContact: ${v.contact||'—'}${escal(v)?'\nESCALATED '+escal(v).label:''}\nPlease update the visit in the ticket hub.`):''; if(tl&&editable(v)) out.push(`<a class="btn" href="${esc(tl)}" target="_blank" rel="noopener">${svg('wa',16)}Message technician</a>`); return out.join(''); })()}
       ${showCall?`<span class="callbox"><span class="num" id="phone-num" style="user-select:all">${esc(ph||'No phone number on this ticket')}</span>${ph?'<button class="btn" style="height:30px" data-act="copy">Copy</button>':''}</span>`:''}
     </div>
   </div>`;
@@ -726,11 +735,13 @@ function bodyHtml(v){
 function editHtml(){
   const d=draft;
   if(mode==='parts'){
-    const known=[...new Set(Object.values(visits).flatMap(v=>(v.parts||[]).map(p=>p.name)))];
+    const inv=Object.values(inventory).sort((a,b)=>(a.partNo||'').localeCompare(b.partNo||''));
+    const known=[...inv.map(i=>i.partNo+' · '+i.description),...new Set(Object.values(visits).flatMap(v=>(v.parts||[]).map(p=>p.name)))];
     return `<div class="card"><div class="card-h"><h3>Parts used on this visit</h3><span class="sub">${partsCount(d)} total</span></div><div class="card-b form">
-      <form id="partform" class="row" style="gap:8px;align-items:flex-end"><label class="flabel" style="flex:1">Add a part<input id="f-part" class="field" placeholder="Part name or Kohler code" autocomplete="off" list="partlist"></label><button class="btn primary" style="height:42px" type="submit">Add</button></form>
+      <form id="partform" class="row" style="gap:8px;align-items:flex-end"><label class="flabel" style="flex:1">Add a part<input id="f-part" class="field" placeholder="${inv.length?'Pick from inventory or type a part':'Part name or Kohler code'}" autocomplete="off" list="partlist"></label><button class="btn primary" style="height:42px" type="submit">Add</button></form>
       <datalist id="partlist">${known.map(n=>`<option value="${esc(n)}">`).join('')}</datalist>
-      <div>${(d.parts||[]).length?d.parts.map((p,i)=>`<div class="prow"><span style="flex:1;min-width:0;overflow-wrap:anywhere;font-weight:500">${esc(p.name)}</span><span class="qty"><button data-q="${i}" data-dq="-1" aria-label="Decrease">−</button><span class="num">${p.qty}</span><button data-q="${i}" data-dq="1" aria-label="Increase">+</button></span></div>`).join(''):'<div class="sub">No parts recorded. Add each part you fitted so the office can match it to stock.</div>'}</div>
+      <div>${(d.parts||[]).length?d.parts.map((p,i)=>`<div class="prow"><span style="flex:1;min-width:0;overflow-wrap:anywhere;font-weight:500">${esc(p.name)}${p.invId&&inventory[p.invId]?`<div class="sub">Inventory ${esc(inventory[p.invId].partNo)} · ${+inventory[p.invId].stock||0} in stock</div>`:''}</span><span class="qty"><button data-q="${i}" data-dq="-1" aria-label="Decrease">−</button><span class="num">${p.qty}</span><button data-q="${i}" data-dq="1" aria-label="Increase">+</button></span></div>`).join(''):'<div class="sub">No parts recorded. Add each part you fitted so the office can match it to stock.</div>'}</div>
+      ${inv.length?'<div class="sub">Parts picked from inventory are deducted from stock when you save.</div>':''}
     </div><div class="formfoot"><button class="btn" data-act="cancel">Cancel</button><button class="btn primary" data-act="saveparts">Save parts</button></div></div>`;
   }
   if(mode==='invoice') return `<div class="card"><div class="card-h"><h3>Z Invoice No.</h3></div><div class="card-b form">
@@ -835,6 +846,69 @@ function partsView(){
   </div>`;
 }
 
+/* ---------- reports ---------- */
+const monthKey=iso=>dxb(iso).toISOString().slice(0,7);
+const mlab=m=>MON[+m.slice(5)-1]+' '+m.slice(0,4);
+function monthData(m){
+  const xs=Object.values(visits).filter(v=>v.scheduled&&monthKey(v.scheduled)===m).sort((a,b)=>a.scheduled.localeCompare(b.scheduled));
+  const done=xs.filter(v=>v.status==='completed'), times=xs.map(onsite).filter(x=>x!=null), att=xs.filter(v=>v.arrived), outc=xs.filter(v=>v.outcome);
+  return {xs,done,avg:times.length?times.reduce((a,b)=>a+b,0)/times.length:null,timed:times.length,sla:att.length?Math.round(100*att.filter(v=>!sla(v).late).length/att.length):null,att:att.length,res:outc.length?Math.round(100*outc.filter(v=>v.outcome==='Resolved').length/outc.length):null,outc:outc.length,parts:xs.reduce((t,v)=>t+partsCount(v),0),invoiced:xs.filter(v=>v.billingRef).length};
+}
+function techPerf(xs){
+  const m={}; xs.forEach(v=>{ const names=(v.technician||'').split(/,|&| and /).map(s=>s.trim()).filter(Boolean); names.forEach(nm=>{ const r=m[nm]||(m[nm]={name:nm,visits:0,done:0,res:0,mins:[]}); r.visits++; if(v.status==='completed') r.done++; if(v.outcome==='Resolved') r.res++; const o=onsite(v); if(o!=null) r.mins.push(o); }); });
+  return Object.values(m).sort((a,b)=>b.visits-a.visits);
+}
+function reportsView(){
+  const months=[...new Set(Object.values(visits).filter(v=>v.scheduled).map(v=>monthKey(v.scheduled)))].sort().reverse();
+  if(!rui.month||!months.includes(rui.month)) rui.month=months.includes(thisMonth())?thisMonth():months[0];
+  if(!rui.month) return '<div class="page"><div class="phead"><h1>Reports</h1></div><div class="card"><div class="empty">No dated tickets yet.</div></div></div>';
+  const d=monthData(rui.month), tp=techPerf(Object.values(visits)), tpm=techPerf(d.xs);
+  const kpi=(l,v,s)=>`<div class="card kpi"><span class="lbl">${l}</span><b>${v}</b><span class="sub">${s}</span></div>`;
+  const st=['new','recheck','review','completed','cancelled'].map(k=>[k,d.xs.filter(v=>v.status===k).length]).filter(x=>x[1]);
+  return `<div class="page">
+    <div class="phead"><div><h1>Reports</h1><div class="sub">Monthly service report for Kohler UAE</div></div>
+      <div class="actions"><select id="r-month" class="field" style="margin:0;width:auto;height:38px;padding:0 32px 0 12px">${months.map(m=>`<option value="${m}" ${m===rui.month?'selected':''}>${mlab(m)}</option>`).join('')}</select>
+      ${downloadsApi?'<button class="btn" data-act="rcsv">'+svg('doc',16)+'CSV</button>':''}${canPdf()?'<button class="btn primary" data-act="rpdf">'+svg('doc',16)+'Download PDF report</button>':''}</div></div>
+    <div class="kpis">
+      ${kpi('Visits',d.xs.length,'scheduled in '+mlab(rui.month))}
+      ${kpi('Completed',d.done.length,d.xs.length?Math.round(100*d.done.length/d.xs.length)+'% of visits':'—')}
+      ${kpi('SLA met',d.sla==null?'—':d.sla+'%',d.att+' timed arrivals')}
+      ${kpi('Resolved',d.res==null?'—':d.res+'%','of '+d.outc+' with an outcome')}
+      ${kpi('Avg time on site',dur(d.avg),d.timed+' timed visits')}
+      ${kpi('Invoiced',d.invoiced,'with a Z invoice no.')}
+    </div>
+    <div style="display:flex;flex-direction:column;gap:16px">
+      <div class="card"><div class="card-h"><h3>Visits in ${mlab(rui.month)}</h3><span class="sub">${d.xs.length} tickets · ${st.map(([k,n])=>n+' '+STATUS[k].toLowerCase()).join(' · ')}</span></div>
+        ${d.xs.length?`<div class="tblwrap"><table class="tbl"><thead><tr><th>Ticket</th><th>Date</th><th>Site</th><th>Product</th><th>Status</th><th>Outcome</th><th>Z Invoice</th></tr></thead><tbody>${d.xs.map(v=>`<tr><td><button class="linkbtn" data-open="${esc(v.id)}">#${esc(v.id)}</button></td><td class="num" style="white-space:nowrap">${esc(dm(v.scheduled))}</td><td>${esc(siteOf(v))}</td><td>${esc(v.product||'—')}</td><td>${chip(v)}</td><td>${esc(v.outcome||'—')}</td><td class="num">${esc(v.billingRef||'—')}</td></tr>`).join('')}</tbody></table></div>`:'<div class="empty">No visits this month.</div>'}</div>
+      <div class="charts">
+        <div class="card"><div class="card-h"><div><h3>Busiest sites</h3><div class="sub">${mlab(rui.month)}</div></div></div><div class="card-b">${d.xs.length?hbars(counts(d.xs,v=>(v.site||'').split('|')[0].trim(),6)):'<div class="sub">No visits.</div>'}</div></div>
+        <div class="card"><div class="card-h"><div><h3>Products serviced</h3><div class="sub">${mlab(rui.month)}</div></div></div><div class="card-b">${d.xs.length?hbars(counts(d.xs,v=>v.product||'Not recorded',6)):'<div class="sub">No visits.</div>'}</div></div>
+      </div>
+    </div>
+    <div class="card"><div class="card-h"><div><h3>Technician performance</h3><div class="sub">From the technicians named on each visit · all time, with ${mlab(rui.month)} in brackets</div></div></div>
+      ${tp.length?`<div class="tblwrap"><table class="tbl"><thead><tr><th>Technician</th><th>Visits</th><th>Completed</th><th>Resolved</th><th>Avg time on site</th></tr></thead><tbody>${tp.map(r=>{ const mm=tpm.find(x=>x.name===r.name); return `<tr><td><b>${esc(r.name)}</b></td><td class="num">${r.visits} <span class="sub">(${mm?mm.visits:0})</span></td><td class="num">${r.done}</td><td class="num">${r.res}</td><td class="num">${dur(r.mins.length?r.mins.reduce((a,b)=>a+b,0)/r.mins.length:null)}</td></tr>`; }).join('')}</tbody></table></div>`:'<div class="empty">No technicians named on visits yet. Names entered in "Technicians who attended" appear here.</div>'}
+    </div>
+  </div>`;
+}
+async function reportPdf(){
+  if(!canPdf()) return; const m=rui.month, d=monthData(m);
+  const {jsPDF}=window.jspdf; const doc=new jsPDF({unit:'pt',format:'a4'}); const W=595.28,H=841.89,M=42; let y;
+  const ink=[13,27,62], muted=[103,114,140];
+  const header=()=>{ doc.setFillColor(10,31,77); doc.rect(0,0,W,84,'F'); doc.setFillColor(201,151,47); doc.rect(0,84,W,3,'F'); doc.setTextColor(255,255,255); doc.setFont('helvetica','bold'); doc.setFontSize(19); doc.text('ZIAR  IMAAR',M,40); doc.setFont('helvetica','normal'); doc.setFontSize(7.5); doc.setTextColor(201,211,234); doc.text('T E C H N I C A L   S E R V I C E S   L . L . C .',M,55); doc.setFontSize(10); doc.setTextColor(241,210,127); doc.text('Kohler UAE  ·  Monthly service report',W-M,38,{align:'right'}); doc.setFontSize(9); doc.setTextColor(255,255,255); doc.text(mlab(m),W-M,54,{align:'right'}); y=116; };
+  const cols=[[M,'Ticket'],[M+52,'Date'],[M+96,'Site'],[M+262,'Product'],[M+390,'Status'],[M+460,'Invoice']];
+  const thead=()=>{ doc.setFont('helvetica','bold'); doc.setFontSize(7.5); doc.setTextColor(...muted); cols.forEach(([x,t])=>doc.text(t.toUpperCase(),x,y)); y+=6; doc.setDrawColor(227,231,239); doc.line(M,y,W-M,y); y+=12; };
+  header(); doc.setTextColor(...ink); doc.setFont('helvetica','bold'); doc.setFontSize(16); doc.text('Service summary · '+mlab(m),M,y); y+=24;
+  const k=[['Visits',d.xs.length],['Completed',d.done.length],['SLA met',d.sla==null?'—':d.sla+'%'],['Resolved',d.res==null?'—':d.res+'%'],['Avg on site',dur(d.avg)],['Invoiced',d.invoiced]];
+  const cw=(W-2*M)/6; k.forEach(([l,v],i)=>{ const x=M+i*cw; doc.setFont('helvetica','normal'); doc.setFontSize(7.5); doc.setTextColor(...muted); doc.text(l.toUpperCase(),x,y); doc.setFont('helvetica','bold'); doc.setFontSize(15); doc.setTextColor(...ink); doc.text(String(v),x,y+18); }); y+=44;
+  thead();
+  d.xs.forEach(v=>{ if(y>H-60){ doc.addPage(); header(); thead(); } doc.setFont('helvetica','normal'); doc.setFontSize(8.5); doc.setTextColor(...ink);
+    const row=['#'+v.id,dm(v.scheduled),siteOf(v),v.product||'—',STATUS[v.status],v.billingRef||'—'];
+    row.forEach((t,i)=>{ const w=(cols[i+1]?cols[i+1][0]:W-M)-cols[i][0]-6; doc.text(doc.splitTextToSize(String(t),w)[0]||'',cols[i][0],y); }); y+=15; });
+  const tp=techPerf(d.xs); if(tp.length){ if(y>H-120){ doc.addPage(); header(); } y+=14; doc.setFont('helvetica','bold'); doc.setFontSize(11); doc.setTextColor(...ink); doc.text('Technicians this month',M,y); y+=16; doc.setFont('helvetica','normal'); doc.setFontSize(9); tp.forEach(r=>{ doc.text(r.name+' — '+r.visits+' visits, '+r.done+' completed, avg on site '+dur(r.mins.length?r.mins.reduce((a,b)=>a+b,0)/r.mins.length:null),M,y); y+=14; }); }
+  const pages=doc.getNumberOfPages(); for(let i=1;i<=pages;i++){ doc.setPage(i); doc.setFont('helvetica','normal'); doc.setFontSize(8); doc.setTextColor(...muted); doc.text('Generated '+dmhm(new Date().toISOString())+' · Ziar Imaar Technical Services L.L.C.',M,H-28); doc.text('Page '+i+' of '+pages,W-M,H-28,{align:'right'}); }
+  try{ await downloadsApi.save({filename:'ziar-imaar-kohler-service-report-'+m+'.pdf',data:doc.output('blob')}); toast('Report saved'); logAction('Downloaded monthly report',{detail:mlab(m)}); }catch(err){ if(!(err&&err.code==='declined')) toast('Could not save the report. Try again in a moment.'); }
+}
+
 /* ---------- inventory ---------- */
 const invState=i=>(+i.stock||0)<=0?{cls:'cancelled',label:'Out of stock'}:(+i.stock||0)<=(+i.min||0)?{cls:'review',label:'Low stock'}:{cls:'completed',label:'In stock'};
 const aed=n=>'AED '+(Math.round(n*100)/100).toLocaleString('en-US',{minimumFractionDigits:0,maximumFractionDigits:2});
@@ -915,7 +989,7 @@ function adminView(){
   if(adminTab==='users') body=`<div class="pgrid">
     <div class="card"><div class="card-h"><h3>People with access</h3><span class="sub">${assigned.length} assigned</span></div>
       <div class="banner gold" style="margin:12px 16px 4px;border-radius:9px"><div><b>Admins</b>The owner and anyone given Editor access from the Share menu are admins automatically.</div></div>
-      <div>${assigned.length?assigned.map(([id,r])=>personRow(id,[`<div class="sub">Assigned ${esc(dm(r.at))}${r.by?' by '+esc(nameOf(r.by)):''}</div>`,`<span style="display:flex;gap:8px;align-items:center"><select class="field" data-setrole="${esc(id)}" style="margin:0;width:auto;padding:6px 30px 6px 10px">${['office','technician','viewer'].map(x=>`<option value="${x}" ${r.role===x?'selected':''}>${ROLE_NAME[x]}</option>`).join('')}</select><button class="linkbtn danger" data-unrole="${esc(id)}">Remove</button></span>`])).join(''):'<div class="empty">No Office, Technician or Viewer users yet. Add people on the right, or approve access requests.</div>'}</div></div>
+      <div>${assigned.length?assigned.map(([id,r])=>personRow(id,[`<div class="sub">Assigned ${esc(dm(r.at))}${r.by?' by '+esc(nameOf(r.by)):''}</div>${r.role==='technician'?`<input class="field" data-tphone="${esc(id)}" value="${esc(r.phone||'')}" placeholder="WhatsApp number, e.g. 050 123 4567" style="margin-top:6px;max-width:260px;padding:6px 10px" inputmode="tel">`:''}`,`<span style="display:flex;gap:8px;align-items:center"><select class="field" data-setrole="${esc(id)}" style="margin:0;width:auto;padding:6px 30px 6px 10px">${['office','technician','viewer'].map(x=>`<option value="${x}" ${r.role===x?'selected':''}>${ROLE_NAME[x]}</option>`).join('')}</select><button class="linkbtn danger" data-unrole="${esc(id)}">Remove</button></span>`])).join(''):'<div class="empty">No Office, Technician or Viewer users yet. Add people on the right, or approve access requests.</div>'}</div></div>
     <div style="display:flex;flex-direction:column;gap:16px">
       <div class="card"><div class="card-h"><h3>Add a person</h3><span class="sub">From your organization</span></div><div class="card-b">
         <label class="search" style="max-width:none">${svg('search',16)}<input id="p-q" class="field" type="search" placeholder="Search by name" value="${esc(psearch.q)}" autocomplete="off" aria-label="Search people"></label>
@@ -945,7 +1019,7 @@ function resultsHtml(){
 async function setRole(id,role,label){
   if(!db) return;
   try{
-    if(role){ await db.doc('roles/'+id).set({role,at:new Date().toISOString(),by:me.id||''}); }
+    if(role){ await db.doc('roles/'+id).set({role,at:new Date().toISOString(),by:me.id||'',phone:(roles[id]&&roles[id].phone)||''}); }
     else await db.doc('roles/'+id).delete();
     if(requests[id]) db.doc('requests/'+id).delete().catch(()=>{});
     logAction(role?'Assigned role':'Removed access',{detail:(label||nameOf(id)||'Person')+(role?' → '+ROLE_NAME[role]:'')});
@@ -1034,7 +1108,7 @@ function render(){
   if(a==='none'){ $app.innerHTML=gateHtml(); document.getElementById('modal').innerHTML=''; return; }
   if(!listInit){ listInit=true; if(a==='technician') list.status='mine'; }
   if(!can(route)){ route=PERMS[a][0]; try{ history.replaceState(null,'','#'+(route==='tickets'&&sel?'t'+sel:route)); }catch(e){} }
-  $app.innerHTML=route==='tickets'?ticketsView():route==='review'?reviewView():route==='parts'?partsView():route==='admin'?adminView():route==='assets'?assetsView():dashView();
+  $app.innerHTML=route==='tickets'?ticketsView():route==='review'?reviewView():route==='parts'?partsView():route==='admin'?adminView():route==='assets'?assetsView():route==='reports'?reportsView():dashView();
   document.getElementById('modal').innerHTML=modalHtml();
   if(route==='tickets'&&mode==='visit') initSig();
 }
@@ -1080,8 +1154,10 @@ document.addEventListener('input',e=>{
 document.addEventListener('change',async e=>{
   const t=e.target;
   if(t.form&&t.form.id==='nvform'&&t.name) nform[t.name]=t.value;
+  if(t.dataset&&t.dataset.tphone){ const id=t.dataset.tphone, r=roles[id]; if(!r||!db) return; try{ await db.doc('roles/'+id).set(Object.assign({},r,{phone:t.value.trim()})); logAction('Updated technician phone',{detail:nameOf(id)}); toast('Phone saved for '+(nameOf(id)||'technician')); }catch(e){ toast('Only admins can change this.'); } return; }
   if(t.dataset&&t.dataset.assign){ const ov=visits[t.dataset.assign]; if(!ov) return; const n=clone(ov); n.assignedTo=t.value; await save(n,t.value?'Assigned to '+(nameOf(t.value)||'technician'):'Unassigned technician'); toast(t.value?'#'+n.id+' assigned to '+(nameOf(t.value)||'technician'):'#'+n.id+' is unassigned'); return; }
   if(t.dataset&&t.dataset.setrole){ await setRole(t.dataset.setrole,t.value); return; }
+  if(t.id==='r-month'){ rui.month=t.value; render(); return; }
   if(t.id==='s-month'){ pui.month=t.value; render(); return; }
   if(t.id!=='f-evidence') return;
   const files=[...t.files]; if(!files.length) return;
@@ -1098,7 +1174,9 @@ document.addEventListener('change',async e=>{
 document.addEventListener('submit',async e=>{
   e.preventDefault(); const id=e.target.id, fd=new FormData(e.target), g=k=>(fd.get(k)||'').toString().trim();
   if(id==='partform'){ const n=g('')||document.getElementById('f-part').value.trim(); if(!n) return;
-    const ex=draft.parts.find(p=>p.name.toLowerCase()===n.toLowerCase()); if(ex) ex.qty++; else draft.parts.push({name:n,qty:1});
+    const it=Object.values(inventory).find(i=>(i.partNo+' · '+i.description).toLowerCase()===n.toLowerCase()||(i.partNo||'').toLowerCase()===n.toLowerCase());
+    const nm=it?it.description+' ('+it.partNo+')':n;
+    const ex=draft.parts.find(p=>(it&&p.invId===it.id)||p.name.toLowerCase()===nm.toLowerCase()); if(ex) ex.qty++; else draft.parts.push(it?{name:nm,qty:1,invId:it.id,sku:it.partNo}:{name:n,qty:1});
     render(); document.getElementById('f-part').focus(); return; }
   if(id==='nvform'){
     const vid=nextId(), sched=new Date(g('scheduled')+':00+04:00');
@@ -1189,13 +1267,17 @@ document.addEventListener('click',async e=>{
   if(act==='savevisit'||act==='saveparts'||act==='savebilling'){
     const d=draft, n=clone(visits[d.id]);
     if(act==='savevisit') Object.assign(n,{arrived:d.arrived||null,finished:d.finished||null,findings:(d.findings||'').trim(),work:(d.work||'').trim(),nextAction:(d.nextAction||'').trim(),outcome:d.outcome||'',returnVisit:d.returnVisit||'No',technician:(d.technician||'').trim(),evidence:d.evidence,signature:d.signature||null,signerName:(d.signerName||'').trim()});
-    if(act==='saveparts') n.parts=d.parts;
+    if(act==='saveparts'){ const before={}, after={}; (n.parts||[]).forEach(p=>{ if(p.invId) before[p.invId]=(before[p.invId]||0)+(+p.qty||0); }); d.parts.forEach(p=>{ if(p.invId) after[p.invId]=(after[p.invId]||0)+(+p.qty||0); });
+      for(const iid of new Set([...Object.keys(before),...Object.keys(after)])){ const it=inventory[iid]; const delta=(after[iid]||0)-(before[iid]||0); if(!it||!delta) continue; const {id,...rest}=it; const ns=Math.max(0,(+it.stock||0)-delta); logAction(delta>0?'Took stock for ticket':'Returned stock from ticket',{ticket:n.id,detail:it.partNo+': '+(+it.stock||0)+' → '+ns}); saveDoc('inventory',iid,Object.assign(rest,{stock:ns,at:new Date().toISOString()}),inventory); if(ns<=(+it.min||0)) setTimeout(()=>toast(it.partNo+' is now '+(ns<=0?'out of stock':'below minimum')),1200); }
+      n.parts=d.parts; }
     if(act==='savebilling') n.billingRef=d.billingRef||'';
     mode='view'; draft=null; await save(n,{savevisit:'Updated visit report',saveparts:'Updated parts used',savebilling:'Updated Z invoice no.'}[act]); toast('Saved'); return;
   }
   if(act==='submit'&&v){ if(!canSubmit(v)||!canEditTicket(v)) return; const n=clone(v); n.status='review'; n.history=[...(n.history||[]),hist('review')]; await save(n,'Submitted for review'); toast('Submitted for review'); return; }
   if(act==='unconfirm'){ rev.confirm=null; render(); return; }
   if(act==='savedetails'){ const ov=visits[rev.id]; if(!ov||!rev.edit) return; const n=clone(ov); n.billingRef=rev.edit.inv.trim(); n.internalNotes=rev.edit.int.trim(); await save(n,'Updated office details'); toast('Details saved for #'+n.id); return; }
+  if(act==='rpdf'){ await reportPdf(); return; }
+  if(act==='rcsv'){ const m=rui.month, ids=new Set(monthData(m).xs.map(v=>v.id)); const all=visits; const keep={}; for(const k in all) if(ids.has(k)) keep[k]=all[k]; const saved=visits; visits=keep; const csv=toCsv(); visits=saved; try{ await downloadsApi.save({filename:'ziar-imaar-kohler-tickets-'+m+'.csv',data:csv}); toast('CSV saved'); }catch(err){ if(!(err&&err.code==='declined')) toast('Could not export the CSV.'); } return; }
   if(act==='csv'){ try{ await downloadsApi.save({filename:'ziar-imaar-kohler-tickets-'+dayKey(new Date().toISOString())+'.csv',data:toCsv()}); toast('CSV saved'); }catch(err){ if(!(err&&err.code==='declined')) toast('Could not export the CSV. Try again in a moment.'); } return; }
   if(act==='draftnote'){
     const ov=visits[rev.id]; if(!ov) return; rev.drafting=true; render();
