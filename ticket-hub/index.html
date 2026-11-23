@@ -390,8 +390,12 @@ kbd{font-family:var(--mono);font-size:11px;border:1px solid var(--line2);border-
 (() => {
 const STATUS={new:'New',review:'Ready for review',completed:'Completed',recheck:'Recheck',cancelled:'Cancelled'};
 const SLA_HOURS={Urgent:4,High:24,Normal:72};
-const OUTCOMES=['Resolved','Pending Parts','Further Action Required'];
+const OUTCOMES=['Resolved','Pending Parts','Further Action Required','Inspection Completed','No Issue Found','Other'];
 const PTYPES=['Parts Needed','Parts Used','Parts Received'];
+// Dubai Mall washroom areas, as written in the service desk records
+const DM_AREAS=["(1,13 ) 1st Floor – P5 High-End Male 13 toilets/cubicles", "(2,16) 1st Floor – P5 High-End Female 16 toilets/cubicles", "(3,11) 2nd Floor – High-End Male 11 toilets/cubicles", "(4,18) 2nd Floor – High-End Female 18 toilets/cubicles", "(5,5) 2nd Floor – MLB Male 5 toilets/cubicles", "(6,6) 2nd Floor – MLB Female 6 toilets/cubicles"];
+const areaShort=a=>String(a).replace(/^\([^)]*\)\s*/,'').replace(/\s+\d+\s+toilets\/cubicles$/,'');
+const areasOf=v=>String(v.washroom||'').split('\n').map(x=>x.trim()).filter(Boolean);
 const ICON={
   dashboard:'<path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/>',
   tickets:'<path d="M4 5h16v4a2 2 0 0 0 0 4v4H4v-4a2 2 0 0 0 0-4z"/><path d="M9 9h6M9 13h4"/>',
@@ -707,7 +711,7 @@ const FILTERS_ALL=[['mine','Assigned to me'],['open','Open'],['unassigned','Unas
 const filtersFor=()=>{ const a=access(); return FILTERS_ALL.filter(([k])=>a==='technician'?['mine','review','completed','all'].includes(k):a==='viewer'?!['mine','unassigned'].includes(k):k!=='mine'); };
 function listRows(){
   const q=list.q.trim().toLowerCase();
-  const m=v=>!q||[v.id,v.ref,v.site,v.product,v.issue,v.model,v.region,v.contact,v.technician,v.billingRef].join(' ').toLowerCase().includes(q);
+  const m=v=>!q||[v.id,v.ref,v.site,v.product,v.issue,v.model,v.region,v.contact,v.technician,v.billingRef,v.serial,v.washroom].join(' ').toLowerCase().includes(q);
   const f={mine:v=>editable(v)&&v.assignedTo===me.id,unassigned:v=>editable(v)&&!v.assignedTo,open:editable,review:v=>v.status==='review',completed:v=>v.status==='completed',cancelled:v=>v.status==='cancelled',all:()=>true}[list.status];
   const mineOnly=access()==='technician';
   return Object.values(visits).filter(v=>!mineOnly||v.assignedTo===me.id).filter(f).filter(m);
@@ -768,9 +772,12 @@ function headCard(v,opts={}){
       <div><div class="lbl">Emirate</div><div>${esc(v.region)||'—'}</div></div>
       <div><div class="lbl">Product</div><div>${esc(v.product)||'—'}</div></div>
       <div><div class="lbl">Model / SKU</div><div class="num">${esc(v.model)||'—'}</div></div>
+      <div><div class="lbl">Serial no.</div><div class="num">${esc(v.serial)||'—'}</div></div>
       <div><div class="lbl">Category</div><div>${esc(v.category)||'—'}</div></div>
       <div><div class="lbl">Visit type</div><div>${esc(v.type)||'—'}</div></div>
-      <div class="wide"><div class="lbl">Contact</div><div>${esc(v.contact)||'—'}${v.address?' · '+esc(v.address):''}</div></div>
+      <div><div class="lbl">Contacted</div><div class="num">${v.contactedAt?esc(dmhm(v.contactedAt)):'—'}</div></div>
+      ${areasOf(v).length?`<div style="grid-column:1/-1"><div class="lbl">Washroom areas</div><div>${areasOf(v).map(a=>`<span class="chip plain" style="margin:2px 6px 2px 0">${esc(areaShort(a))}</span>`).join('')}</div></div>`:''}
+      <div style="grid-column:1/-1"><div class="lbl">Contact</div><div>${esc(v.contact)||'—'}${v.address&&v.address!==v.site?' · '+esc(v.address):''}</div></div>
     </div>
     <div class="quick">
       <button class="btn" data-act="call">${svg('phone',16)}Call</button>
@@ -808,7 +815,8 @@ function detailHtml(v){
   if(v.status==='completed') banner=`<div class="banner ok"><div><b>Completed</b>${esc(dmhm(lastClose.at))}${lastClose.note&&lastClose.note!=='Imported from service desk'?' · '+esc(lastClose.note):''}</div></div>`;
   if(v.status==='cancelled') banner=`<div class="banner bad"><div><b>Cancelled</b>${lastClose.note?esc(lastClose.note):''}</div></div>`;
   const ro=editable(v)&&!canEditTicket(v)?`<div class="banner gold"><div><b>Read only</b>${access()==='viewer'?'Viewers can see tickets and download service reports, but not change them.':'Only the assigned technician or the office can update this visit.'}</div></div>`:'';
-  return headCard(v)+escB+banner+ro+(editable(v)&&canEditTicket(v)?stepsCard(v):'')+bodyHtml(v);
+  const ins=v.instructions?`<div class="banner gold"><div><b>Service instructions</b>${esc(v.instructions)}</div></div>`:'';
+  return headCard(v)+escB+banner+ins+ro+(editable(v)&&canEditTicket(v)?stepsCard(v):'')+bodyHtml(v);
 }
 function bodyHtml(v){
   const ev=evItems(v);
@@ -827,6 +835,7 @@ function bodyHtml(v){
         <div class="kv"><span>Outcome</span><span>${esc(v.outcome)||'—'}</span></div>
         <div class="kv"><span>Technicians</span><span>${esc(v.technician)||'—'}</span></div>
         <div class="kv"><span>Return visit</span><span>${esc(v.returnVisit||'No')}</span></div>
+        ${v.customerFeedback?`<div class="kv"><span>Customer feedback</span><span>${esc(v.customerFeedback)}</span></div>`:''}
         <div class="kv"><span>Z Invoice No.</span><span>${esc(v.billingRef)||'—'}</span></div>
         ${(()=>{ const a=assetFor(v); if(!a) return ''; const w=warranty(a); return `<div class="kv"><span>Registered asset</span><span>${esc(a.serial?'S/N '+a.serial:a.model)}${w?` · <span class="chip ${w.cls}" style="height:20px">${esc(w.label)}</span>`:''}</span></div>`; })()}
         ${v.internalNotes?`<div class="kv"><span>Internal notes</span><span>${esc(v.internalNotes)}</span></div>`:''}
@@ -859,6 +868,8 @@ function editHtml(){
   return `<div class="card"><div class="card-h"><h3>Complete visit</h3><span class="sub">Saved when you press Save</span></div><div class="card-b form">
     <label class="flabel">Technicians who attended<input id="f-tech" class="field" value="${esc(d.technician)}" placeholder="e.g. Shamsidine, Basheer" autocomplete="off"></label>
     <div><span class="lbl">Time in / out</span><div class="stamps">${stamp('arrived','Arrived')}${stamp('finished','Finished')}</div>${d.arrived&&d.finished?`<div class="sub" style="margin-top:6px">On site ${dur(onsite(d))}</div>`:''}</div>
+    <div class="fgrid" style="grid-template-columns:repeat(auto-fit,minmax(220px,1fr))"><label>Serial number<input id="f-serial" class="field" value="${esc(d.serial)}" placeholder="From the unit label" autocomplete="off"></label></div>
+    ${isDM(d)?`<div><span class="lbl">Dubai Mall washroom areas</span><div class="pills">${DM_AREAS.map((a,i)=>`<button class="pill" data-area="${i}" aria-pressed="${areasOf(d).includes(a)}">${esc(areaShort(a))}</button>`).join('')}</div></div>`:''}
     <label class="flabel">Findings<textarea id="f-findings" class="field" rows="3" placeholder="What you found on site">${esc(d.findings)}</textarea></label>
     <label class="flabel">Action taken<textarea id="f-work" class="field" rows="4" placeholder="The work done during this visit">${esc(d.work)}</textarea></label>
     <label class="flabel">Required next action<textarea id="f-next" class="field" rows="2" placeholder="Parts to supply, follow-up needed, or leave blank">${esc(d.nextAction)}</textarea></label>
@@ -866,6 +877,7 @@ function editHtml(){
       <div><span class="lbl">Outcome</span><div class="pills">${OUTCOMES.map(o=>`<button class="pill" data-outcome="${o}" aria-pressed="${d.outcome===o}">${o}</button>`).join('')}</div></div>
       <div><span class="lbl">Return visit required</span><div class="pills">${['No','Yes'].map(o=>`<button class="pill" data-ret="${o}" aria-pressed="${(d.returnVisit||'No')===o}">${o}</button>`).join('')}</div></div>
     </div>
+    <label class="flabel">Customer feedback<textarea id="f-fb" class="field" rows="2" placeholder="What the customer said, if anything">${esc(d.customerFeedback)}</textarea></label>
     <div><span class="lbl">Photos / documents · ${ev.length}</span>
       <label class="drop" for="f-evidence">${uploading?`<span class="spin"></span> Uploading ${uploading} file${uploading>1?'s':''}…`:'+ Add photo or PDF'}<input id="f-evidence" type="file" accept="image/*,application/pdf" multiple ${uploading?'disabled':''}></label>
       ${!assets&&loaded?'<div class="sub" style="margin-top:6px">File storage is not available in this view, so only file names are saved.</div>':''}
@@ -985,9 +997,10 @@ function reportsView(){
     </div>
     <div style="display:flex;flex-direction:column;gap:16px">
       <div class="card"><div class="card-h"><h3>Visits in ${mlab(rui.month)}</h3><span class="sub">${d.xs.length} tickets · ${st.map(([k,n])=>n+' '+STATUS[k].toLowerCase()).join(' · ')}</span></div>
-        ${d.xs.length?`<div class="tblwrap"><table class="tbl"><thead><tr><th>Ticket</th><th>Date</th><th>Site</th><th>Product</th><th>Status</th><th>Outcome</th><th>Z Invoice</th></tr></thead><tbody>${d.xs.map(v=>`<tr><td><button class="linkbtn" data-open="${esc(v.id)}">#${esc(v.id)}</button></td><td class="num" style="white-space:nowrap">${esc(dm(v.scheduled))}</td><td>${esc(siteOf(v))}</td><td>${esc(v.product||'—')}</td><td>${chip(v)}</td><td>${esc(v.outcome||'—')}</td><td class="num">${esc(v.billingRef||'—')}</td></tr>`).join('')}</tbody></table></div>`:'<div class="empty">No visits this month.</div>'}</div>
+        ${d.xs.length?`<div class="tblwrap"><table class="tbl"><thead><tr><th>Ticket</th><th>Date</th><th>Site</th><th>Product</th><th>Status</th><th>Outcome</th><th>Z Invoice</th></tr></thead><tbody>${d.xs.map(v=>`<tr><td><button class="linkbtn" data-open="${esc(v.id)}">#${esc(v.id)}</button></td><td class="num" style="white-space:nowrap">${esc(dm(v.scheduled))}</td><td>${esc(siteOf(v))}</td><td>${esc(v.product||'—')}</td><td>${chip(v)}</td><td>${esc(v.outcome||'—')}</td><td class="num" style="white-space:nowrap">${esc(v.billingRef||'—')}</td></tr>`).join('')}</tbody></table></div>`:'<div class="empty">No visits this month.</div>'}</div>
       <div class="charts">
         <div class="card"><div class="card-h"><div><h3>Busiest sites</h3><div class="sub">${mlab(rui.month)}</div></div></div><div class="card-b">${d.xs.length?hbars(counts(d.xs,v=>(v.site||'').split('|')[0].trim(),6)):'<div class="sub">No visits.</div>'}</div></div>
+        ${(()=>{ const dmx=d.xs.filter(isDM); const m={}; dmx.forEach(v=>areasOf(v).forEach(a=>{ const k=areaShort(a); m[k]=(m[k]||0)+1; })); const rows=Object.entries(m).map(([label,n])=>({label,n})).sort((a,b)=>b.n-a.n); return `<div class="card"><div class="card-h"><div><h3>Dubai Mall washroom areas</h3><div class="sub">Visits per area · ${mlab(rui.month)}</div></div></div><div class="card-b">${rows.length?hbars(rows):'<div class="sub">No Dubai Mall areas recorded this month.</div>'}</div></div>`; })()}
         <div class="card"><div class="card-h"><div><h3>Products serviced</h3><div class="sub">${mlab(rui.month)}</div></div></div><div class="card-b">${d.xs.length?hbars(counts(d.xs,v=>v.product||'Not recorded',6)):'<div class="sub">No visits.</div>'}</div></div>
       </div>
     </div>
@@ -1177,7 +1190,7 @@ async function downloadReport(v){
   header();
   doc.setTextColor(...ink); doc.setFont('helvetica','bold'); doc.setFontSize(15);
   const title=doc.splitTextToSize(siteOf(v)+(v.issue?': '+v.issue:''),W-2*M); doc.text(title,M,y); y+=title.length*18+6;
-  const kv=[['Ticket','#'+v.id],['Status',STATUS[v.status]],['Visit date',v.scheduled?dayLong(v.scheduled):'—'],['Emirate',v.region||'—'],['Product',v.product||'—'],['Model / SKU',v.model||'—'],['Category',v.category||'—'],['Visit type',v.type||'—'],['Technicians',v.technician||'—'],['Time in / out',v.arrived?hm(v.arrived)+' – '+(hm(v.finished)||'—'):'—'],['Outcome',v.outcome||'—'],['Return visit',v.returnVisit||'No'],['Z Invoice No.',v.billingRef||'—'],['Contact',v.contact||'—']];
+  const kv=[['Ticket','#'+v.id],['Status',STATUS[v.status]],['Visit date',v.scheduled?dayLong(v.scheduled):'—'],['Emirate',v.region||'—'],['Product',v.product||'—'],['Model / SKU',v.model||'—'],['Serial no.',v.serial||'—'],['Category',v.category||'—'],['Visit type',v.type||'—'],['Technicians',v.technician||'—'],['Time in / out',v.arrived?hm(v.arrived)+' – '+(hm(v.finished)||'—'):'—'],['Outcome',v.outcome||'—'],['Return visit',v.returnVisit||'No'],['Z Invoice No.',v.billingRef||'—'],['Contact',v.contact||'—']];
   doc.setDrawColor(227,231,239); const colW=(W-2*M)/2;
   for(let i=0;i<kv.length;i+=2){ need(34); for(let c=0;c<2;c++){ const k=kv[i+c]; if(!k) continue; const x=M+c*colW;
       doc.setFont('helvetica','normal'); doc.setFontSize(7.5); doc.setTextColor(...muted); doc.text(k[0].toUpperCase(),x,y);
@@ -1188,7 +1201,7 @@ async function downloadReport(v){
     doc.setFont('helvetica','bold'); doc.setFontSize(8); doc.setTextColor(125,92,18); doc.text(t.toUpperCase(),M,y); y+=14;
     doc.setFont('helvetica','normal'); doc.setFontSize(10); doc.setTextColor(...ink);
     lines.forEach(l=>{ need(14); doc.text(l,M,y); y+=13.5; }); y+=10; };
-  para('Findings',v.findings); para('Action taken',v.work); para('Required next action',v.nextAction);
+  para('Service instructions',v.instructions); para('Washroom areas',areasOf(v).map(areaShort).join(', ')); para('Findings',v.findings); para('Action taken',v.work); para('Required next action',v.nextAction); para('Customer feedback',v.customerFeedback);
   para('Parts',(v.parts||[]).map(p=>p.name+' × '+p.qty).join('\n')); para('Photos / documents',evItems(v).map(e=>e.name).join(', '));
   if(typeof v.signature==='string'&&v.signature.startsWith('data:image/png')){ need(120);
     doc.setFont('helvetica','bold'); doc.setFontSize(8); doc.setTextColor(125,92,18); doc.text('CUSTOMER SIGN-OFF',M,y); y+=8;
@@ -1200,9 +1213,9 @@ async function downloadReport(v){
   catch(err){ if(!(err&&err.code==='declined')) toast('Could not save the report. Try again in a moment.'); }
 }
 function toCsv(){
-  const cols=['Ticket','Reference','Status','Site','Emirate','Product','Model','Category','Type','Priority','Issue','Scheduled (Dubai)','SLA','Time in','Time out','On site (min)','Outcome','Technicians','Return visit','Z Invoice No.','Findings','Action taken','Required next action','Parts','Evidence files','Contact','Address','Signed by'];
+  const cols=['Ticket','Reference','Status','Site','Emirate','Product','Model','Category','Type','Priority','Issue','Scheduled (Dubai)','SLA','Time in','Time out','On site (min)','Outcome','Technicians','Return visit','Z Invoice No.','Findings','Action taken','Required next action','Parts','Evidence files','Contact','Address','Serial no.','Washroom areas','Customer feedback','Service instructions','Signed by'];
   const q=x=>{ const s=String(x??''); return /[",\n]/.test(s)?'"'+s.replace(/"/g,'""')+'"':s; };
-  const rows=Object.values(visits).sort((a,b)=>a.id.localeCompare(b.id)).map(v=>[v.id,v.ref,STATUS[v.status],v.site,v.region,v.product,v.model,v.category,v.type,v.priority||'Normal',v.issue,v.scheduled?dmy(v.scheduled)+' '+hm(v.scheduled):'',sla(v).label,hm(v.arrived),hm(v.finished),onsite(v)==null?'':Math.round(onsite(v)),v.outcome,v.technician,v.returnVisit||'No',v.billingRef,v.findings,v.work,v.nextAction,(v.parts||[]).map(p=>p.name+' x'+p.qty).join('; '),evItems(v).length,v.contact,v.address,v.signature?(v.signerName||'Signed'):'']);
+  const rows=Object.values(visits).sort((a,b)=>a.id.localeCompare(b.id)).map(v=>[v.id,v.ref,STATUS[v.status],v.site,v.region,v.product,v.model,v.category,v.type,v.priority||'Normal',v.issue,v.scheduled?dmy(v.scheduled)+' '+hm(v.scheduled):'',sla(v).label,hm(v.arrived),hm(v.finished),onsite(v)==null?'':Math.round(onsite(v)),v.outcome,v.technician,v.returnVisit||'No',v.billingRef,v.findings,v.work,v.nextAction,(v.parts||[]).map(p=>p.name+' x'+p.qty).join('; '),evItems(v).length,v.contact,v.address,v.serial,areasOf(v).map(areaShort).join('; '),v.customerFeedback,v.instructions,v.signature?(v.signerName||'Signed'):'']);
   return [cols,...rows].map(r=>r.map(q).join(',')).join('\n');
 }
 
@@ -1250,7 +1263,7 @@ function initSig(){
 /* ---------- events ---------- */
 document.addEventListener('input',e=>{
   const t=e.target, d=draft;
-  if(d){ if(t.id==='f-findings') d.findings=t.value; if(t.id==='f-work') d.work=t.value; if(t.id==='f-next') d.nextAction=t.value; if(t.id==='f-tech') d.technician=t.value; if(t.id==='f-signer') d.signerName=t.value; if(t.id==='f-bill') d.billingRef=t.value.trim(); }
+  if(d){ if(t.id==='f-findings') d.findings=t.value; if(t.id==='f-work') d.work=t.value; if(t.id==='f-next') d.nextAction=t.value; if(t.id==='f-tech') d.technician=t.value; if(t.id==='f-serial') d.serial=t.value; if(t.id==='f-fb') d.customerFeedback=t.value; if(t.id==='f-signer') d.signerName=t.value; if(t.id==='f-bill') d.billingRef=t.value.trim(); }
   if(t.id==='o-note'){ rev.note=t.value; const er=document.getElementById('o-err'); if(er) er.textContent=''; }
   if(t.id==='o-inv'&&rev.edit) rev.edit.inv=t.value;
   if(t.id==='o-int'&&rev.edit) rev.edit.int=t.value;
@@ -1383,6 +1396,7 @@ document.addEventListener('click',async e=>{
   if(ds.stamp){ draft[ds.stamp]=draft[ds.stamp]?null:new Date().toISOString(); render(); return; }
   if(ds.outcome){ draft.outcome=draft.outcome===ds.outcome?'':ds.outcome; render(); return; }
   if(ds.ret){ draft.returnVisit=ds.ret; render(); return; }
+  if(ds.area!==undefined&&draft){ const a=DM_AREAS[+ds.area], cur=areasOf(draft); draft.washroom=(cur.includes(a)?cur.filter(x=>x!==a):[...cur,a]).join('\n'); render(); return; }
   if(ds.rmev){ draft.evidence.splice(+ds.rmev,1); render(); return; }
   if(ds.q){ const p=draft.parts[+ds.q]; p.qty+= +ds.dq; if(p.qty<=0) draft.parts.splice(+ds.q,1); render(); return; }
   if(ds.decide){
@@ -1404,7 +1418,7 @@ document.addEventListener('click',async e=>{
   if(act==='clearsig'){ draft.signature=null; render(); return; }
   if(act==='savevisit'||act==='saveparts'||act==='savebilling'){
     const d=draft, n=clone(visits[d.id]);
-    if(act==='savevisit') Object.assign(n,{arrived:d.arrived||null,finished:d.finished||null,findings:(d.findings||'').trim(),work:(d.work||'').trim(),nextAction:(d.nextAction||'').trim(),outcome:d.outcome||'',returnVisit:d.returnVisit||'No',technician:(d.technician||'').trim(),evidence:d.evidence,signature:d.signature||null,signerName:(d.signerName||'').trim()});
+    if(act==='savevisit') Object.assign(n,{arrived:d.arrived||null,finished:d.finished||null,findings:(d.findings||'').trim(),work:(d.work||'').trim(),nextAction:(d.nextAction||'').trim(),outcome:d.outcome||'',returnVisit:d.returnVisit||'No',technician:(d.technician||'').trim(),serial:(d.serial||'').trim(),washroom:d.washroom||'',customerFeedback:(d.customerFeedback||'').trim(),evidence:d.evidence,signature:d.signature||null,signerName:(d.signerName||'').trim()});
     if(act==='saveparts'){ const before={}, after={}; (n.parts||[]).forEach(p=>{ if(p.invId) before[p.invId]=(before[p.invId]||0)+(+p.qty||0); }); d.parts.forEach(p=>{ if(p.invId) after[p.invId]=(after[p.invId]||0)+(+p.qty||0); });
       for(const iid of new Set([...Object.keys(before),...Object.keys(after)])){ const it=inventory[iid]; const delta=(after[iid]||0)-(before[iid]||0); if(!it||!delta) continue; const {id,...rest}=it; const ns=Math.max(0,(+it.stock||0)-delta); logAction(delta>0?'Took stock for ticket':'Returned stock from ticket',{ticket:n.id,detail:it.partNo+': '+(+it.stock||0)+' → '+ns}); saveDoc('inventory',iid,Object.assign(rest,{stock:ns,at:new Date().toISOString()}),inventory); if(ns<=(+it.min||0)) setTimeout(()=>toast(it.partNo+' is now '+(ns<=0?'out of stock':'below minimum')),1200); }
       n.parts=d.parts; }
