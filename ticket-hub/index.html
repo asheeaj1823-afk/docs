@@ -416,7 +416,9 @@ const ESC_TO=['','Technician','Office supervisor','Administrator'];
 
 let visits={}, parts={}, stock={};
 let db=null, assets=null, userApi=null, sampleApi=null, downloadsApi=null;
-let me={id:null,name:''};
+let me={id:null,name:''}, isOwnerFlag=false;
+// sign-in identity: the account id, or 'owner' for the artifact owner if the platform gives no id
+const uid=()=>me.id||(isOwnerFlag?'owner':null);
 const names={};
 let demo=false, loaded=false;
 let route='dashboard';
@@ -485,12 +487,13 @@ async function totpCheck(secret,code,last){ const c=Math.floor(Date.now()/30000)
 const b64=a=>btoa(String.fromCharCode(...new Uint8Array(a)));
 const unb64=s=>Uint8Array.from(atob(s),c=>c.charCodeAt(0));
 async function pinHash(pin,salt,iter){ const key=await crypto.subtle.importKey('raw',new TextEncoder().encode(pin),'PBKDF2',false,['deriveBits']); return b64(await crypto.subtle.deriveBits({name:'PBKDF2',salt:unb64(salt),iterations:iter,hash:'SHA-256'},key,256)); }
-const signedIn=()=>!!(unlock&&unlock.id===me.id&&unlock.until>Date.now());
-const needsSignIn=()=>!!(db&&!demo&&me.id&&!['loading','none'].includes(access())&&!signedIn());
-function fails(){ try{ const f=JSON.parse(localStorage.getItem(FAIL_KEY)||'null'); return f&&f.id===me.id?f:{id:me.id,count:0,until:0}; }catch(e){ return {id:me.id,count:0,until:0}; } }
+const signedIn=()=>!!(uid()&&unlock&&unlock.id===uid()&&unlock.until>Date.now());
+// fail closed: whenever live data is shown, a PIN and authenticator sign-in is required
+const needsSignIn=()=>!!(db&&!demo&&!['loading','none'].includes(access())&&!signedIn());
+function fails(){ try{ const f=JSON.parse(localStorage.getItem(FAIL_KEY)||'null'); return f&&f.id===uid()?f:{id:uid(),count:0,until:0}; }catch(e){ return {id:uid(),count:0,until:0}; } }
 function setFails(f){ try{ localStorage.setItem(FAIL_KEY,JSON.stringify(f)); }catch(e){} }
-async function loadPin(){ try{ const sn=await db.doc('pins/'+me.id).get(); pinDoc=sn.exists?sn.data():null; }catch(e){ pinDoc=null; } render(); }
-function startSession(keep){ unlock={id:me.id,until:Date.now()+SESSION_MS}; lastAct=Date.now(); for(const st of stores2()){ try{ st.removeItem(UNLOCK_KEY); }catch(e){} } try{ (keep?localStorage:sessionStorage).setItem(UNLOCK_KEY,JSON.stringify(unlock)); }catch(e){} }
+async function loadPin(){ if(!uid()){ pinDoc=null; return render(); } try{ const sn=await db.doc('pins/'+uid()).get(); pinDoc=sn.exists?sn.data():null; }catch(e){ pinDoc=null; } render(); }
+function startSession(keep){ unlock={id:uid(),until:Date.now()+SESSION_MS}; lastAct=Date.now(); for(const st of stores2()){ try{ st.removeItem(UNLOCK_KEY); }catch(e){} } try{ (keep?localStorage:sessionStorage).setItem(UNLOCK_KEY,JSON.stringify(unlock)); }catch(e){} }
 function signOut(reason){ if(signedIn()) logAction('Signed out',reason?{detail:reason}:{}); unlock=null; signStep='pin'; pendSecret=''; for(const st of stores2()){ try{ st.removeItem(UNLOCK_KEY); }catch(e){} } signErr=reason||''; pinDoc=undefined; modal=null; render(); }
 function signinHtml(){
   if(pinDoc===undefined&&!loadPin.busy){ loadPin.busy=true; loadPin().finally(()=>{ loadPin.busy=false; }); }
@@ -547,9 +550,9 @@ const canEditTicket=v=>{ const a=access(); return a==='admin'||a==='office'||(a=
 // each person appends to their own audit record (audit/<their id>); the store lets nobody else, the owner included, change it, and only admins read others' records
 let auditChain=Promise.resolve();
 function logAction(action,data={}){
-  if(!db||!me.id) return;
+  if(!db||!uid()) return;
   const e=Object.assign({at:new Date().toISOString(),action,role:access()},data);
-  auditChain=auditChain.then(async()=>{ const ref=db.doc('audit/'+me.id); const sn=await ref.get(); const prev=(sn.exists&&Array.isArray((sn.data()||{}).entries))?sn.data().entries:[]; await ref.set({entries:[...prev,e].slice(-500)}); }).catch(()=>{});
+  auditChain=auditChain.then(async()=>{ const ref=db.doc('audit/'+uid()); const sn=await ref.get(); const prev=(sn.exists&&Array.isArray((sn.data()||{}).entries))?sn.data().entries:[]; await ref.set({entries:[...prev,e].slice(-500)}); }).catch(()=>{});
 }
 
 function sla(v){
@@ -1091,7 +1094,7 @@ function adminView(){
   let body='';
   if(adminTab==='users') body=`<div class="pgrid">
     <div class="card"><div class="card-h"><h3>People with access</h3><span class="sub">${assigned.length} assigned</span></div>
-      <div class="banner gold" style="margin:12px 16px 4px;border-radius:9px"><div style="flex:1"><b>Admins</b>The owner and anyone given Editor access from the Share menu are admins automatically. Everyone signs in with their own PIN and authenticator app. Reset sign-in clears both, for a forgotten PIN or a lost phone; they set them up again at their next sign-in.</div><button class="btn" style="height:32px" data-resetpin="${esc(me.id||'')}">Reset my sign-in</button></div>
+      <div class="banner gold" style="margin:12px 16px 4px;border-radius:9px"><div style="flex:1"><b>Admins</b>The owner and anyone given Editor access from the Share menu are admins automatically. Everyone signs in with their own PIN and authenticator app. Reset sign-in clears both, for a forgotten PIN or a lost phone; they set them up again at their next sign-in.</div><button class="btn" style="height:32px" data-resetpin="${esc(uid()||'')}">Reset my sign-in</button></div>
       <div>${assigned.length?assigned.map(([id,r])=>personRow(id,[`<div class="sub">Assigned ${esc(dm(r.at))}${r.by?' by '+esc(nameOf(r.by)):''}</div>${r.role==='technician'?`<input class="field" data-tphone="${esc(id)}" value="${esc(r.phone||'')}" placeholder="WhatsApp number, e.g. 050 123 4567" style="margin-top:6px;max-width:260px;padding:6px 10px" inputmode="tel">`:''}`,`<span style="display:flex;gap:8px;align-items:center"><select class="field" data-setrole="${esc(id)}" style="margin:0;width:auto;padding:6px 30px 6px 10px">${['office','technician','viewer'].map(x=>`<option value="${x}" ${r.role===x?'selected':''}>${ROLE_NAME[x]}</option>`).join('')}</select><button class="linkbtn" data-resetpin="${esc(id)}">Reset sign-in</button><button class="linkbtn danger" data-unrole="${esc(id)}">Remove</button></span>`])).join(''):'<div class="empty">No Office, Technician or Viewer users yet. Add people on the right, or approve access requests.</div>'}</div></div>
     <div style="display:flex;flex-direction:column;gap:16px">
       <div class="card"><div class="card-h"><h3>Add a person</h3><span class="sub">From your organization</span></div><div class="card-b">
@@ -1296,7 +1299,7 @@ document.addEventListener('submit',async e=>{
     try{
       const secret=id==='otpsetup'?pendSecret:pinDoc.totp.secret;
       const k=await totpCheck(secret,code,id==='otplogin'?pinDoc.totp.last:0);
-      if(k!=null){ const totp={secret,enabled:true,at:(pinDoc.totp&&pinDoc.totp.at)||new Date().toISOString(),last:k}; const docv=Object.assign({},pinDoc,{totp}); await db.doc('pins/'+me.id).set(docv); pinDoc=docv; setFails({id:me.id,count:0,until:0}); signErr=''; pendSecret=''; signStep='pin'; startSession(pendKeep); logAction(id==='otpsetup'?'Set up authenticator and signed in':'Signed in'); }
+      if(k!=null){ const totp={secret,enabled:true,at:(pinDoc.totp&&pinDoc.totp.at)||new Date().toISOString(),last:k}; const docv=Object.assign({},pinDoc,{totp}); await db.doc('pins/'+uid()).set(docv); pinDoc=docv; setFails({id:uid(),count:0,until:0}); signErr=''; pendSecret=''; signStep='pin'; startSession(pendKeep); logAction(id==='otpsetup'?'Set up authenticator and signed in':'Signed in'); }
       else{ f.count++; if(f.count>=5){ f.until=Date.now()+15*60000; f.count=0; signStep='pin'; logAction('Sign-in paused after 5 wrong codes'); } else logAction('Wrong authenticator code'); setFails(f); signErr=f.until>Date.now()?'':'That code is not right or has expired. Check the time on your phone and try the newest code.'; }
     }catch(e){ signErr='Could not check the code. Try again.'; }
     signBusy=false; render(); return; }
@@ -1307,7 +1310,7 @@ document.addEventListener('submit',async e=>{
       if(/^(\d)\1+$/.test(a1)||'0123456789'.includes(a1)||'9876543210'.includes(a1)){ signErr='That PIN is too easy to guess. Avoid repeated or sequential digits.'; render(); return; }
       if(a1!==a2){ signErr='The two PINs do not match.'; render(); return; }
       signBusy=true; render();
-      try{ const salt=b64(crypto.getRandomValues(new Uint8Array(16))), iter=150000; const hash=await pinHash(a1,salt,iter); await db.doc('pins/'+me.id).set({salt,hash,iter,alg:'PBKDF2-SHA256',at:new Date().toISOString()}); pinDoc={salt,hash,iter}; signErr=''; setFails({id:me.id,count:0,until:0}); logAction('Created PIN'); pendKeep=keep; pendSecret=b32enc(crypto.getRandomValues(new Uint8Array(20))); signStep='setup'; }
+      try{ const salt=b64(crypto.getRandomValues(new Uint8Array(16))), iter=150000; const hash=await pinHash(a1,salt,iter); await db.doc('pins/'+uid()).set({salt,hash,iter,alg:'PBKDF2-SHA256',at:new Date().toISOString()}); pinDoc={salt,hash,iter}; signErr=''; setFails({id:uid(),count:0,until:0}); logAction('Created PIN'); pendKeep=keep; pendSecret=b32enc(crypto.getRandomValues(new Uint8Array(20))); signStep='setup'; }
       catch(e){ signErr='Could not save your PIN. Check your connection and try again.'; }
       signBusy=false; render(); return; }
     const f=fails(); if(f.until>Date.now()){ render(); return; }
@@ -1364,7 +1367,7 @@ document.addEventListener('click',async e=>{
   if(ds.areg!==undefined){ const tr=b.closest('tr'); const cells=tr.querySelectorAll('td'); aui.form={product:cells[0].querySelector('b').textContent,model:cells[0].querySelector('.mono').textContent,site:cells[1].textContent==='—'?'':cells[1].textContent}; const v=Object.values(visits).find(x=>x.model===aui.form.model&&akey(x.site,x.model)===akey(aui.form.site,aui.form.model)); if(v&&v.category) aui.form.category=v.category; render(); window.scrollTo(0,0); return; }
   if(ds.atab){ adminTab=ds.atab; render(); return; }
   if(ds.grant){ if(ds.nm) names[ds.grant]=ds.nm; await setRole(ds.grant,ds.r,ds.nm); return; }
-  if(ds.resetpin){ try{ await db.doc('pins/'+ds.resetpin).delete(); logAction('Reset sign-in (PIN and authenticator)',{detail:ds.resetpin===me.id?'Own sign-in':nameOf(ds.resetpin)||'Person'}); if(ds.resetpin===me.id){ toast('Your sign-in was reset. Set it up again now.'); signOut(); } else toast('Sign-in reset. '+(nameOf(ds.resetpin)||'They')+' will set up a new PIN and authenticator at next sign-in.'); }catch(e){ toast('Only admins can reset PINs.'); } return; }
+  if(ds.resetpin){ try{ await db.doc('pins/'+ds.resetpin).delete(); logAction('Reset sign-in (PIN and authenticator)',{detail:ds.resetpin===uid()?'Own sign-in':nameOf(ds.resetpin)||'Person'}); if(ds.resetpin===uid()){ toast('Your sign-in was reset. Set it up again now.'); signOut(); } else toast('Sign-in reset. '+(nameOf(ds.resetpin)||'They')+' will set up a new PIN and authenticator at next sign-in.'); }catch(e){ toast('Only admins can reset PINs.'); } return; }
   if(ds.unrole){ await setRole(ds.unrole,null); return; }
   if(ds.dismiss){ try{ await db.doc('requests/'+ds.dismiss).delete(); }catch(e){ toast('Could not dismiss the request.'); } return; }
   if(ds.act==='reqaccess'){ if(!db||!me.id) return; try{ await db.doc('requests/'+me.id).set({at:new Date().toISOString()}); requested=true; render(); }catch(e){ toast('Could not send the request. Try again.'); } return; }
@@ -1463,11 +1466,11 @@ function demoData(){ // only used when the shared store is unavailable; the side
 function goDemo(){ if(loaded) return; demo=true; loaded=true; visits=demoData(); render(); }
 
 (async()=>{
-  const fallback=setTimeout(goDemo,10000);
+  const fallback=setTimeout(()=>{ if(!db) goDemo(); else toast('Still connecting to the shared data…'); },10000);
   const use=n=>window.claude&&window.claude.use?Promise.resolve(window.claude.use(n)).catch(()=>null):Promise.resolve(null);
   db=await use('db');
   if(!db){ clearTimeout(fallback); goDemo(); }
-  use('user').then(async u=>{ userApi=u; if(!u){ canEditLvl=false; safeRender(); return; } try{ const v=await u.me(); me={id:v.id||(u.id?await u.id():null),name:v.name||''}; canEditLvl=!!(v.canEdit||v.isOwner||await u.canEdit()); }catch(e){ canEditLvl=false; } safeRender(); resolveNames(); });
+  use('user').then(async u=>{ userApi=u; if(!u){ canEditLvl=false; safeRender(); return; } try{ const v=await u.me(); me={id:v.id||(u.id?await u.id():null),name:v.name||''}; isOwnerFlag=!!(v.isOwner||(u.isOwner&&await u.isOwner())); canEditLvl=!!(v.canEdit||isOwnerFlag||await u.canEdit()); }catch(e){ canEditLvl=false; } safeRender(); resolveNames(); });
   setTimeout(()=>{ if(canEditLvl===null){ canEditLvl=false; safeRender(); } },10000);
   use('assets').then(a=>{ assets=a; safeRender(); });
   use('sample').then(s=>{ sampleApi=s; safeRender(); });
