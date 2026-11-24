@@ -1209,6 +1209,32 @@ function monthChart(all){
     <details class="tv"><summary>Show as table</summary><table><thead><tr><th>Month</th><th>Tickets</th><th>Completed</th></tr></thead><tbody>${months.map(m=>`<tr><td>${m.label} ${m.year}</td><td class="num">${m.n}</td><td class="num">${m.done}</td></tr>`).join('')}</tbody></table></details>
   </div></div>`;
 }
+/* billing day: for 5 days after a cycle closes (15th and month end), show the statement, the cycle's invoices and what is overdue */
+const BD_KEY='zi-billday-seen';
+function billDay(){
+  if(!can('finance')||!finSeen.has('invoices')) return null;
+  const due=dueStatementMonths(), m=due[due.length-1]; if(!m) return null;
+  const [a,e]=stRange(m), t=todayDxb(); if(t>addDays(e,5)) return null;
+  try{ if(localStorage.getItem(BD_KEY)===m) return null; }catch(x){}
+  const inv=Object.values(invoices).filter(i=>!['draft','void'].includes(i.status)&&!isCredit(i)&&i.date>=a&&i.date<=e);
+  const over=Object.values(invoices).filter(i=>!['draft','void'].includes(i.status)&&invoiceState(i).k==='overdue');
+  const drafts=Object.values(invoices).filter(i=>i.status==='draft'&&!isCredit(i)&&i.date>=a&&i.date<=e);
+  return {m,label:stLabel(m),inv,net:r2(inv.reduce((x,i)=>x+invGross(i),0)),over,overAmt:r2(over.reduce((x,i)=>x+invGross(i)-invPaid(i),0)),drafts,st:!!statements[m]};
+}
+function billDayHtml(){
+  const b=billDay(); if(!b) return '';
+  const parts=[b.inv.length?`${b.inv.length} invoice${b.inv.length>1?'s':''} · ${money(b.net)} incl. VAT`:'No invoices in this cycle',b.drafts.length?`${b.drafts.length} draft${b.drafts.length>1?'s':''} to issue`:'',b.over.length?`${b.over.length} overdue · ${money(b.overAmt)} to collect`:''].filter(Boolean);
+  return `<div class="card billday" style="margin-bottom:16px;border-left:4px solid var(--gold)"><div class="card-b" style="display:flex;gap:14px;align-items:center;flex-wrap:wrap">
+    <div style="flex:1 1 260px;min-width:0"><div style="font-weight:700">Billing day · cycle ${esc(b.label)} is closed</div><div class="sub">${esc(parts.join(' · '))}. ${b.st?'The statement is ready to send to '+esc(FS().customer||'the customer')+'.':'The statement is being prepared.'}</div></div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap">${b.st&&canPdf()?`<button class="btn primary" data-stmtpdf="${esc(b.m)}">${svg('doc',14)}Statement PDF</button>`:''}<button class="btn" data-gofin="${b.drafts.length?'invoices:draft':b.over.length?'invoices:overdue':'invoices'}">Open invoices</button><button class="btn ghost" data-act="bdseen" data-m="${esc(b.m)}">Done</button></div>
+  </div></div>`;
+}
+function todayHtml(all){
+  const t=todayDxb(), xs=all.filter(v=>v.scheduled&&dayKey(v.scheduled)===t&&v.status!=='cancelled').sort((a,b)=>(a.scheduled||'').localeCompare(b.scheduled||''));
+  const left=xs.filter(v=>!v.finished&&['new','recheck'].includes(v.status)).length;
+  return `<div class="card"><div class="card-h"><div><h3>Today's visits</h3><div class="sub">${xs.length?xs.length+' booked · '+left+' still to do':'Nothing booked for today'}</div></div></div>
+    ${xs.length?`<div class="attn">${xs.slice(0,8).map(v=>`<button data-open="${esc(v.id)}"><span class="idn">${esc(hm(v.scheduled))}</span><span style="min-width:0"><span style="display:block;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">#${esc(v.id)} · ${esc((v.site||'').split('|')[0].trim()||'Site not set')}</span><span class="sub">${esc([v.region,v.technician||assigneeName(v)].filter(Boolean).join(' · ')||'Not assigned')}</span></span>${v.finished||['completed','review'].includes(v.status)?'<span class="chip completed">Done</span>':v.arrived?'<span class="chip review">On site</span>':chip(v)}</button>`).join('')}</div>`:''}</div>`;
+}
 function dashView(){
   const all=Object.values(visits);
   const c=k=>all.filter(v=>v.status===k).length;
@@ -1233,12 +1259,14 @@ function dashView(){
       ${kpi('Resolved',res==null?'—':res+'%','of '+withOut.length+' with an outcome')}
       ${kpi('Avg time on site',dur(avg),times.length+' timed visits')}
     </div>
+    ${billDayHtml()}
     <div class="card"><div class="card-b" style="display:flex;flex-direction:column;gap:10px">
       <div class="row"><span class="lbl">Pipeline</span><span class="sub">${all.length} tickets</span></div>
       <div class="stack" role="img" aria-label="${corder.map(k=>STATUS[k]+' '+c(k)).join(', ')}">${corder.filter(k=>c(k)).map(k=>`<span style="flex:${c(k)};background:var(--s-${k})" data-tip="${STATUS[k]}: ${c(k)} of ${all.length}"></span>`).join('')}</div>
       <div class="legend">${corder.map(k=>`<span><i style="background:var(--s-${k})"></i>${STATUS[k]} <b class="num">${c(k)}</b></span>`).join('')}</div>
     </div></div>
     <div class="dgrid">
+      ${todayHtml(all)}
       ${monthChart(all)}
       <div class="card"><div class="card-h"><h3>Needs attention</h3>${can('review')?'<button class="linkbtn" data-route="review">Review queue →</button>':''}</div>
         ${can('parts')&&Object.values(inventory).some(i=>invState(i).cls!=='completed')?`<button class="banner bad" data-route="parts" style="margin:12px 16px 0;width:calc(100% - 32px);text-align:left"><div><b>${Object.values(inventory).filter(i=>invState(i).cls!=='completed').length} inventory parts low or out of stock</b>Open Parts &amp; stock to reorder.</div></button>`:''}
@@ -2718,6 +2746,7 @@ document.addEventListener('click',async e=>{
   if(ds.act==='xcheck'){ await xeroCheck(); return; }
   if(ds.act==='xexport'){ await xeroExport(); render(); return; }
   if(ds.act==='bkdl'){ await backupDownload(); return; }
+  if(ds.act==='bdseen'){ try{ localStorage.setItem(BD_KEY,ds.m); }catch(x){} render(); return; }
   if(ds.act==='bkupd'){ if(bk){ bk.upd=!bk.upd; bk.confirm=false; render(); } return; }
   if(ds.act==='bkcancel'){ bk=null; render(); return; }
   if(ds.act==='bkgo'){ if(!bk) return; if(!bk.confirm){ bk.confirm=true; render(); return; } await backupRestore(); return; }

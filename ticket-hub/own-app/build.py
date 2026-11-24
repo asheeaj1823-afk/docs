@@ -39,7 +39,7 @@ out = rep(out, "${me.name?'Signing in as <b>'+esc(me.name)+'</b> (your Claude ac
           "${me.name?'Signing in as <b>'+esc(me.name)+'</b>. ':''}Each person signs in with their own email login and their own PIN. Not you? Use Sign out and sign in with your own login. New staff: create a login on the sign-in page, then an administrator gives you a role.")
 out = rep(out, "esc(me.name||'your Claude account')", "esc(me.name||'your login')")
 out = rep(out, "Sign in to your Claude account to request access.", "Sign in with your email login to request access.")
-out = rep(out, "sent to your phone by Claude. Manage it in claude.ai → Scheduled tasks.", "Reminders now show inside the hub on the 1st and 16th.")
+out = rep(out, "sent to your phone by Claude. Manage it in claude.ai → Scheduled tasks.", "After each cycle closes (15th and month end), the Dashboard shows a billing-day reminder with the statement and invoices for 5 days.")
 
 dist = os.path.join(here, 'dist')
 os.makedirs(dist, exist_ok=True)

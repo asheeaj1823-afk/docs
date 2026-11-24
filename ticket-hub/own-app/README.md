@@ -66,4 +66,4 @@ The 223 tickets are already in Supabase. To bring over everything else (invoices
 | Photos | Stored privately in Supabase Storage (bucket `evidence`) |
 | "Draft note with Claude" button | Hidden (needs an Anthropic API key) |
 | Airtable / Xero live connection | Not connected. Use *Import tickets from a file* (CSV/Excel) and *Send invoices to Xero* (CSV export) |
-| Phone reminders on the 1st and 16th | Shown inside the hub; not pushed to the phone |
+| Phone reminders on the 1st and 16th | A billing-day banner on the Dashboard for 5 days after each cycle closes; not pushed to the phone |
