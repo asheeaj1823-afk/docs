@@ -877,7 +877,11 @@ function integrationsView(){
     ${row('Phone reminders','1st and 16th, 8:32','ok','Billing reminder with the invoice and statement, sent to your phone by Claude. Manage it in claude.ai → Scheduled tasks.')}
     ${row('WhatsApp','Links','plain','Ticket pages open WhatsApp with the customer’s number. Nothing is sent automatically.')}
     ${row('QuickBooks','Not used','plain','Your QuickBooks company is set up in US dollars, so the hub does not use it. Xero (AED) is used instead.')}
-    ${row('Airtable','Off','plain','Not connected, as you asked.')}
+    ${(()=>{ const a=atui; const where='Reads <b>Ziara Financial Command Center → Service Tickets</b> and never writes to Airtable. Tickets match by the number at the end of the Ticket ID (EZR-KOHLER-SRV-26-0224 → #0224); filled-in Airtable fields update the hub, empty ones never erase hub data, and nothing is deleted. Syncs every 5 minutes while an administrator has the hub open.';
+      return a.st==='ok'?row('Airtable','Syncing · read only','ok',`Last sync ${esc(dmhm(a.at))}: ${a.read} ticket${a.read===1?'':'s'} read · ${a.made} new · ${a.upd} updated${a.skip?' · '+a.skip+' without a ticket number skipped':''}. ${where}`,`<button class="btn" data-act="atsync">Sync now</button>`)
+       :a.st==='busy'?row('Airtable','Syncing…','plain','Reading your Airtable tickets…','')
+       :a.st==='err'?row('Airtable','Not syncing','bad',esc(a.err)+' '+where,`<button class="btn" data-act="atsync">Try again</button>`)
+       :row('Airtable','Ready to connect','plain',(mcpApi?'':'Open the hub in claude.ai to connect. ')+where,mcpApi?`<button class="btn primary" data-act="atsync">Connect &amp; sync now</button>`:''); })()}
    </div></div>
    <div class="card"><div class="card-h"><div><h3>Send invoices to Xero</h3><div class="sub">${n} invoice${n===1?'':'s'} not exported yet</div></div></div><div class="card-b" style="display:grid;gap:12px">
     <p class="sub" style="margin:0">Downloads a file in Xero’s sales-invoice import format, with the same lines as your tax invoices. In Xero go to <b>Business → Invoices → Import</b> and upload it. Credit notes are included with negative amounts.</p>
@@ -1065,6 +1069,44 @@ function syncLabel(){ if(!loaded) return ['Connecting…','wait']; if(demo) retu
   if(!navigator.onLine) return ['Offline'+(syncQ.length?' · '+syncQ.length+' change'+(syncQ.length>1?'s':'')+' waiting':' · showing the last data'),'off'];
   if(syncQ.length) return ['Syncing '+syncQ.length+' change'+(syncQ.length>1?'s':'')+'…','wait'];
   return ['Live · updated '+(lastSync?hm(new Date(lastSync).toISOString()):'just now'),'']; }
+
+
+/* ---------- Airtable: read-only ticket sync (Ziara Financial Command Center → Service Tickets) ---------- */
+const AT={server:'Airtable',base:'appnqZO5v0DyFIpwY',table:'tblRP3mQyqCkOzd84',f:{id:'fldnleSfR9hAVNJlY',date:'fldlVF5uY7RmxBpsq',desc:'fldX7psQgQ3cPEsHa',emirate:'fldCWdzu5Nl1FkfE6',status:'fldpGLvEj3LJQ5mkS',notes:'fldqHiqOi3uek8Tl6',site:'fld9gjG7nvp9KQvTF',loc:'fldz9kZI1tsHBPE8T',product:'fldkIW30GkGnBgtDl',tech:'fldk0OSciZSzVquoF',done:'fld38MAopIcendWcH',inv:'fldBw0nv73gk2jaAo'}};
+let atui={st:'idle',at:null,read:0,made:0,upd:0,skip:0,err:''}, permApi=null, atTimer=null;
+const atTxt=v=>v==null?'':Array.isArray(v)?v.map(atTxt).filter(x=>x&&!/^rec[A-Za-z0-9]{14}$/.test(x)).join(', '):typeof v==='object'?String(v.name??v.value??v.text??v.label??''):String(v).trim();
+function atStatus(v){ const t=atTxt(v).toLowerCase(); if(!t) return null; if(/cancel/.test(t)) return 'cancelled'; if(/complet|done|closed|finish/.test(t)) return 'completed'; if(/review/.test(t)) return 'review'; if(/recheck|return|revisit/.test(t)) return 'recheck'; if(/new|open|schedul|pending|progress|assign/.test(t)) return 'new'; return null; }
+const AT_FIX={needs_reauth:'Reconnect Airtable in claude.ai → Settings → Connectors, then try again.',server_not_connected:'Add the Airtable connector in claude.ai → Settings → Connectors, then try again.',selection_required:'You have more than one Airtable connector — choose one when claude.ai asks, then try again.',approval_required:'This page needs your approval to read Airtable. Press the button again and choose Allow.',not_in_manifest:'Airtable is turned off for this page. Turn it on in the page’s Permissions menu.',blocked_by_policy:'Your organisation’s policy blocks Airtable for this page.',not_granted:'Connectors are not available in this view. Open the hub in claude.ai.',capability_disabled:'Connectors are not available in this view. Open the hub in claude.ai.',server_unavailable:'Airtable did not answer just now. Try again in a minute.',tool_error:'Airtable refused the request. Check that the base “Ziara Financial Command Center” and its “Service Tickets” table still exist and are shared with your connector.'};
+async function airtableSync(manual){
+  if(!mcpApi){ if(manual){ atui={...atui,st:'err',err:AT_FIX.not_granted}; render(); } return; }
+  if(atui.st==='busy'||access()!=='admin'||demo||!loaded) return; atui={...atui,st:'busy',err:''}; if(manual) render();
+  try{
+    let cursor=null; const recs=[];
+    for(let i=0;i<20;i++){ const input={baseId:AT.base,tableId:AT.table,pageSize:1000,fieldIds:Object.values(AT.f)}; if(cursor) input.cursor=cursor;
+      const r=await mcpApi.callTool(AT.server,'list_records_for_table',input,{cache:false}); const pl=r&&r.payload||{}; recs.push(...(Array.isArray(pl.records)?pl.records:[])); cursor=pl.nextCursor||null; if(!cursor) break; }
+    let made=0, upd=0, skip=0;
+    for(const rec of recs){ const c=rec.cellValuesByFieldId||rec.fields||{}, g=k=>c[AT.f[k]];
+      const tid=atTxt(g('id')), m=tid.match(/(\d{1,5})\s*$/); if(!m){ skip++; continue; } const id=m[1].padStart(4,'0'), ex=visits[id], patch={};
+      const put=(k,v)=>{ if(v!==undefined&&v!==null&&v!=='') patch[k]=v; };
+      if(/\D/.test(tid)) put('ref',tid);
+      const dt=atTxt(g('date')).slice(0,10); if(/^\d{4}-\d{2}-\d{2}$/.test(dt)&&!(ex&&ex.scheduled&&dayKey(ex.scheduled)===dt)) put('scheduled',dt+'T04:00:00.000Z');
+      const fin=atTxt(g('done')).slice(0,10); if(/^\d{4}-\d{2}-\d{2}$/.test(fin)&&!(ex&&ex.finished)) put('finished',fin+'T08:00:00.000Z');
+      const st=atStatus(g('status')); if(st) put('status',st);
+      put('region',atTxt(g('emirate'))); put('site',atTxt(g('site'))); put('address',atTxt(g('loc'))); put('product',atTxt(g('product'))); put('issue',atTxt(g('desc'))); put('technician',atTxt(g('tech'))); put('billingRef',atTxt(g('inv'))); put('airtableNotes',atTxt(g('notes')));
+      if(!ex){ const v=Object.assign({id,ref:'EZR-KOHLER-SRV-26-'+id,status:'new',type:'Inspection',priority:'Normal',category:'',product:'',site:'',address:'',region:'',issue:'',prepared:false,contactedAt:null,arrived:null,finished:null,findings:'',work:'',nextAction:'',outcome:'',returnVisit:'No',technician:'',internalNotes:'',parts:[],evidence:[],billingRef:''},patch,{source:'airtable',airtableId:rec.id}); v.history=[Object.assign(hist(v.status),{note:'Imported from Airtable'})]; await save(v,null); made++; continue; }
+      const keys=Object.keys(patch).filter(k=>canon(ex[k]??null)!==canon(patch[k])); if(ex.airtableId!==rec.id) keys.push('airtableId');
+      if(!keys.length) continue;
+      const n=clone(ex); keys.forEach(k=>{ if(k!=='airtableId') n[k]=patch[k]; }); n.airtableId=rec.id; n.source=n.source||'hub+airtable';
+      if(patch.status&&patch.status!==ex.status) n.history=[...(n.history||[]),Object.assign(hist(patch.status),{note:'Status from Airtable'})];
+      await save(n,null); upd++; }
+    atui={st:'ok',at:new Date().toISOString(),read:recs.length,made,upd,skip,err:''};
+    if(made||upd) logAction('Synced tickets from Airtable',{detail:recs.length+' read · '+made+' new · '+upd+' updated'});
+    if(manual||made||upd) toast('Airtable: '+recs.length+' ticket'+(recs.length===1?'':'s')+' read · '+made+' new · '+upd+' updated');
+    if(!atTimer) atTimer=setInterval(()=>airtableSync(false),300000);
+  }catch(e){ const c=(e&&e.code)||'upstream_error'; atui={...atui,st:'err',err:AT_FIX[c]||('Airtable sync failed ('+c+'). Try again.')}; if(['needs_reauth','server_not_connected','not_in_manifest','blocked_by_policy','not_granted'].includes(c)&&atTimer){ clearInterval(atTimer); atTimer=null; } }
+  if(manual||route==='integrations') render();
+}
+async function airtableAutoStart(){ if(access()!=='admin'||!mcpApi||!permApi) return; let st='unavailable'; try{ st=await permApi.state('mcp:Airtable'); }catch(e){} if(st==='granted') airtableSync(false); }
 
 /* ---------- nav ---------- */
 function navHtml(){
@@ -2332,7 +2374,7 @@ async function downloadReport(v){
   header();
   doc.setTextColor(...ink); doc.setFont('helvetica','bold'); doc.setFontSize(15);
   const title=doc.splitTextToSize(siteOf(v)+(v.issue?': '+v.issue:''),W-2*M); doc.text(title,M,y); y+=title.length*18+6;
-  const kv=[['Ticket','#'+v.id],['Status',STATUS[v.status]],['Visit date',v.scheduled?dayLong(v.scheduled):'—'],['Emirate',v.region||'—'],['Product',v.product||'—'],['Model / SKU',v.model||'—'],['Serial no.',v.serial||'—'],['Category',v.category||'—'],['Visit type',v.type||'—'],['Technicians',v.technician||'—'],['Time in / out',v.arrived?hm(v.arrived)+' – '+(hm(v.finished)||'—'):'—'],['Outcome',v.outcome||'—'],['Return visit',v.returnVisit||'No'],['Z Invoice No.',v.billingRef||'—'],['Contact',v.contact||'—']];
+  const kv=[['Ticket','#'+v.id+(v.airtableId?' · from Airtable':'')],['Status',STATUS[v.status]],['Visit date',v.scheduled?dayLong(v.scheduled):'—'],['Emirate',v.region||'—'],['Product',v.product||'—'],['Model / SKU',v.model||'—'],['Serial no.',v.serial||'—'],['Category',v.category||'—'],['Visit type',v.type||'—'],['Technicians',v.technician||'—'],['Time in / out',v.arrived?hm(v.arrived)+' – '+(hm(v.finished)||'—'):'—'],['Outcome',v.outcome||'—'],['Return visit',v.returnVisit||'No'],['Z Invoice No.',v.billingRef||'—'],['Contact',v.contact||'—']];
   doc.setDrawColor(227,231,239); const colW=(W-2*M)/2;
   for(let i=0;i<kv.length;i+=2){ need(34); for(let c=0;c<2;c++){ const k=kv[i+c]; if(!k) continue; const x=M+c*colW;
       doc.setFont('helvetica','normal'); doc.setFontSize(7.5); doc.setTextColor(...muted); doc.text(k[0].toUpperCase(),x,y);
@@ -2593,6 +2635,7 @@ document.addEventListener('click',async e=>{
   if(ds.act==='jadd'){ if(gui.jf){ gui.jf.lines.push({a:'5900',d:'',c:''}); render(); } return; }
   if(ds.jdel!==undefined){ if(gui.jf){ gui.jf.lines.splice(+ds.jdel,1); render(); } return; }
   if(ds.jrm){ if(gui.jrm!==ds.jrm){ gui.jrm=ds.jrm; render(); return; } const j=journals[ds.jrm]; gui.jrm=null; await delDoc('journals',ds.jrm,journals); logAction('Deleted journal',{detail:(j&&j.memo)||''}); toast('Journal deleted'); return; }
+  if(ds.act==='atsync'){ await airtableSync(true); return; }
   if(ds.act==='xcheck'){ await xeroCheck(); return; }
   if(ds.act==='xexport'){ await xeroExport(); render(); return; }
   if(ds.act==='bkdl'){ await backupDownload(); return; }
@@ -2767,6 +2810,8 @@ function goDemo(){ if(loaded) return; demo=true; loaded=true; visits=demoData();
   use('sample').then(s=>{ sampleApi=s; safeRender(); });
   use('downloads').then(d=>{ downloadsApi=d; safeRender(); });
   use('mcp').then(m=>{ mcpApi=m; if(route==='integrations') safeRender(); });
+  use('permissions').then(pm=>{ permApi=pm; });
+  setTimeout(()=>airtableAutoStart(),9000);
   setTimeout(flushQ,3000);
   if(!db) return;
   const sub=(col,store)=>db.collection(col).onSnapshot(snap=>{ for(const k in store) delete store[k]; snap.docs.forEach(d=>{ const x=d.data(); if(x) store[d.id]=Object.assign({id:d.id},x); }); overlayQ(col,store); lastSync=Date.now(); if(['parts','assets','tickets','finance'].includes(route)) safeRender(); resolveNames(); },()=>{});
