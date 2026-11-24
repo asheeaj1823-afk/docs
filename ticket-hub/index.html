@@ -1004,7 +1004,7 @@ async function invoicePdf(id){
   const LV=(l,v,x,yy,o={})=>{ T(l,x,yy,{s:o.s||8,c:o.c}); if(v) T(String(v),x+doc.getTextWidth(l)+2,yy,{s:o.s||8,b:true}); };
   const header=()=>{ y=M+12; T(title,W/2,y,{b:true,s:15,a:'center'}); y+=12;
     const lx=M+150; box(M,y,X2-M,100);
-    doc.setFont('helvetica','normal'); doc.setFontSize(22); doc.setTextColor(...ink); doc.setLineWidth(.8); doc.setDrawColor(...ink); [[0,0],[5,0]].forEach(([dx])=>{ doc.line(M+14+dx,y+58,M+26+dx,y+44); doc.line(M+17+dx,y+58,M+29+dx,y+44); }); doc.text((c.tradeName||c.legalName||'').split(' ')[0].toUpperCase(),M+38,y+57,{charSpace:2.5});
+    pdfLogo(doc,c,M,y);
     const nl=doc.splitTextToSize(c.legalName||'',X2-lx-12); const nl2=(()=>{ doc.setFont('helvetica','bold'); doc.setFontSize(19); return doc.splitTextToSize(c.legalName||'',X2-lx-10); })(); doc.setTextColor(...ink); doc.text(nl2.slice(0,2),lx,y+26); const ny=y+26+(Math.min(2,nl2.length)-1)*21;
     T(c.address||'',lx,ny+13,{s:7.6,c:muted}); if(c.phone) LV('Phone:  ',c.phone,lx,ny+26); if(c.email) LV('Email:  ',c.email,lx+190,ny+26); if(c.trn) LV('TRN: ',c.trn,lx,ny+38); y+=100; };
   header();
@@ -1057,6 +1057,13 @@ async function invoicePdf(id){
   try{ await downloadsApi.save({filename:(cr?'Tax_Credit_Note_':'Tax_Invoice_')+inv.invoiceNo.replace(/\s+/g,'-')+'_'+(inv.date||'').split('-').reverse().join('_').replace(/^(\d\d)_(\d\d)_\d\d(\d\d)$/,'$1_$2_$3')+'.pdf',data:doc.output('blob')}); toast((cr?'Credit note':'Tax invoice')+' saved'); logAction('Downloaded '+(cr?'credit note':'tax invoice'),{detail:inv.invoiceNo}); }catch(err){ if(!(err&&err.code==='declined')) toast('Could not save the PDF.'); }
 }
 
+/* logo in the PDF header: the company's logo image when set, otherwise its name in bold (e.g. ZIARA) */
+function pdfLogo(doc,c,M,y){
+  if(c.logo&&/^data:image\/(png|jpe?g);base64,/.test(c.logo)){ try{ const p=doc.getImageProperties(c.logo), w=Math.min(132,p.width*(60/p.height)), h=w*(p.height/p.width); doc.addImage(c.logo,/png/.test(c.logo)?'PNG':'JPEG',M+8,y+50-h/2,w,h); return; }catch(e){} }
+  const word=String(c.logoText||(c.legalName||c.tradeName||'').split(' ')[0]||'').toUpperCase();
+  doc.setDrawColor(30,36,48); doc.setLineWidth(.9); [[0,0],[4.5,0],[9,0]].forEach(([dx])=>doc.line(M+12+dx,y+59,M+24+dx,y+43)); doc.line(M+14,y+44,M+34,y+58);
+  doc.setFont('helvetica','bold'); doc.setFontSize(21); doc.setTextColor(30,36,48); doc.text(word,M+40,y+58,{charSpace:1.2});
+}
 /* receipt number for a paid invoice, e.g. ZRA-1866 -> RCPT-1866 */
 const rcptNo=inv=>'RCPT-'+String(inv&&inv.invoiceNo||'').replace(/\D/g,'');
 const paidHtml=inv=>`<span class="paidtag">PAID</span><div class="sub num" style="margin-top:3px;font-size:11.5px">Receipt ${esc(rcptNo(inv))}</div>`;
@@ -1075,7 +1082,7 @@ function pdfKit(title){
   K.box=(x,yy,w,h,fill)=>{ doc.setDrawColor(...line); doc.setLineWidth(.6); if(fill){ doc.setFillColor(...shade); doc.rect(x,yy,w,h,'FD'); } else doc.rect(x,yy,w,h); };
   K.LV=(l,v,x,yy,o={})=>{ K.T(l,x,yy,{s:o.s||8,c:o.c}); if(v!==undefined&&v!==null&&v!=='') K.T(String(v),x+doc.getTextWidth(l)+2,yy,{s:o.s||8,b:true}); };
   K.header=()=>{ let y=M+12; K.T(title,W/2,y,{b:true,s:15,a:'center'}); y+=12; const lx=M+150; K.box(M,y,X2-M,100);
-    doc.setFont('helvetica','normal'); doc.setFontSize(22); doc.setTextColor(...ink); doc.setLineWidth(.8); doc.setDrawColor(...ink); [0,5].forEach(dx=>{ doc.line(M+14+dx,y+58,M+26+dx,y+44); doc.line(M+17+dx,y+58,M+29+dx,y+44); }); doc.text((c.tradeName||c.legalName||'').split(' ')[0].toUpperCase(),M+38,y+57,{charSpace:2.5});
+    pdfLogo(doc,c,M,y);
     doc.setFont('helvetica','bold'); doc.setFontSize(19); const nl2=doc.splitTextToSize(c.legalName||'',X2-lx-10); doc.setTextColor(...ink); doc.text(nl2.slice(0,2),lx,y+26); const ny=y+26+(Math.min(2,nl2.length)-1)*21;
     K.T(c.address||'',lx,ny+13,{s:7.6,c:muted}); if(c.phone) K.LV('Phone:  ',c.phone,lx,ny+26); if(c.email) K.LV('Email:  ',c.email,lx+190,ny+26); if(c.trn) K.LV('TRN: ',c.trn,lx,ny+38); K.y=y+100; };
   K.need=h=>{ if(K.y+h>H-56){ doc.addPage(); K.header(); K.y+=8; } };
