@@ -884,6 +884,7 @@ function integrationsView(){
        :row('Airtable','Ready to connect','plain',(mcpApi?'':'Open the hub in claude.ai to connect. ')+where,mcpApi?`<button class="btn primary" data-act="atpick">Choose base &amp; table</button><button class="btn" data-act="atsync">Sync now</button>`:''); })()}
     ${atPick?`<div style="border-top:1px solid var(--line)">${atPickHtml()}</div>`:''}
    </div></div>
+   <div class="card"><div class="card-h"><div><h3>Import tickets from a file</h3><div class="sub">CSV or Excel · read only, nothing is sent anywhere</div></div></div>${ticketFileHtml()}</div>
    <div class="card"><div class="card-h"><div><h3>Send invoices to Xero</h3><div class="sub">${n} invoice${n===1?'':'s'} not exported yet</div></div></div><div class="card-b" style="display:grid;gap:12px">
     <p class="sub" style="margin:0">Downloads a file in Xero’s sales-invoice import format, with the same lines as your tax invoices. In Xero go to <b>Business → Invoices → Import</b> and upload it. Credit notes are included with negative amounts.</p>
     <form id="fxeroform" class="fgrid" style="grid-template-columns:repeat(auto-fit,minmax(200px,1fr))">
@@ -1085,6 +1086,56 @@ let atui={st:'idle',at:null,read:0,made:0,upd:0,skip:0,err:''}, permApi=null, at
 const atTxt=v=>v==null?'':Array.isArray(v)?v.map(atTxt).filter(x=>x&&!/^rec[A-Za-z0-9]{14}$/.test(x)).join(', '):typeof v==='object'?String(v.name??v.value??v.text??v.label??''):String(v).trim();
 function atStatus(v){ const t=atTxt(v).toLowerCase(); if(!t) return null; if(/cancel/.test(t)) return 'cancelled'; if(/complet|done|closed|finish/.test(t)) return 'completed'; if(/review/.test(t)) return 'review'; if(/recheck|return|revisit/.test(t)) return 'recheck'; if(/new|open|schedul|pending|progress|assign/.test(t)) return 'new'; return null; }
 const AT_FIX={needs_reauth:'Reconnect Airtable in claude.ai → Settings → Connectors, then try again.',server_not_connected:'Add the Airtable connector in claude.ai → Settings → Connectors, then try again.',selection_required:'You have more than one Airtable connector — choose one when claude.ai asks, then try again.',approval_required:'This page needs your approval to read Airtable. Press the button again and choose Allow.',not_in_manifest:'Airtable is turned off for this page. Turn it on in the page’s Permissions menu.',blocked_by_policy:'Your organisation’s policy blocks Airtable for this page.',not_granted:'Connectors are not available in this view. Open the hub in claude.ai.',capability_disabled:'Connectors are not available in this view. Open the hub in claude.ai.',server_unavailable:'Airtable did not answer just now. Try again in a minute.',tool_error:'Airtable refused the request. Check that the chosen base and table still exist and are shared with your Airtable connector.'};
+
+/* merge one incoming ticket (Airtable record or file row) into the hub: fill-in only, never erase, never delete */
+async function mergeTicket(tid,g,src){
+  tid=String(tid||'').trim(); const m=tid.match(/(\d{1,5})\s*$/); if(!m) return 'skip'; const id=m[1].padStart(4,'0'), ex=visits[id], patch={};
+  const put=(k,v)=>{ if(v!==undefined&&v!==null&&v!=='') patch[k]=v; };
+  const iso=v=>{ const t=atTxt(v); if(/^\d{4}-\d{2}-\d{2}/.test(t)) return t.slice(0,10); const d=typeof parseDate==='function'?parseDate(t):null; return d||''; };
+  if(/\D/.test(tid)) put('ref',tid);
+  const dt=iso(g('date')); if(dt&&!(ex&&ex.scheduled&&dayKey(ex.scheduled)===dt)) put('scheduled',dt+'T04:00:00.000Z');
+  const fin=iso(g('done')); if(fin&&!(ex&&ex.finished)) put('finished',fin+'T08:00:00.000Z');
+  const st=atStatus(g('status')); if(st) put('status',st);
+  put('region',atTxt(g('emirate'))); put('site',atTxt(g('site'))); put('address',atTxt(g('loc'))); put('product',atTxt(g('product'))); put('issue',atTxt(g('desc'))); put('technician',atTxt(g('tech'))); put('billingRef',atTxt(g('inv'))); put('airtableNotes',atTxt(g('notes')));
+  if(!ex){ const v=Object.assign({id,ref:'EZR-KOHLER-SRV-26-'+id,status:'new',type:'Inspection',priority:'Normal',category:'',product:'',site:'',address:'',region:'',issue:'',prepared:false,contactedAt:null,arrived:null,finished:null,findings:'',work:'',nextAction:'',outcome:'',returnVisit:'No',technician:'',internalNotes:'',parts:[],evidence:[],billingRef:''},patch,{source:src.source});
+    if(src.recId) v.airtableId=src.recId; v.history=[Object.assign(hist(v.status),{note:'Imported from '+src.label})]; await save(v,null); return 'new'; }
+  const keys=Object.keys(patch).filter(k=>canon(ex[k]??null)!==canon(patch[k])); if(src.recId&&ex.airtableId!==src.recId) keys.push('airtableId');
+  if(!keys.length) return 'same';
+  const n=clone(ex); keys.forEach(k=>{ if(k!=='airtableId') n[k]=patch[k]; }); if(src.recId) n.airtableId=src.recId; n.source=n.source||('hub+'+src.source);
+  if(patch.status&&patch.status!==ex.status) n.history=[...(n.history||[]),Object.assign(hist(patch.status),{note:'Status from '+src.label})];
+  await save(n,null); return 'upd';
+}
+/* ticket import from a CSV or Excel file (e.g. downloaded from Airtable) */
+let tfi=null;
+async function ticketFileRead(file){
+  tfi={st:'busy',name:file.name}; render();
+  try{ let rows;
+    if(/\.(xlsx|xls)$/i.test(file.name)){ if(!window.XLSX) throw new Error('The Excel reader did not load. Save the file as CSV and try again.'); const wb=XLSX.read(await file.arrayBuffer(),{type:'array',cellDates:true}); rows=XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]],{header:1,raw:false,dateNF:'yyyy-mm-dd'}); }
+    else rows=parseCsv(await file.text());
+    rows=rows.filter(r=>r&&r.some(c=>String(c??'').trim()!==''));
+    const hi=rows.findIndex(r=>r.some(c=>/ticket|ref/i.test(String(c||'')))); if(hi<0) throw new Error('Could not find a header row with a Ticket or Ref column.');
+    const H=rows[hi].map((c,i)=>({id:'c'+i,name:String(c||'Column '+(i+1)).trim(),type:'text'}));
+    const data=rows.slice(hi+1).map(r=>Object.fromEntries(H.map((h,i)=>[h.id,r[i]??''])));
+    const t={id:'file',name:file.name,fields:H,primaryFieldId:null};
+    tfi={st:'map',name:file.name,fields:H,data,map:atAutoMap(t)};
+  }catch(e){ tfi={st:'err',name:file.name,err:e.message||'Could not read the file.'}; }
+  render();
+}
+function ticketFileHtml(){ const a=tfi; if(!a) return `<div class="card-b" style="display:grid;gap:8px"><div class="sub">Upload a CSV or Excel file of tickets — for example downloaded from Airtable (View → Download CSV). Columns are matched automatically. Filled-in cells update the hub, blank cells never erase anything, nothing is deleted.</div><input type="file" id="tk-file" accept=".csv,.xlsx,.xls" class="field" style="height:auto;padding:8px"></div>`;
+  if(a.st==='busy') return '<div class="card-b sub">Reading the file…</div>';
+  if(a.st==='err') return `<div class="card-b"><div class="notice">${esc(a.err)}</div><button class="btn" data-act="tkclose">Try another file</button></div>`;
+  if(a.st==='done') return `<div class="card-b"><div class="notice">✓ ${esc(a.name)}: ${a.res.new} new · ${a.res.upd} updated · ${a.res.same} unchanged${a.res.skip?' · '+a.res.skip+' row'+(a.res.skip>1?'s':'')+' without a ticket number skipped':''}.</div><button class="btn" data-act="tkclose">Import another file</button></div>`;
+  const ids=a.data.map(r=>String(a.map.id?r[a.map.id]:'')).filter(x=>/\d\s*$/.test(x)), nn=ids.filter(x=>!visits[x.match(/(\d{1,5})\s*$/)[1].padStart(4,'0')]).length;
+  return `<form id="ftkmap" class="card-b" style="display:grid;gap:12px"><div><b>${esc(a.name)}</b> · ${a.data.length} rows · ${ids.length} with a ticket number (${nn} new, ${ids.length-nn} already in the hub)</div>
+    <div class="fgrid" style="grid-template-columns:repeat(auto-fit,minmax(220px,1fr))">${AT_KEYS.map(([k,l,req])=>`<label>${l}${req?' *':''}<select class="field" name="m_${k}"><option value="">— not used —</option>${a.fields.map(f=>`<option value="${esc(f.id)}"${a.map[k]===f.id?' selected':''}>${esc(f.name)}</option>`).join('')}</select></label>`).join('')}</div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn primary" type="submit">Import ${ids.length} ticket${ids.length===1?'':'s'}</button><button type="button" class="btn ghost" data-act="tkclose">Cancel</button></div></form>`;
+}
+async function ticketFileImport(map){
+  const a=tfi; if(!a) return; const res={new:0,upd:0,same:0,skip:0};
+  for(const row of a.data){ const g=k=>map[k]?row[map[k]]:undefined; const r=await mergeTicket(atTxt(g('id')),g,{label:'file '+a.name,source:'file'}); res[r==='new'?'new':r==='upd'?'upd':r==='skip'?'skip':'same']++; }
+  logAction('Imported tickets from file',{detail:a.name+' · '+res.new+' new · '+res.upd+' updated'}); tfi={st:'done',name:a.name,res}; toast('Tickets imported: '+res.new+' new · '+res.upd+' updated'); render();
+}
+
 async function airtableSync(manual){
   if(!mcpApi){ if(manual){ atui={...atui,st:'err',err:AT_FIX.not_granted}; render(); } return; }
   if(atui.st==='busy'||access()!=='admin'||demo||!loaded) return; atui={...atui,st:'busy',err:''}; if(manual) render();
@@ -1094,19 +1145,7 @@ async function airtableSync(manual){
       const r=await mcpApi.callTool(AT.server,'list_records_for_table',input,{cache:false}); const pl=r&&r.payload||{}; recs.push(...(Array.isArray(pl.records)?pl.records:[])); cursor=pl.nextCursor||null; if(!cursor) break; }
     let made=0, upd=0, skip=0;
     const AT=atCfg(); for(const rec of recs){ const c=rec.cellValuesByFieldId||rec.fields||{}, g=k=>AT.f[k]?c[AT.f[k]]:undefined;
-      const tid=atTxt(g('id')), m=tid.match(/(\d{1,5})\s*$/); if(!m){ skip++; continue; } const id=m[1].padStart(4,'0'), ex=visits[id], patch={};
-      const put=(k,v)=>{ if(v!==undefined&&v!==null&&v!=='') patch[k]=v; };
-      if(/\D/.test(tid)) put('ref',tid);
-      const dt=atTxt(g('date')).slice(0,10); if(/^\d{4}-\d{2}-\d{2}$/.test(dt)&&!(ex&&ex.scheduled&&dayKey(ex.scheduled)===dt)) put('scheduled',dt+'T04:00:00.000Z');
-      const fin=atTxt(g('done')).slice(0,10); if(/^\d{4}-\d{2}-\d{2}$/.test(fin)&&!(ex&&ex.finished)) put('finished',fin+'T08:00:00.000Z');
-      const st=atStatus(g('status')); if(st) put('status',st);
-      put('region',atTxt(g('emirate'))); put('site',atTxt(g('site'))); put('address',atTxt(g('loc'))); put('product',atTxt(g('product'))); put('issue',atTxt(g('desc'))); put('technician',atTxt(g('tech'))); put('billingRef',atTxt(g('inv'))); put('airtableNotes',atTxt(g('notes')));
-      if(!ex){ const v=Object.assign({id,ref:'EZR-KOHLER-SRV-26-'+id,status:'new',type:'Inspection',priority:'Normal',category:'',product:'',site:'',address:'',region:'',issue:'',prepared:false,contactedAt:null,arrived:null,finished:null,findings:'',work:'',nextAction:'',outcome:'',returnVisit:'No',technician:'',internalNotes:'',parts:[],evidence:[],billingRef:''},patch,{source:'airtable',airtableId:rec.id}); v.history=[Object.assign(hist(v.status),{note:'Imported from Airtable'})]; await save(v,null); made++; continue; }
-      const keys=Object.keys(patch).filter(k=>canon(ex[k]??null)!==canon(patch[k])); if(ex.airtableId!==rec.id) keys.push('airtableId');
-      if(!keys.length) continue;
-      const n=clone(ex); keys.forEach(k=>{ if(k!=='airtableId') n[k]=patch[k]; }); n.airtableId=rec.id; n.source=n.source||'hub+airtable';
-      if(patch.status&&patch.status!==ex.status) n.history=[...(n.history||[]),Object.assign(hist(patch.status),{note:'Status from Airtable'})];
-      await save(n,null); upd++; }
+      const r=await mergeTicket(atTxt(g('id')),g,{recId:rec.id,label:'Airtable',source:'airtable'}); if(r==='skip') skip++; else if(r==='new') made++; else if(r==='upd') upd++; }
     atui={st:'ok',at:new Date().toISOString(),read:recs.length,made,upd,skip,err:''};
     if(made||upd) logAction('Synced tickets from Airtable',{detail:recs.length+' read · '+made+' new · '+upd+' updated'});
     if(manual||made||upd) toast('Airtable: '+recs.length+' ticket'+(recs.length===1?'':'s')+' read · '+made+' new · '+upd+' updated');
@@ -2514,6 +2553,7 @@ document.addEventListener('change',async e=>{
   if(t.id==='g-to'){ gui.to=t.value; render(); return; }
   if(t.id==='g-quick'&&t.value){ const [a,b]=quickPeriod(t.value); gui.from=a; gui.to=b; render(); return; }
   if(t.id==='g-acct'){ gui.acct=t.value; render(); return; }
+  if(t.id==='tk-file'){ const f=t.files&&t.files[0]; if(f) await ticketFileRead(f); return; }
   if(t.id==='bk-file'){ const f=t.files&&t.files[0]; if(!f) return; try{ const data=JSON.parse(await f.text()); if(!data||data.app!=='ziar-imaar-hub'||!data.collections) throw 0; bk={name:f.name,data,confirm:false}; }catch(e){ bk=null; toast('That file is not a hub backup.'); } render(); return; }
   if(t.id==='imp-file'){ const f=t.files&&t.files[0]; if(f) await importStatement(f); return; }
   if(t.id==='r-month'){ rui.month=t.value; render(); return; }
@@ -2608,6 +2648,7 @@ document.addEventListener('submit',async e=>{
   if(id==='fatmap'){ const a=atPick; if(!a) return; const el=e.target.elements, f={}; AT_KEYS.forEach(([k])=>{ const x=el['m_'+k]; if(x&&x.value) f[k]=x.value; }); if(!f.id){ toast('Choose the column that holds the ticket number.'); return; }
     const t=a.tables.find(x=>x.id===a.table), b=(a.bases||[]).find(x=>x.id===a.base); const d=Object.assign({},finSettings.main||{},{airtable:{base:a.base,baseName:b?b.name:a.base,table:a.table,tableName:t?t.name:a.table,f}}); delete d.id;
     await saveDoc('finSettings','main',d,finSettings); logAction('Connected Airtable table',{detail:(b?b.name:a.base)+' → '+(t?t.name:a.table)}); atPick=null; toast('Airtable table saved — syncing'); await airtableSync(true); return; }
+  if(id==='ftkmap'){ const el=e.target.elements, map={}; AT_KEYS.forEach(([k])=>{ const x=el['m_'+k]; if(x&&x.value) map[k]=x.value; }); if(!map.id){ toast('Choose the column that holds the ticket number.'); return; } await ticketFileImport(map); return; }
   if(id==='fsetform'){ const el=e.target.elements; const d={autoInvoice:el.autoInvoice.checked,rate:Math.max(0,r2(el.rate.value)),terms:Math.min(180,Math.max(0,parseInt(el.terms.value,10)||0)),customerAliases:(()=>{ const old=FS().customer, nw=(el.customer.value||'').trim(), al=new Set(FS().customerAliases||[]); if(old&&nw&&old!==nw) al.add(old); al.delete(nw); return [...al]; })(),autoNumber:el.autoNumber.value,reviewIssue:!!(el.reviewIssue&&el.reviewIssue.checked),halfFrom:el.autoNumber.value==='half'?(FS().halfFrom||todayDxb().slice(0,7)):(FS().halfFrom||''),invPrefix:((el.nextNoTxt.value.match(/^\s*([A-Za-z]+[\s\-]?)/)||[,'ZRA '])[1].replace('-',' ').replace(/([A-Za-z])$/,'$1 ').toUpperCase()),nextNo:parseInt((el.nextNoTxt.value.match(/(\d+)\s*$/)||[,0])[1],10)||0,customer:(el.customer.value||'').trim()||'Easy Renovations LLC',endClient:(el.endClient.value||'').trim(),autoStatement:el.autoStatement.checked,stmtDay:Math.min(28,Math.max(1,parseInt(el.stmtDay.value,10)||1)),at:new Date().toISOString()};
     if(FS().rateCard) d.rateCard=FS().rateCard; if(FS().rateHistory) d.rateHistory=FS().rateHistory; await saveDoc('finSettings','main',d,finSettings); logAction('Updated finance automation',{detail:(d.autoInvoice?'auto invoices on':'auto invoices off')+' · '+money(d.rate)+' per ticket · statements day '+d.stmtDay}); toast('Automation saved'); scheduleFinAuto(); return; }
   if(id==='fptxform'){ const d={partner:g('partner'),type:g('type'),date:g('date'),amount:r2(g('amount')),note:g('note'),at:new Date().toISOString()};
@@ -2666,6 +2707,7 @@ document.addEventListener('click',async e=>{
   if(ds.act==='jadd'){ if(gui.jf){ gui.jf.lines.push({a:'5900',d:'',c:''}); render(); } return; }
   if(ds.jdel!==undefined){ if(gui.jf){ gui.jf.lines.splice(+ds.jdel,1); render(); } return; }
   if(ds.jrm){ if(gui.jrm!==ds.jrm){ gui.jrm=ds.jrm; render(); return; } const j=journals[ds.jrm]; gui.jrm=null; await delDoc('journals',ds.jrm,journals); logAction('Deleted journal',{detail:(j&&j.memo)||''}); toast('Journal deleted'); return; }
+  if(ds.act==='tkclose'){ tfi=null; render(); return; }
   if(ds.act==='atpick'){ await atLoadBases(); return; }
   if(ds.act==='atpickclose'){ atPick=null; render(); return; }
   if(ds.act==='atpickback'){ await atLoadBases(); return; }
