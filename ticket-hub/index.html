@@ -590,7 +590,7 @@ function signinHtml(){
       <div class="hide-sm" style="position:relative;z-index:1;max-width:420px"><div style="font-family:var(--display);font-size:22px;font-weight:600;line-height:1.3">Kohler UAE service ticket hub</div><div style="color:var(--navyInk);margin-top:8px">Visits, reviews, parts and reports for the Kohler UAE service contract, in one place for the office and the field.</div></div>
       <div class="sub hide-sm" style="color:var(--navyInk);position:relative;z-index:1">Ziar Imaar Technical Services L.L.C.</div></div>
     <div class="formpane"><div class="signcard"><div><h1>${creating||signStep==='setup'?'Set up your sign-in':'Sign in'}</h1><div class="sub" style="margin-top:4px">${signStep==='setup'?'Link your phone so every sign-in needs a code from it.':signStep==='otp'?'Open your authenticator app for the current code.':creating?'Create a personal PIN, then link your authenticator app.':'Enter your personal PIN, then the code from your authenticator app.'}</div></div>${who}${form}
-      <div class="sub" style="border-top:1px solid var(--line);padding-top:12px">Not you? Switch to your own Claude account, then open this page again.</div></div></div>
+      <div class="sub" style="border-top:1px solid var(--line);padding-top:12px">${me.name?'Signing in as <b>'+esc(me.name)+'</b> (your Claude account). ':''}Each person signs in with their own Claude account and their own PIN. Not you? Sign in to Claude with your own account, then open this link again. New staff: ask the owner to share the hub with your Claude account and give you a role.</div></div></div>
   </div>`;
 }
 
