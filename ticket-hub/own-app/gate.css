@@ -18,5 +18,5 @@
 #hub-me{position:fixed;right:10px;bottom:10px;z-index:900;display:flex;align-items:center;gap:8px;background:rgba(10,31,77,.92);color:#c9d3ea;border-radius:999px;padding:4px 4px 4px 12px;font:12px Inter,-apple-system,sans-serif;box-shadow:0 4px 14px rgba(0,0,0,.2)}
 #hub-me span{max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 #hub-me button{border:0;border-radius:999px;background:#c9972f;color:#0a1f4d;font:inherit;font-weight:600;padding:5px 10px;cursor:pointer}
-@media (max-width:760px){#hub-me{bottom:auto;top:calc(env(safe-area-inset-top,0px) + 6px);right:6px}#hub-me span{display:none}}
+@media (max-width:760px){#hub-me{display:none}}
 @media print{#hub-me{display:none}}

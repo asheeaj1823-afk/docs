@@ -254,6 +254,8 @@ function badge(){
   b.innerHTML = `<span>${esc(session.user.email)}</span><button type="button">Sign out</button>`;
   b.querySelector('button').onclick = async () => { await sb.auth.signOut(); location.replace(location.pathname); };
   document.body.appendChild(b);
+  // the hub's own Sign out button also ends the email login
+  document.addEventListener('click', e => { if (e.target.closest && e.target.closest('[data-act="signout"]')) setTimeout(async () => { await sb.auth.signOut(); location.replace(location.pathname); }, 50); }, true);
 }
 sb.auth.onAuthStateChange((ev, s) => {
   if (ev === 'PASSWORD_RECOVERY'){ recovering = true; session = s; gate('reset'); return; }

@@ -180,6 +180,12 @@ details.tv td,details.tv th{padding:4px 8px;text-align:left;border-top:1px solid
 .attn{display:flex;flex-direction:column}
 .attn button{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:12px;align-items:center;padding:12px 16px;border-top:1px solid var(--line);text-align:left;width:100%}
 .attn button:first-child{border-top:0}
+.myjobs{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px;margin-bottom:16px}
+.myjob{background:var(--surface);border:1px solid var(--line);border-left:4px solid var(--navy3);border-radius:14px;padding:14px;display:grid;gap:8px;min-width:0}
+.myjob.late{border-left-color:var(--bad)}.myjob.done{border-left-color:var(--ok);opacity:.75}
+.myjob .t{display:flex;justify-content:space-between;gap:8px;align-items:baseline}.myjob .t b{font-size:18px}
+.myjob .site{font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.myjob .acts{display:flex;gap:8px;flex-wrap:wrap}.myjob .acts>*{flex:1 1 auto;justify-content:center;text-align:center;text-decoration:none}
 .attn button:hover{background:var(--surface2)}
 .attn .idn{font-weight:700;font-variant-numeric:tabular-nums;color:var(--navy)}
 #tip{position:fixed;z-index:60;pointer-events:none;background:var(--navy);color:#fff;font-size:12px;padding:6px 9px;border-radius:7px;max-width:240px;box-shadow:0 6px 18px rgba(13,27,62,.25)}
@@ -1329,11 +1335,25 @@ function listBody(){
   rows.sort((a,b)=>(b.scheduled||'').localeCompare(a.scheduled||'')||b.id.localeCompare(a.id));
   return rows.slice(0,list.limit).map(itemHtml).join('')+(rows.length>list.limit?`<div class="more"><button class="btn block" data-act="more">Show ${Math.min(60,rows.length-list.limit)} more of ${rows.length-list.limit}</button></div>`:'');
 }
+/* technician field view: today's and overdue jobs with call and map buttons */
+function myJobsHtml(){
+  if(access()!=='technician'||!me.id) return '';
+  const t=todayDxb(), mine=Object.values(visits).filter(v=>v.assignedTo===me.id&&v.status!=='cancelled');
+  const jobs=mine.filter(v=>v.scheduled&&((dayKey(v.scheduled)===t)||(dayKey(v.scheduled)<t&&editable(v)))).sort((a,b)=>(a.scheduled||'').localeCompare(b.scheduled||''));
+  const next=mine.filter(v=>v.scheduled&&dayKey(v.scheduled)>t&&editable(v)).length;
+  const card=v=>{ const late=dayKey(v.scheduled)<t, done=!editable(v)||!!v.finished, ph=String(phoneOf(v)).replace(/[\s-]/g,''), place=[(v.address||''),(v.site||'').split('|')[0].trim(),v.region].filter(Boolean).join(', ');
+    return `<div class="myjob${done?' done':late?' late':''}"><div class="t"><b>${late?esc(dm(v.scheduled)):esc(hm(v.scheduled))}</b>${done?'<span class="chip completed">Done</span>':v.arrived?'<span class="chip review">On site</span>':late?'<span class="chip sla-late">Overdue</span>':chip(v)}</div>
+      <div class="site">#${esc(v.id)} · ${esc((v.site||'').split('|')[0].trim()||'Site not set')}</div><div class="sub">${esc([v.product,v.issue].filter(Boolean).join(' · ').slice(0,120)||v.type||'')}</div>
+      <div class="acts"><button class="btn primary" data-open="${esc(v.id)}">${done?'View':v.arrived?'Continue':'Open job'}</button>${ph?`<a class="btn" href="tel:${esc(ph)}">Call</a>`:''}${place?`<a class="btn" target="_blank" rel="noopener" href="https://www.google.com/maps/search/?api=1&amp;query=${encodeURIComponent(place)}">Map</a>`:''}</div></div>`; };
+  return `<div style="margin-bottom:6px;display:flex;justify-content:space-between;align-items:baseline;gap:8px;flex-wrap:wrap"><h2 style="margin:0;font-size:17px">My jobs today</h2><span class="sub">${jobs.length?jobs.filter(v=>editable(v)&&!v.finished).length+' to do':'Nothing booked for today'}${next?' · '+next+' coming up':''}</span></div>
+    ${jobs.length?`<div class="myjobs">${jobs.map(card).join('')}</div>`:'<div style="height:10px"></div>'}`;
+}
 function ticketsView(){
   const all=Object.values(visits).filter(v=>access()!=='technician'||v.assignedTo===me.id), n={mine:all.filter(v=>editable(v)&&v.assignedTo===me.id).length,unassigned:all.filter(v=>editable(v)&&!v.assignedTo).length,open:all.filter(editable).length,review:all.filter(v=>v.status==='review').length,completed:all.filter(v=>v.status==='completed').length,cancelled:all.filter(v=>v.status==='cancelled').length,all:all.length};
   let v=sel&&visits[sel]; const hidden=v&&access()==='technician'&&v.assignedTo!==me.id; if(hidden) v=null;
   return `<div class="page">
     <div class="phead"><div><h1>Tickets</h1><div class="sub">Open a ticket to record the visit, parts and invoice, or to follow its review.</div></div></div>
+    ${v?'':myJobsHtml()}
     <div class="split${v?' has-sel':''}">
       <section class="card listpane" aria-label="Ticket list">
         <div class="listtools">
