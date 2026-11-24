@@ -1320,7 +1320,7 @@ const FILTERS_ALL=[['mine','Assigned to me'],['open','Open'],['unassigned','Unas
 const filtersFor=()=>{ const a=access(); return FILTERS_ALL.filter(([k])=>a==='technician'?['mine','review','completed','all'].includes(k):a==='viewer'?!['mine','unassigned'].includes(k):k!=='mine'); };
 function listRows(){
   const q=list.q.trim().toLowerCase();
-  const m=v=>!q||[v.id,v.ref,v.site,v.product,v.issue,v.model,v.region,v.contact,v.technician,v.billingRef,v.serial,v.washroom].join(' ').toLowerCase().includes(q);
+  const qs=q.replace(/[\s\-_]/g,''); const m=v=>{ if(!q) return true; const h=[v.id,v.ref,v.site,v.product,v.issue,v.model,v.region,v.contact,v.technician,v.billingRef,v.serial,v.washroom].join(' ').toLowerCase(); return h.includes(q)||(!!qs&&h.replace(/[\s\-_]/g,'').includes(qs)); };
   const f={mine:v=>editable(v)&&v.assignedTo===me.id,unassigned:v=>editable(v)&&!v.assignedTo,open:editable,review:v=>v.status==='review',completed:v=>v.status==='completed',cancelled:v=>v.status==='cancelled',all:()=>true}[list.status];
   const mineOnly=access()==='technician';
   return Object.values(visits).filter(v=>!mineOnly||v.assignedTo===me.id).filter(f).filter(m);
@@ -1330,7 +1330,7 @@ function itemHtml(v){
   return `<button class="titem" data-sel="${esc(v.id)}" aria-current="${sel===v.id}">
     <div class="top"><span class="idn">#${esc(v.id)}</span>${chip(v)}${e?`<span class="chip sla-late" style="margin-left:auto">${esc(e.label)}</span>`:editable(v)&&s.label!=='—'?`<span class="chip ${s.cls}" style="margin-left:auto">${esc(s.label)}</span>`:miss?`<span class="sub" style="margin-left:auto;color:var(--bad);font-weight:600">⚠ ${miss} missing</span>`:''}</div>
     <div class="site">${esc(siteOf(v))}</div>
-    <div class="meta"><span>${esc(v.product||'—')}</span><span>·</span><span class="num">${esc(dayLong(v.scheduled))}</span>${v.priority&&v.priority!=='Normal'?`<span class="prio ${esc(v.priority)}">${esc(v.priority)}</span>`:''}${editable(v)?`<span style="margin-left:auto;font-weight:600;color:${v.assignedTo?'var(--ink2)':'var(--warn)'}">${v.assignedTo?esc(assigneeName(v)):'Unassigned'}</span>`:''}</div>
+    <div class="meta"><span>${esc(v.product||'—')}</span><span>·</span><span class="num">${esc(dayLong(v.scheduled))}</span>${v.priority&&v.priority!=='Normal'?`<span class="prio ${esc(v.priority)}">${esc(v.priority)}</span>`:''}${editable(v)?`<span style="margin-left:auto;font-weight:600;color:${v.assignedTo?'var(--ink2)':'var(--warn)'}">${v.assignedTo?esc(assigneeName(v)):'Unassigned'}</span>`:(v.billingRef||'').trim()?`<span class="num" style="margin-left:auto;font-weight:600;color:var(--ink2)" title="Z Invoice No.">${esc(v.billingRef)}</span>`:v.status==='completed'?`<span style="margin-left:auto;color:var(--warn);font-weight:600">Not invoiced yet</span>`:''}</div>
   </button>`;
 }
 function listBody(){
