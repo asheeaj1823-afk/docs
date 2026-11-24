@@ -744,7 +744,12 @@ function tasksView(){
   const a=access(), items=[], mineT=Object.values(visits).filter(v=>v.assignedTo&&v.assignedTo===me.id&&!['completed','cancelled'].includes(v.status));
   mineT.forEach(v=>items.push(['warn',tref(v)+' · '+(v.site||'Site'),(v.scheduled?dmhm(v.scheduled)+' · ':'')+(v.issue||v.type||''),`<button class="btn" data-open="${esc(v.id)}">Open</button>`]));
   if(isOffice()){
-    const rq=reviewQueue(); if(rq.length) items.push(['warn',rq.length+' ticket'+(rq.length>1?'s':'')+' waiting for office review','Approve or send back for recheck.',`<button class="btn" data-route="review">Review</button>`]);
+    const rq=reviewQueue(); if(rq.length) items.push(['warn',rq.length+' ticket'+(rq.length>1?'s':'')+' waiting for office review',reportFromAirtable()?'Review and complete them in Airtable.':'Approve or send back for recheck.',`<button class="btn" data-route="review">Review</button>`]);
+    if(reportFromAirtable()){ const t=todayDxb(), nw=atLog.filter(c=>c.kind==='new'&&dayKey(c.at)===t);
+      if(nw.length) items.unshift(['ok',nw.length+' new ticket'+(nw.length>1?'s':'')+' from Airtable today',nw.slice(0,6).map(c=>tref(c.id)).join(', '),`<button class="btn" data-open="${esc(nw[0].id)}">Open</button>`]);
+      const fx=atFixList(), ft=[...new Set(fx.map(x=>x.v.id))]; if(ft.length) items.push(['warn',ft.length+' ticket'+(ft.length>1?'s need':' needs')+' a fix in Airtable',[...new Set(fx.map(x=>x.why))].slice(0,3).join(' · '),`<button class="btn" data-route="dashboard">See list</button>`]);
+      const last=monthEnd(t.slice(0,7)); if(FS().autoNumber==='half'&&(t.slice(8)==='15'||t===last)){ const p=periodOf(t,'half'), w=Object.values(visits).filter(v=>['new','review','recheck'].includes(v.status)&&(v.scheduled||'').slice(0,10)>=p.key&&(v.scheduled||'').slice(0,10)<=p.end);
+        items.unshift(['bad','Billing cycle '+p.label+' closes today',w.length?w.length+' ticket'+(w.length>1?'s are':' is')+' not completed in Airtable yet ('+w.slice(0,5).map(v=>tref(v)).join(', ')+'). Complete them in Airtable today to include them in '+nextInvoiceNo()+'.':'Every ticket in this cycle is completed. '+nextInvoiceNo()+' is raised automatically tonight.',`<button class="btn" data-route="dashboard">Preview</button>`]); } }
     const late=Object.values(visits).filter(v=>!['completed','cancelled'].includes(v.status)&&sla(v).late); if(late.length) items.push(['bad',late.length+' ticket'+(late.length>1?'s':'')+' past the response time',late.slice(0,5).map(v=>tref(v)).join(', '),`<button class="btn" data-open="${esc(late[0].id)}">Open #${esc(late[0].id)}</button>`]);
     const un=Object.values(visits).filter(v=>v.status==='new'&&!v.assignedTo); if(un.length) items.push(['warn',un.length+' new ticket'+(un.length>1?'s':'')+' with no technician',un.slice(0,6).map(v=>tref(v)).join(', '),`<button class="btn" data-open="${esc(un[0].id)}">Assign</button>`]);
     const dq=qualityIssues().reduce((s,g)=>s+g.list.length,0); if(dq) items.push(['warn',dq+' data issue'+(dq>1?'s':'')+' to fix','Missing dates, emirates, invoice numbers and more.',`<button class="btn" data-route="quality">See them</button>`]);
@@ -1182,6 +1187,8 @@ async function airtableSync(manual){
       const r=await mergeTicket(atTxt(g('id')),g,{recId:rec.id,label:'Airtable',source:'airtable',inout:!!(AT.f.arrived&&AT.f.doneAt),files:!!AT.f.photos}); if(r==='skip') skip++; else if(r==='new') made++; else if(r==='upd') upd++; }
     atui={st:'ok',at:new Date().toISOString(),read:recs.length,made,upd,skip,err:'',conflicts:atConflicts.length};
     if(atChanges.length) await atLogSave(atChanges);
+    { const nw=atChanges.filter(c=>c.kind==='new'); if(nw.length&&atui.at){ const msg=nw.length===1?'New ticket from Airtable: '+tref(nw[0].id)+(visits[nw[0].id]&&visits[nw[0].id].site?' · '+visits[nw[0].id].site:''):nw.length+' new tickets from Airtable'; setTimeout(()=>toast(msg),1200);
+      try{ if(window.Notification&&Notification.permission==='granted') new Notification('Ziar Imaar Hub',{body:msg}); }catch(e){} } }
     if(made||upd) logAction('Synced tickets from Airtable',{detail:recs.length+' read · '+made+' new · '+upd+' updated'});
     if(manual||made||upd) toast('Airtable: '+recs.length+' ticket'+(recs.length===1?'':'s')+' read · '+made+' new · '+upd+' updated');
     if(!atTimer) atTimer=setInterval(()=>airtableSync(false),1800000);
@@ -1394,9 +1401,9 @@ function listRows(){
 function itemHtml(v){
   const s=sla(v), e=escal(v), miss=v.status==='review'?missingChecks(v).length:0;
   return `<button class="titem" data-sel="${esc(v.id)}" aria-current="${sel===v.id}">
-    <div class="top"><span class="idn">${esc(tref(v))}</span>${chip(v)}${e?`<span class="chip sla-late" style="margin-left:auto">${esc(e.label)}</span>`:editable(v)&&s.label!=='—'?`<span class="chip ${s.cls}" style="margin-left:auto">${esc(s.label)}</span>`:miss?`<span class="sub" style="margin-left:auto;color:var(--bad);font-weight:600">⚠ ${miss} missing</span>`:''}</div>
+    <div class="top"><span class="idn">${esc(tref(v))}</span>${invChip(v)}${chip(v)}${e?`<span class="chip sla-late" style="margin-left:auto">${esc(e.label)}</span>`:editable(v)&&s.label!=='—'?`<span class="chip ${s.cls}" style="margin-left:auto">${esc(s.label)}</span>`:miss?`<span class="sub" style="margin-left:auto;color:var(--bad);font-weight:600">⚠ ${miss} missing</span>`:''}</div>
     <div class="site">${esc(siteOf(v))}</div>
-    <div class="meta"><span>${esc(v.product||'—')}</span><span>·</span><span class="num">${esc(dayLong(v.scheduled))}</span>${v.priority&&v.priority!=='Normal'?`<span class="prio ${esc(v.priority)}">${esc(v.priority)}</span>`:''}${editable(v)?`<span style="margin-left:auto;font-weight:600;color:${v.assignedTo?'var(--ink2)':'var(--warn)'}">${v.assignedTo?esc(assigneeName(v)):'Unassigned'}</span>`:(v.billingRef||'').trim()?`<span class="num" style="margin-left:auto;font-weight:600;color:var(--ink2)" title="Z Invoice No.">${esc(v.billingRef)}</span>`:v.status==='completed'?`<span style="margin-left:auto;color:var(--warn);font-weight:600">Not invoiced yet</span>`:''}</div>
+    <div class="meta"><span>${esc(v.product||'—')}</span><span>·</span><span class="num">${esc(dayLong(v.scheduled))}</span>${v.priority&&v.priority!=='Normal'?`<span class="prio ${esc(v.priority)}">${esc(v.priority)}</span>`:''}${editable(v)?`<span style="margin-left:auto;font-weight:600;color:${v.assignedTo?'var(--ink2)':'var(--warn)'}">${v.assignedTo?esc(assigneeName(v)):'Unassigned'}</span>`:''}</div>
   </button>`;
 }
 function listBody(){
@@ -1451,7 +1458,7 @@ function headCard(v,opts={}){
     <div class="dhead">
       ${opts.back!==false?`<button class="btn ghost backlink" data-act="back" style="align-self:flex-start;padding:0;height:28px">${svg('back',16)} All tickets</button>`:''}
       <div class="row" style="align-items:flex-start;flex-wrap:wrap">
-        <div style="min-width:0"><div class="mono" style="font-weight:700">${esc(tref(v))}</div><h2 style="margin-top:2px">${esc(siteOf(v))}</h2>${v.issue?`<div style="color:var(--ink2);margin-top:2px">${esc(v.issue)}</div>`:''}</div>
+        <div style="min-width:0"><div class="mono" style="font-weight:700;display:flex;gap:8px;align-items:center;flex-wrap:wrap">${esc(tref(v))}${invChip(v)}</div><h2 style="margin-top:2px">${esc(siteOf(v))}</h2>${v.issue?`<div style="color:var(--ink2);margin-top:2px">${esc(v.issue)}</div>`:''}</div>
         <div class="actions">${canPdf()?`<button class="btn" data-pdf="${esc(v.id)}">${svg('doc',16)}Service report</button>`:''}</div>
       </div>
       <div class="chips">${chip(v)}${slaChip(v)}<span class="prio ${esc(v.priority||'Normal')}">${esc(v.priority||'Normal')} priority</span></div>
@@ -1529,7 +1536,7 @@ function bodyHtml(v){
         <div class="kv"><span>Technicians</span><span>${esc(v.technician)||'—'}</span></div>
         <div class="kv"><span>Return visit</span><span>${esc(v.returnVisit||'No')}</span></div>
         ${v.customerFeedback?`<div class="kv"><span>Customer feedback</span><span>${esc(v.customerFeedback)}</span></div>`:''}
-        <div class="kv"><span>Z Invoice No.</span><span>${esc(v.billingRef)||'—'}</span></div>
+        <div class="kv"><span>Z Invoice No.</span><span>${(()=>{ const i=invFor(v); return !i||!i.no?'—':i.planned?esc(i.no)+' <span class="sub">· planned, fixed on '+esc(String(i.on).split('-').reverse().join('/'))+'</span>':'<b>'+esc(i.no)+'</b>'; })()}</span></div>
         ${(()=>{ const a=assetFor(v); if(!a) return ''; const w=warranty(a); return `<div class="kv"><span>Registered asset</span><span>${esc(a.serial?'S/N '+a.serial:a.model)}${w?` · <span class="chip ${w.cls}" style="height:20px">${esc(w.label)}</span>`:''}</span></div>`; })()}
         ${v.internalNotes?`<div class="kv"><span>Internal notes</span><span>${esc(v.internalNotes)}</span></div>`:''}
       </div></div>
@@ -2046,6 +2053,17 @@ function nextInvoiceNo(skip=0){
   [...Object.values(invoices).map(i=>i.invoiceNo),...Object.values(visits).map(v=>v.billingRef)].forEach(x=>{ const m=String(x||'').toUpperCase().replace(/[\s\-_]/g,'').match(new RegExp('^'+pre+'(\\d+)$')); if(m) mx=Math.max(mx,+m[1]); });
   return (s.invPrefix||'ZRA ')+Math.max(mx+1,+s.nextNo||0)+'';
 }
+/* invoice number for a ticket: its own Z invoice number, or the next number it will get when its billing cycle closes */
+function invFor(v){
+  if((v.billingRef||'').trim()) return {no:v.billingRef.trim(),planned:false};
+  if(v.status==='cancelled'||billKindOf(v)==='none') return null;
+  const mode=FS().autoNumber; if(!mode||mode==='off') return null;
+  const t=todayDxb(), d=ticketDate(v)||t, m=mode==='half'?'half':mode==='weekly'?'weekly':'month';
+  if(mode==='ticket') return {no:nextInvoiceNo(),planned:true,on:'when completed'};
+  const p=periodOf(d,m), cur=periodOf(t,m); if(p.key>cur.key) return {no:'',planned:true,on:p.end};
+  return {no:nextInvoiceNo(),planned:true,on:cur.end};
+}
+const invChip=v=>{ const i=invFor(v); if(!i||!i.no) return ''; return i.planned?`<span class="chip plain" style="height:22px;font-weight:600;opacity:.85" title="Planned — the number is fixed when the billing cycle closes (${esc(i.on)})">${esc(i.no)} · planned</span>`:`<span class="chip completed" style="height:22px;font-weight:700" title="Z Invoice No.">${esc(i.no)}</span>`; };
 const unbilled=()=>Object.values(visits).filter(v=>v.status==='completed'&&!(v.billingRef||'').trim()&&billKindOf(v)!=='none').sort((a,b)=>ticketDate(a).localeCompare(ticketDate(b))||a.id.localeCompare(b.id));
 function periodOf(d,mode){
   const fd=x=>x.split('-').reverse().join('/');
