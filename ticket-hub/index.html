@@ -67,6 +67,17 @@ h1,h2,h3{margin:0;font-family:var(--display);letter-spacing:-.01em;text-wrap:bal
 .nav .nitems button{height:34px;padding-left:40px;font-size:13px}
 .nav .soon{margin-left:auto;font-size:10px;letter-spacing:.04em;text-transform:uppercase;opacity:.55;border:1px solid currentColor;border-radius:4px;padding:0 4px}
 .side{overflow-y:auto}
+.nav .gsbtn{display:flex;align-items:center;gap:10px;height:38px;margin:0 0 10px;padding:0 12px;border-radius:9px;background:rgba(255,255,255,.08);color:var(--navyInk);font-weight:500}
+.nav .gsbtn:hover{background:rgba(255,255,255,.14);color:#fff}
+.nav .gsbtn kbd{margin-left:auto;font-size:10.5px;opacity:.65;font-family:inherit;border:1px solid currentColor;border-radius:4px;padding:0 5px}
+#gsearch .gs-box{position:fixed;left:50%;top:10vh;transform:translateX(-50%);width:min(640px,calc(100vw - 32px));max-height:72vh;display:flex;flex-direction:column;background:var(--surface);border-radius:14px;box-shadow:0 24px 64px rgba(10,20,40,.35);z-index:82;overflow:hidden}
+#gsearch .gs-in{display:flex;align-items:center;gap:10px;padding:14px 16px;border-bottom:1px solid var(--line);color:var(--muted)}
+#gsearch .gs-in input{flex:1;border:0;outline:0;font:inherit;font-size:16px;background:transparent;color:var(--ink);min-width:0}
+#gsearch .gs-in kbd{font-size:11px;border:1px solid var(--line);border-radius:4px;padding:1px 6px;font-family:inherit}
+#gsearch .gs-res{overflow-y:auto;padding:6px 0}
+#gsearch .gs-g{padding:10px 16px 4px;font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+#gsearch .gs-item{display:flex;flex-direction:column;align-items:flex-start;gap:2px;width:100%;padding:8px 16px;text-align:left}
+#gsearch .gs-item.on,#gsearch .gs-item:hover{background:var(--goldSoft)}
 #msheet .msheet-bg{position:fixed;inset:0;background:rgba(10,20,40,.45);z-index:80}
 #msheet .msheet{position:fixed;left:0;right:0;bottom:0;max-height:85vh;overflow-y:auto;background:var(--navy);color:#fff;border-radius:16px 16px 0 0;padding:12px 14px calc(18px + env(safe-area-inset-bottom,0px));z-index:81}
 #msheet .msheet-h{display:flex;align-items:center;justify-content:space-between;padding:4px 4px 10px}
@@ -694,7 +705,7 @@ function curNavKey(){ if(navCur){ const [si,ii]=navCur.split('.'); const it=NAV[
 function navGroupsHtml(){
   const cur=curNavKey(), curSec=cur?+cur.split('.')[0]:-1, n=reviewQueue().length;
   if(navOpen===null) navOpen=new Set([curSec]);
-  return NAV.map(([no,label,icon,items],si)=>{ const vis=items.map((it,ii)=>[it,ii]).filter(([it])=>navItemOk(it[1])); if(!vis.length) return '';
+  return `<button class="gsbtn" data-act="gsopen">${svg('search',16)}<span>Search</span><kbd>Ctrl K</kbd></button>`+NAV.map(([no,label,icon,items],si)=>{ const vis=items.map((it,ii)=>[it,ii]).filter(([it])=>navItemOk(it[1])); if(!vis.length) return '';
     const open=navOpen.has(si)||(si===curSec&&!navClosedCur);
     return `<div class="ngrp${si===curSec?' cur':''}"><button class="nsec" data-nsec="${si}" aria-expanded="${open}">${svg(icon)}<span><small>${no}</small> ${label}</span>${si===2-1&&n?`<span class="badge">${n}</span>`:''}<i class="chev">${open?'▾':'▸'}</i></button>
       ${open?`<div class="nitems">${vis.map(([[l,o],ii])=>`<button data-nav="${si}.${ii}" ${cur===si+'.'+ii?'aria-current="page"':''}>${esc(l)}${o.r==='planned'?'<span class="soon">planned</span>':''}${o.r==='review'&&n?`<span class="badge">${n}</span>`:''}</button>`).join('')}</div>`:''}</div>`; }).join('');
@@ -793,7 +804,8 @@ function qualityView(){
 }
 
 /* ---------- Company ---------- */
-const CO=()=>Object.assign({legalName:'Ziar Imaar Technical Services L.L.C.',tradeName:'Ziar Imaar',licence:'',trn:'',address:'',phone:'',email:'',bankName:'',accountName:'',iban:'',swift:''},FS().company||{});
+const ibanOk=x=>{ const r=(x.slice(4)+x.slice(0,4)).replace(/[A-Z]/g,ch=>String(ch.charCodeAt(0)-55)); let m=0; for(const d of r) m=(m*10+(+d))%97; return m===1; };
+const CO=()=>Object.assign({legalName:'Ziar Imaar Technical Services L.L.C.',tradeName:'Ziar Imaar',licence:'',trn:'',address:'',phone:'',email:'',custAddress:'',custTrn:'',placeOfSupply:'Dubai',accountNo:'',bankName:'',accountName:'',iban:'',swift:''},FS().company||{});
 function companyView(){
   const c=CO(), f=(k,l,ph='')=>`<label>${l}<input class="field" name="${k}" value="${esc(c[k]||'')}" placeholder="${esc(ph)}"></label>`;
   const tabs=[['entities','Legal entities'],['profile','Company profile'],['system','System settings']];
@@ -802,7 +814,8 @@ function companyView(){
     <div class="card-b sub" style="font-size:12.5px">The hub keeps one company's books. If you run a second company, its invoices and bank accounts must be kept separately — tell me and I will add it as its own entity.</div></div>`;
   if(coui.tab==='profile') body=`<form id="fcoform" class="card"><div class="card-h"><h3>Company profile</h3><span class="sub">Printed on statements</span></div><div class="card-b"><div class="fgrid">
     ${f('legalName','Legal name')}${f('tradeName','Trade name')}${f('licence','Trade licence no.')}${f('trn','TRN (VAT registration no.)','15 digits')}${f('address','Address','Office, area, emirate')}${f('phone','Phone')}${f('email','Email')}
-    ${f('bankName','Bank name','e.g. Wio Bank')}${f('accountName','Account name')}${f('iban','IBAN','AE…')}${f('swift','SWIFT / BIC')}</div>
+    ${f('custAddress','Customer address (on invoices)','Easy Renovations LLC address')}${f('custTrn','Customer TRN','15 digits, if VAT registered')}
+    ${f('placeOfSupply','Place of supply','Dubai')}${f('bankName','Bank name','e.g. Wio Business')}${f('accountNo','Account no.')}${f('accountName','Account name')}${f('iban','IBAN','AE…')}${f('swift','SWIFT / BIC')}</div>
     <div class="formfoot" style="padding:12px 0 0"><button class="btn primary" type="submit">Save company profile</button></div></div></form>`;
   if(coui.tab==='system'){ const s=FS(); body=`<div class="card"><div>${[
     ['Sign-in','PIN + authenticator code · sessions end after 8 hours, or 30 minutes idle',`<button class="btn" data-nav="7.0">Users</button>`],
@@ -863,6 +876,112 @@ function plannedView(){
   const why={'General Ledger':'Double-entry journals, chart of accounts and trial balance. This will be built after your main workbook is loaded, so the opening balances are right. Until then your accountant keeps the ledger; use Finance → Export for the figures.','Procurement':'Purchase requests, supplier bills and approvals. Until then, record parts received under Inventory and supplier payments under Finance → Bank.'}[plannedName]||'';
   return `<div class="page"><div class="phead"><div><h1>${esc(plannedName)}</h1><div class="sub">Planned · not built yet</div></div></div><div class="card"><div class="card-b"><p style="margin-top:0">${esc(why)}</p></div></div></div>`;
 }
+
+
+/* ---------- tax invoice / tax credit note PDF (layout of the company's own tax invoice) ---------- */
+function aedWords(n){
+  const o=['','One','Two','Three','Four','Five','Six','Seven','Eight','Nine','Ten','Eleven','Twelve','Thirteen','Fourteen','Fifteen','Sixteen','Seventeen','Eighteen','Nineteen'], t=['','','Twenty','Thirty','Forty','Fifty','Sixty','Seventy','Eighty','Ninety'];
+  const h=x=>{ let s=''; if(x>=100){ s+=o[Math.floor(x/100)]+' Hundred'; x%=100; if(x) s+=' '; } if(x>=20){ s+=t[Math.floor(x/10)]; if(x%10) s+=' '+o[x%10]; } else if(x) s+=o[x]; return s; };
+  const w=x=>{ if(!x) return 'Zero'; const parts=[]; [[1e9,'Billion'],[1e6,'Million'],[1e3,'Thousand']].forEach(([d,l])=>{ if(x>=d){ parts.push(h(Math.floor(x/d))+' '+l); x%=d; } }); if(x) parts.push(h(x)); return parts.join(' '); };
+  const a=Math.abs(r2(n)), d=Math.floor(a), f=Math.round((a-d)*100);
+  return 'UAE Dirhams '+w(d)+(f?' and '+w(f)+' Fils':'')+' only (AED '+(f?a.toFixed(2):d)+')';
+}
+function invRows(inv){
+  if(isCredit(inv)) return [{d:'Credit against invoice '+(inv.refInvoice||'')+(inv.notes?' — '+inv.notes:''),q:1,u:-inv.net,neg:true}];
+  const L=(inv.lines||[]).slice().sort((a,b)=>a.ticket.localeCompare(b.ticket)); if(!L.length) return [{d:'Technical services'+(ticketsForInv(inv).length?' — '+ticketsForInv(inv).map(v=>v.ref||'#'+v.id).join(', '):''),q:1,u:inv.net}];
+  const ref=id=>(visits[id]&&visits[id].ref)||('#'+id), items=[];
+  L.forEach(l=>{ if(l.service) items.push({k:'svc',u:l.service,id:l.ticket}); if(l.collection) items.push({k:'col:'+l.emirate,u:l.collection,id:l.ticket,em:l.emirate}); if(l.waiting) items.push({k:'wait',u:l.waiting,id:l.ticket}); });
+  const rows=[]; const groups={};
+  items.forEach(x=>{ const g=x.k+'|'+x.u; (groups[g]=groups[g]||[]).push(x); });
+  Object.values(groups).forEach(xs=>{ const k=xs[0].k;
+    if(k.startsWith('col:')){ rows.push({d:'Spare Collection - Transportation Charges - '+xs[0].em+'  ('+xs.map(x=>ref(x.id)).join(', ')+')',q:xs.length,u:xs[0].u,first:xs[0].id}); return; }
+    if(k==='wait'){ rows.push({d:'Waiting time - '+xs.map(x=>ref(x.id)).join(', '),q:xs.length,u:xs[0].u,first:xs[0].id}); return; }
+    let run=[xs[0]]; const flush=()=>{ const a=run[0], b=run[run.length-1]; rows.push({d:'Ticket No-'+(run.length===1?ref(a.id):run.length===2?ref(a.id)+' & '+ref(b.id):ref(a.id)+' to '+ref(b.id)),q:run.length,u:a.u,first:a.id}); };
+    xs.slice(1).forEach(x=>{ const prev=run[run.length-1]; if(+x.id===+prev.id+1) run.push(x); else { flush(); run=[x]; } }); flush(); });
+  return rows.sort((a,b)=>(a.d.startsWith('Spare')?0:1)-(b.d.startsWith('Spare')?0:1)||(b.first||'').localeCompare(a.first||''));
+}
+async function invoicePdf(id){
+  const inv=invoices[id]; if(!inv||!canPdf()) return; const cr=isCredit(inv), c=CO();
+  const {jsPDF}=window.jspdf; const doc=new jsPDF({unit:'pt',format:'a4'}); const W=595.28,H=841.89,M=34, X2=W-M; let y;
+  const ink=[30,36,48], muted=[95,104,120], line=[60,66,80], shade=[236,238,242];
+  const fd=d=>d?d.split('-').reverse().join('/'):'—', amt=n=>Math.abs(r2(n)).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})+' AED';
+  const T=(t,x,yy,o={})=>{ doc.setFont('helvetica',o.b?'bold':'normal'); doc.setFontSize(o.s||8.5); doc.setTextColor(...(o.c||ink)); doc.text(t,x,yy,o.a?{align:o.a}:undefined); };
+  const box=(x,yy,w,h,fill)=>{ doc.setDrawColor(...line); doc.setLineWidth(.6); if(fill){ doc.setFillColor(...shade); doc.rect(x,yy,w,h,'FD'); } else doc.rect(x,yy,w,h); };
+  const title=cr?'Tax Credit Note':'Tax Invoice';
+  const header=()=>{ y=M+12; T(title,W/2,y,{b:true,s:15,a:'center'}); y+=12;
+    box(M,y,X2-M,74); T(c.legalName||'',M+12,y+24,{b:true,s:16});
+    T(c.address||'',M+12,y+38,{s:8,c:muted}); T((c.phone?'Phone:  '+c.phone:''),M+12,y+51,{s:8}); if(c.email) T('Email:  '+c.email,X2-12,y+51,{s:8,a:'right'}); if(c.trn) T('TRN: '+c.trn,M+12,y+63,{s:8,b:true}); y+=74; };
+  header();
+  // bill to / invoice details
+  const mid=M+(X2-M)*0.5, mid2=M+(X2-M)*0.75;
+  box(M,y,mid-M,15,true); box(mid,y,X2-mid,15,true); T('Bill To:',M+5,y+10,{b:true,s:8}); T(cr?'Credit Note Details:':'Invoice Details:',mid+5,y+10,{b:true,s:8}); y+=15;
+  const hb=48; box(M,y,mid-M,hb); box(mid,y,mid2-mid,hb); box(mid2,y,X2-mid2,hb);
+  T(String(inv.customer||FS().customer).toUpperCase(),M+5,y+12,{b:true}); doc.splitTextToSize(c.custAddress||'DUBAI',mid-M-10).slice(0,2).forEach((l,i)=>T(l,M+5,y+24+i*10,{s:8})); if(c.custTrn) T('TRN: '+c.custTrn,M+5,y+44,{s:8});
+  T((cr?'Credit Note No.: ':'Invoice No.: ')+inv.invoiceNo,mid+5,y+12); T('Date: '+fd(inv.date),mid+5,y+24); T(cr?'Against Invoice: '+(inv.refInvoice||''):'Place Of Supply: '+(c.placeOfSupply||'Dubai'),mid+5,y+36);
+  T('Date of Supply: '+fd(inv.supplyDate||inv.date),mid2+5,y+12); y+=hb+10;
+  // table
+  const cols=[[M,18,'#','left'],[M+18,170,'Item name','left'],[M+188,52,'Quantity','right'],[M+240,44,'Unit','right'],[M+284,60,'Price/\nUnit(AED)','right'],[M+344,38,'VAT %','right'],[M+382,74,'VAT Amount(AED)','right'],[M+456,X2-M-456,'Amount(AED)','right']];
+  const th=()=>{ cols.forEach(([x,w,t,al])=>{ box(x,y,w,26,true); const ls=t.split('\n'); ls.forEach((l,i)=>T(l,al==='right'?x+w-4:x+4,y+11+i*9-(ls.length-1)*4,{b:true,s:7.6,a:al==='right'?'right':undefined})); }); y+=26; };
+  th();
+  const rows=invRows(inv); let qty=0, vatT=0, totT=0;
+  rows.forEach((r,i)=>{ const net=r.u*r.q, vat=r2(net*VAT_RATE), tot=r2(net+vat); qty+=r.q; vatT+=vat; totT+=tot; const ls=doc.splitTextToSize(r.d,170-8); const rh=Math.max(22,ls.length*9.5+8);
+    if(y+rh>H-120){ doc.addPage(); header(); y+=8; th(); }
+    cols.forEach(([x,w])=>box(x,y,w,rh)); T(String(i+1),M+4,y+rh/2+3);
+    ls.forEach((l,k)=>T(l,M+22,y+11+k*9.5,{b:true,s:7.8})); const v=[String(r.q),'Ser',amt(r.u),'5%',amt(vat),amt(tot)];
+    v.forEach((t,k)=>{ const [x,w]=cols[k+2]; T((cr&&k>=2&&k!==3?'-':'')+t,x+w-4,y+rh/2+3,{s:8,a:'right'}); }); y+=rh; });
+  cols.forEach(([x,w])=>box(x,y,w,18)); T('Total',M+22,y+12,{b:true}); T(String(qty),cols[2][0]+cols[2][2-1]-4,y+12,{b:true,a:'right'}); T((cr?'-':'')+amt(vatT),cols[6][0]+cols[6][1]-4,y+12,{b:true,a:'right'}); T((cr?'-':'')+amt(totT),X2-4,y+12,{b:true,a:'right'}); y+=18;
+  // totals block
+  const tx=M+(X2-M)*0.655, tw=X2-tx; if(y>H-200){ doc.addPage(); header(); y+=8; }
+  const gross=r2(invGross(inv)), paid=cr?0:invPaid(inv), bal=r2(gross-paid);
+  const prev=cr?0:r2(Object.values(invoices).filter(x=>!isCredit(x)&&!['draft','void'].includes(x.status)&&x.id!==inv.id&&(x.customer||'')===(inv.customer||'')&&(x.date||'')<(inv.date||'')).reduce((a,x)=>a+Math.max(0,invGross(x)-invPaid(x)),0));
+  const top=y; const tr=(k,v,b,fill)=>{ box(tx,y,tw,15,fill); T(k,tx+4,y+10.5,{b,s:8}); if(v!=='') T(v,X2-4,y+10.5,{b,s:8,a:'right'}); y+=15; };
+  tr('Sub Total   :',(cr?'-':'')+amt(gross)); tr('Total         :',(cr?'-':'')+amt(gross),true,true); box(tx,y,tw,15,true); T(cr?'Credit Amount in Words:':'Invoice Amount in Words:',tx+4,y+10.5,{b:true,s:8}); y+=15;
+  const wl=doc.splitTextToSize(aedWords(gross),tw-8); box(tx,y,tw,wl.length*10+8); wl.forEach((l,i)=>T(l,tx+4,y+11+i*10,{s:8})); y+=wl.length*10+8;
+  if(!cr){ const cn=creditsFor(inv); if(cn) tr('Credit notes   :','-'+amt(cn)); tr('Received   :',amt(paid-cn)); tr('Balance     :',amt(bal)); const tracked=Object.values(invoices).some(x=>(+x.paidOther||0)>0)||Object.values(bankTx).some(t=>t.invoiceNo&&+t.amount>0); tr('Previous Balance:',amt(tracked?prev:0)); tr('Current Balance :',amt(r2((tracked?prev:0)+bal))); }
+  box(M,top,tx-M,y-top); box(M,y-30,tx-M,15,true); T('Payment Mode:',M+4,y-19.5,{b:true,s:8}); box(M,y-15,tx-M,15); T(cr?'Credit note':'Credit',M+4,y-4.5,{s:8});
+  // page 2: bank, signatures, acknowledgement
+  doc.addPage(); header();
+  box(M,y,X2-M,15,true); T('Bank Details:',M+5,y+10,{b:true,s:8}); y+=15;
+  const bank=[['Name',c.bankName],['Account No.',c.accountNo],['SWIFT code',c.swift],["Account holder's name",c.accountName],['IBAN',c.iban]].filter(x=>x[1]);
+  box(M,y,X2-M,Math.max(20,bank.length*14+8)); bank.forEach(([k,v],i)=>{ T(k+' : ',M+6,y+13+i*14,{s:8.5}); T(String(v),M+6+doc.getTextWidth(k+' : ')+4,y+13+i*14,{s:8.5,b:true}); }); y+=Math.max(20,bank.length*14+8);
+  box(M,y,mid-M,15,true); box(mid,y,X2-mid,15,true); T("Customer's Seal & Signature:",M+5,y+10,{b:true,s:8}); T('For '+(c.legalName||'')+':',mid+5,y+10,{b:true,s:7.6}); y+=15;
+  box(M,y,mid-M,70); box(mid,y,X2-mid,70); T('Customer Signatory',(M+mid)/2,y+64,{s:8.5,a:'center'}); T('Authorized Signatory',(mid+X2)/2,y+64,{s:8.5,a:'center'}); y+=88;
+  doc.setLineDashPattern([3,3],0); doc.setDrawColor(...muted); doc.line(M,y,X2,y); doc.setLineDashPattern([],0); y+=24;
+  T('Acknowledgement',W/2,y,{b:true,s:14,a:'center'}); y+=12;
+  box(M,y,X2-M,15,true); T('Company Details:',M+5,y+10,{b:true,s:8}); y+=15; box(M,y,X2-M,38); T(c.legalName||'',W/2,y+17,{b:true,s:13,a:'center'}); T([c.phone&&'Phone: '+c.phone,c.email&&'Email: '+c.email,c.trn&&'TRN: '+c.trn].filter(Boolean).join('     '),W/2,y+31,{s:7.6,a:'center'}); y+=38;
+  const w3=(X2-M)/3; [['Invoice Details:',0],['Party Details:',1],["Receiver's Seal & Sign:",2]].forEach(([t,k])=>{ box(M+k*w3,y,w3,15,true); T(t,M+k*w3+5,y+10,{b:true,s:8}); }); y+=15;
+  [0,1,2].forEach(k=>box(M+k*w3,y,w3,44)); T((cr?'Credit Note No. : ':'Invoice No. : ')+inv.invoiceNo,M+5,y+12,{s:8}); T('Date : '+(inv.date||'').split('-').reverse().join('-'),M+5,y+23,{s:8}); T('Amount : '+(cr?'-':'')+amt(gross),M+5,y+34,{s:8});
+  T(String(inv.customer||FS().customer).toUpperCase(),M+w3+5,y+12,{b:true,s:8}); T((c.custAddress||'DUBAI').split(',')[0],M+w3+5,y+23,{s:8});
+  if(!c.trn){ T('Supplier TRN missing — add it under Company management → Company profile.',M,H-30,{s:8,c:[180,60,40]}); }
+  const pages=doc.getNumberOfPages(); for(let i=1;i<=pages;i++){ doc.setPage(i); T('Page '+i+' of '+pages,X2,H-16,{s:7,c:muted,a:'right'}); }
+  try{ await downloadsApi.save({filename:(cr?'Tax_Credit_Note_':'Tax_Invoice_')+inv.invoiceNo.replace(/\s+/g,'-')+'_'+(inv.date||'').split('-').reverse().join('_').replace(/^(\d\d)_(\d\d)_\d\d(\d\d)$/,'$1_$2_$3')+'.pdf',data:doc.output('blob')}); toast((cr?'Credit note':'Tax invoice')+' saved'); logAction('Downloaded '+(cr?'credit note':'tax invoice'),{detail:inv.invoiceNo}); }catch(err){ if(!(err&&err.code==='declined')) toast('Could not save the PDF.'); }
+}
+
+/* ---------- global search (Ctrl+K) ---------- */
+let gs={q:'',i:0};
+function gsResults(){
+  const q=gs.q.trim().toLowerCase(); if(!q) return [];
+  const out=[], hit=s=>String(s||'').toLowerCase().includes(q), qk=invKey(q);
+  NAV.forEach(([no,sec,ic,items],si)=>items.forEach(([l,o],ii)=>{ if(navItemOk(o)&&(hit(l)||hit(sec))) out.push({g:'Pages',t:l,s:sec,go:{nav:si+'.'+ii}}); }));
+  if(can('finance')) Object.values(invoices).filter(i=>invKey(i.invoiceNo).includes(qk)||hit(i.customer)||hit(i.notes)).sort((a,b)=>(b.date||'').localeCompare(a.date||'')).slice(0,10)
+    .forEach(i=>out.push({g:isCredit(i)?'Credit notes':'Invoices',t:i.invoiceNo,s:[fdx(i.date),money(invGross(i)),invoiceState(i).label].join(' · '),go:{inv:i.invoiceNo}}));
+  if(can('tickets')) Object.values(visits).filter(v=>canSeeTicket(v)&&(hit(v.id)||hit(v.ref)||hit(v.site)||hit(v.product)||hit(v.model)||hit(v.serial)||hit(v.issue)||hit(v.technician)||(v.billingRef&&invKey(v.billingRef).includes(qk)))).sort((a,b)=>b.id.localeCompare(a.id)).slice(0,12)
+    .forEach(v=>out.push({g:'Tickets',t:'#'+v.id+' · '+(v.site||'Site'),s:[STATUS[v.status],v.product,v.billingRef].filter(Boolean).join(' · '),go:{ticket:v.id}}));
+  if(can('customers')){ const seen=new Set(); Object.values(visits).forEach(v=>{ const c=custOf(v); if(!seen.has(c)&&hit(c)){ seen.add(c); out.push({g:'Customers',t:c,s:'Customer directory',go:{cust:c}}); } }); }
+  return out.slice(0,40);
+}
+const fdx=d=>d?d.slice(0,10).split('-').reverse().join('/'):'';
+const canSeeTicket=v=>access()!=='technician'||v.assignedTo===me.id;
+function gsShow(on){ let el=document.getElementById('gsearch'); if(!on){ if(el) el.remove(); return; }
+  if(!el){ el=document.createElement('div'); el.id='gsearch'; document.body.appendChild(el); el.innerHTML=`<div class="msheet-bg" data-act="gsclose"></div><div class="gs-box" role="dialog" aria-label="Search"><label class="gs-in">${svg('search',18)}<input id="gs-q" placeholder="Search tickets, invoices, customers, pages…" autocomplete="off" aria-label="Search everything"><kbd>Esc</kbd></label><div id="gs-res" class="gs-res"></div></div>`; }
+  const i=document.getElementById('gs-q'); i.value=gs.q; gsRender(); setTimeout(()=>i.focus(),10); }
+function gsRender(){ const r=gsResults(), box=document.getElementById('gs-res'); if(!box) return; gs.list=r; if(gs.i>=r.length) gs.i=0; let g='';
+  box.innerHTML=gs.q.trim()?(r.length?r.map((x,k)=>{ const h=x.g!==g?`<div class="gs-g">${esc(x.g)}</div>`:''; g=x.g; return h+`<button class="gs-item${k===gs.i?' on':''}" data-gs="${k}"><b>${esc(x.t)}</b><span class="sub">${esc(x.s||'')}</span></button>`; }).join(''):'<div class="empty">Nothing found.</div>'):'<div class="sub" style="padding:14px 16px">Type a ticket number, site, serial, invoice number (e.g. ZRA 1897), customer or page name.</div>'; }
+function gsOpen(k){ const x=(gs.list||[])[k]; if(!x) return; gsShow(false); gs.q='';
+  if(x.go.nav) openNav(x.go.nav);
+  else if(x.go.ticket) go('tickets',x.go.ticket);
+  else if(x.go.inv){ fui.tab='invoices'; fui.invStatus='all'; fui.invQ=x.go.inv; fui.form=null; go('finance'); }
+  else if(x.go.cust){ cui.tab='dir'; cui.q=x.go.cust; go('customers'); } }
 
 /* ---------- nav ---------- */
 function navHtml(){
@@ -980,7 +1099,7 @@ function ticketsView(){
     <div class="split${v?' has-sel':''}">
       <section class="card listpane" aria-label="Ticket list">
         <div class="listtools">
-          <label class="search">${svg('search',16)}<input id="l-q" class="field" type="search" placeholder="Search tickets  (Ctrl+K)" value="${esc(list.q)}" autocomplete="off" aria-label="Search tickets"></label>
+          <label class="search">${svg('search',16)}<input id="l-q" class="field" type="search" placeholder="Search tickets" value="${esc(list.q)}" autocomplete="off" aria-label="Search tickets"></label>
           <div class="tabs" role="group" aria-label="Filter tickets">${filtersFor().map(([k,l])=>`<button data-filter="${k}" aria-pressed="${list.status===k}">${l} <span class="c">${n[k]}</span></button>`).join('')}</div>
         </div>
         <div class="tlist" id="l-body">${listBody()}</div>
@@ -1390,7 +1509,7 @@ function finInvoices(){
     ${f?invForm(f):''}${cnForm()}${unbilledCard()}
     ${['overdue','open'].includes(fui.invStatus)&&all.some(i=>['open','overdue'].includes(invoiceState(i).k))?`<form id="fbulkpaid" class="notice" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap"><span><b>Already paid?</b> Mark every unpaid invoice dated up to</span><input class="field" type="date" name="upto" required style="width:auto;height:34px" value="${esc(fui.bulkUpto||'')}"><span>as paid on</span><input class="field" type="date" name="on" style="width:auto;height:34px" value="${todayDxb()}"><button class="btn" type="submit">${fui.bulkConfirm?'Confirm — mark '+fui.bulkConfirm+' paid':'Mark paid'}</button></form>`:''}
     <div class="card"><div class="card-h"><h3>Invoice register</h3><span class="sub">${all.length} invoices · issued ${esc(money(totals.gross))} · received ${esc(money(totals.paid))}</span></div>
-    ${list.length?`<div class="tblwrap"><table class="tbl"><thead><tr><th>Invoice</th><th>Date</th><th>Customer</th><th>Tickets</th><th class="amt">Net</th><th class="amt">VAT</th><th class="amt">Gross</th><th class="amt">Paid</th><th>Status</th><th></th></tr></thead><tbody>${list.slice(0,fui.limit).map(i=>{ const st=invoiceState(i), tk=ticketsForInv(i); return `<tr${sel&&sel.id===i.id?' style="background:var(--goldSoft)"':''}><td><b>${esc(i.invoiceNo)}</b></td><td class="num" style="white-space:nowrap">${i.date?esc(dmy(i.date+'T08:00:00Z')):'—'}</td><td>${esc(i.customer||'—')}</td><td>${tk.length?tk.slice(0,4).map(v=>`<button class="linkbtn" data-open="${esc(v.id)}">#${esc(v.id)}</button>`).join(' ')+(tk.length>4?` <span class="sub">+${tk.length-4}</span>`:''):'<span class="sub">—</span>'}</td><td class="amt">${(+i.net)?esc(money(i.net)):'—'}</td><td class="amt">${(+i.vat)?esc(money(i.vat)):'—'}</td><td class="amt"><b>${invGross(i)?esc(money(invGross(i))):'—'}</b></td><td class="amt">${invPaid(i)?esc(money(invPaid(i))):'—'}</td><td><span class="chip ${st.cls}">${st.label}</span></td><td style="white-space:nowrap;text-align:right">${i.status==='draft'&&!isCredit(i)?`<button class="btn primary" style="height:30px" data-invissue="${esc(i.id)}">Issue</button> `:''}${['open','overdue'].includes(st.k)?`<button class="btn" style="height:30px" data-invpaid="${esc(i.id)}">Mark paid</button> `:''}${!isCredit(i)&&!['draft','void'].includes(i.status)&&invGross(i)?`<button class="linkbtn" data-invcn="${esc(i.id)}">Credit note</button> `:''}${invLocked(i)?`<span class="chip plain" title="${i.locked?'Locked by hand':'Locked because a payment is recorded'}">🔒 Locked</span>${i.locked&&!(+i.paidOther)&&!isCredit(i)?` <button class="linkbtn" data-invlock="${esc(i.id)}" data-on="0">Unlock</button>`:''} `:i.amountAuto?`<button class="linkbtn" data-invlock="${esc(i.id)}" data-on="1" title="Stop automatic changes to this invoice">Lock</button> `:''}<button class="linkbtn" data-invedit="${esc(i.id)}">Edit</button> <button class="linkbtn danger" data-invdel="${esc(i.id)}">${fui.del===i.id?'Confirm':'Delete'}</button></td></tr>`; }).join('')}</tbody></table></div>${list.length>fui.limit?`<div class="more"><button class="btn block" data-act="finmore">Show more</button></div>`:''}`:`<div class="empty">${all.length?'No invoices in this view.':pend.length?'No invoices yet. '+pend.length+' Z invoice numbers are on your tickets — use “Create from tickets”.':'No invoices yet. Add one with “New invoice”.'}</div>`}</div>`;
+    ${list.length?`<div class="tblwrap"><table class="tbl"><thead><tr><th>Invoice</th><th>Date</th><th>Customer</th><th>Tickets</th><th class="amt">Net</th><th class="amt">VAT</th><th class="amt">Gross</th><th class="amt">Paid</th><th>Status</th><th></th></tr></thead><tbody>${list.slice(0,fui.limit).map(i=>{ const st=invoiceState(i), tk=ticketsForInv(i); return `<tr${sel&&sel.id===i.id?' style="background:var(--goldSoft)"':''}><td><b>${esc(i.invoiceNo)}</b></td><td class="num" style="white-space:nowrap">${i.date?esc(dmy(i.date+'T08:00:00Z')):'—'}</td><td>${esc(i.customer||'—')}</td><td>${tk.length?tk.slice(0,4).map(v=>`<button class="linkbtn" data-open="${esc(v.id)}">#${esc(v.id)}</button>`).join(' ')+(tk.length>4?` <span class="sub">+${tk.length-4}</span>`:''):'<span class="sub">—</span>'}</td><td class="amt">${(+i.net)?esc(money(i.net)):'—'}</td><td class="amt">${(+i.vat)?esc(money(i.vat)):'—'}</td><td class="amt"><b>${invGross(i)?esc(money(invGross(i))):'—'}</b></td><td class="amt">${invPaid(i)?esc(money(invPaid(i))):'—'}</td><td><span class="chip ${st.cls}">${st.label}</span></td><td style="white-space:nowrap;text-align:right">${canPdf()&&invGross(i)?`<button class="linkbtn" data-invpdf="${esc(i.id)}" title="Download ${isCredit(i)?'tax credit note':'tax invoice'} PDF">PDF</button> `:''}${i.status==='draft'&&!isCredit(i)?`<button class="btn primary" style="height:30px" data-invissue="${esc(i.id)}">Issue</button> `:''}${['open','overdue'].includes(st.k)?`<button class="btn" style="height:30px" data-invpaid="${esc(i.id)}">Mark paid</button> `:''}${!isCredit(i)&&!['draft','void'].includes(i.status)&&invGross(i)?`<button class="linkbtn" data-invcn="${esc(i.id)}">Credit note</button> `:''}${invLocked(i)?`<span class="chip plain" title="${i.locked?'Locked by hand':'Locked because a payment is recorded'}">🔒 Locked</span>${i.locked&&!(+i.paidOther)&&!isCredit(i)?` <button class="linkbtn" data-invlock="${esc(i.id)}" data-on="0">Unlock</button>`:''} `:i.amountAuto?`<button class="linkbtn" data-invlock="${esc(i.id)}" data-on="1" title="Stop automatic changes to this invoice">Lock</button> `:''}<button class="linkbtn" data-invedit="${esc(i.id)}">Edit</button> <button class="linkbtn danger" data-invdel="${esc(i.id)}">${fui.del===i.id?'Confirm':'Delete'}</button></td></tr>`; }).join('')}</tbody></table></div>${list.length>fui.limit?`<div class="more"><button class="btn block" data-act="finmore">Show more</button></div>`:''}`:`<div class="empty">${all.length?'No invoices in this view.':pend.length?'No invoices yet. '+pend.length+' Z invoice numbers are on your tickets — use “Create from tickets”.':'No invoices yet. Add one with “New invoice”.'}</div>`}</div>`;
 }
 function invForm(f){
   const v=k=>esc(f[k]??'');
@@ -1723,7 +1842,7 @@ async function statementPdf(m){
   const x=statements[m]; if(!x||!canPdf()) return;
   const {jsPDF}=window.jspdf; const doc=new jsPDF({unit:'pt',format:'a4'}); const W=595.28,H=841.89,M=42; let y; const ink=[13,27,62], muted=[103,114,140];
   const fd=d=>d?d.split('-').reverse().join('/'):'—', amt=n=>(n<0?'-':'')+Math.abs(r2(n)).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});
-  const header=()=>{ doc.setFillColor(10,31,77); doc.rect(0,0,W,84,'F'); doc.setFillColor(201,151,47); doc.rect(0,84,W,3,'F'); doc.setTextColor(255,255,255); doc.setFont('helvetica','bold'); doc.setFontSize(19); doc.text('ZIAR  IMAAR',M,40); doc.setFont('helvetica','normal'); doc.setFontSize(7.5); doc.setTextColor(201,211,234); doc.text('T E C H N I C A L   S E R V I C E S   L . L . C .',M,55); if(CO().trn){ doc.setFontSize(7.5); doc.text('TRN '+CO().trn,M,68); } doc.setFontSize(10); doc.setTextColor(241,210,127); doc.text(/-H[12]$/.test(m)?'Statement · billing period':'Monthly statement',W-M,38,{align:'right'}); doc.setFontSize(9); doc.setTextColor(255,255,255); doc.text(stLabel(m)+'  ·  '+fd(x.start)+' – '+fd(x.end),W-M,54,{align:'right'}); y=116; };
+  const header=()=>{ doc.setFillColor(10,31,77); doc.rect(0,0,W,84,'F'); doc.setFillColor(201,151,47); doc.rect(0,84,W,3,'F'); doc.setTextColor(255,255,255); const co=CO(); doc.setFont('helvetica','bold'); doc.setFontSize(co.legalName.length>40?13:17); doc.text(co.legalName,M,38,{maxWidth:W/2+60}); doc.setFont('helvetica','normal'); doc.setFontSize(7.5); doc.setTextColor(201,211,234); doc.text(co.address||'',M,55); if(CO().trn){ doc.setFontSize(7.5); doc.text('TRN '+CO().trn,M,68); } doc.setFontSize(10); doc.setTextColor(241,210,127); doc.text(/-H[12]$/.test(m)?'Statement · billing period':'Monthly statement',W-M,38,{align:'right'}); doc.setFontSize(9); doc.setTextColor(255,255,255); doc.text(stLabel(m)+'  ·  '+fd(x.start)+' – '+fd(x.end),W-M,54,{align:'right'}); y=116; };
   const h2=t=>{ if(y>H-120){ doc.addPage(); header(); } doc.setFont('helvetica','bold'); doc.setFontSize(12.5); doc.setTextColor(...ink); doc.text(t,M,y); y+=8; doc.setDrawColor(201,151,47); doc.setLineWidth(1); doc.line(M,y,M+40,y); y+=16; };
   const row=(cells,bold)=>{ if(y>H-60){ doc.addPage(); header(); } doc.setFont('helvetica',bold?'bold':'normal'); doc.setFontSize(8.8); doc.setTextColor(...ink); cells.forEach(([t,xx,al])=>doc.text(doc.splitTextToSize(String(t),al==='right'?110:200)[0]||'',xx,y,al?{align:al}:undefined)); y+=14; };
   const kv=(k,v,b)=>row([[k,M],[v,W-M,'right']],b);
@@ -1984,6 +2103,7 @@ function initSig(){
 document.addEventListener('input',e=>{
   const t=e.target, d=draft;
   if(d){ if(t.id==='f-findings') d.findings=t.value; if(t.id==='f-work') d.work=t.value; if(t.id==='f-next') d.nextAction=t.value; if(t.id==='f-tech') d.technician=t.value; if(t.id==='f-serial') d.serial=t.value; if(t.id==='f-fb') d.customerFeedback=t.value; if(t.id==='f-signer') d.signerName=t.value; if(t.id==='f-bill') d.billingRef=t.value.trim(); if(t.id==='f-billkind'){ d.billKind=t.value; render(); } if(t.id==='f-wait') d.waitMins=Math.max(0,parseInt(t.value,10)||0); }
+  if(t.id==='gs-q'){ gs.q=t.value; gs.i=0; gsRender(); return; }
   if(t.id==='c-q'){ cui.q=t.value; clearTimeout(cui.t); cui.t=setTimeout(()=>{ const pos=t.selectionStart; render(); const el=document.getElementById('c-q'); if(el){ el.focus(); try{ el.setSelectionRange(pos,pos); }catch(e){} } },250); return; }
   if(t.id==='d-q'){ dui.q=t.value; clearTimeout(dui.t); dui.t=setTimeout(()=>{ const pos=t.selectionStart; render(); const el=document.getElementById('d-q'); if(el){ el.focus(); try{ el.setSelectionRange(pos,pos); }catch(e){} } },250); return; }
   if(t.id==='o-note'){ rev.note=t.value; const er=document.getElementById('o-err'); if(er) er.textContent=''; }
@@ -2085,7 +2205,7 @@ document.addEventListener('submit',async e=>{
     if(fui.bulkConfirm!==xs.length||fui.bulkUpto!==upto){ fui.bulkConfirm=xs.length; fui.bulkUpto=upto; render(); return; }
     let tot=0; for(const i of xs){ const due=r2(invGross(i)-invPaid(i)); tot+=due; const d=Object.assign({},i,{paidOther:r2((+i.paidOther||0)+due),paidDate:on,locked:true}); delete d.id; await saveDoc('invoices',i.id,d,invoices); }
     logAction('Marked invoices paid in bulk',{detail:xs.length+' invoices up to '+upto+' · '+money(tot)}); fui.bulkConfirm=null; toast(xs.length+' invoices marked paid ('+money(tot)+')'); return; }
-  if(id==='fcoform'){ const el=e.target.elements, c={}; ['legalName','tradeName','licence','trn','address','phone','email','bankName','accountName','iban','swift'].forEach(k=>c[k]=(el[k].value||'').trim()); c.iban=c.iban.replace(/\s+/g,'').toUpperCase(); if(c.iban&&!/^AE\d{21}$/.test(c.iban)){ toast('A UAE IBAN is AE followed by 21 digits. Please check it.'); return; } if(c.trn&&!/^\d{15}$/.test(c.trn.replace(/\s/g,''))){ toast('A UAE TRN has 15 digits. Please check it.'); return; }
+  if(id==='fcoform'){ const el=e.target.elements, c={}; ['legalName','tradeName','licence','trn','address','phone','email','custAddress','custTrn','placeOfSupply','bankName','accountNo','accountName','iban','swift'].forEach(k=>c[k]=(el[k].value||'').trim()); if(c.custTrn&&!/^\d{15}$/.test(c.custTrn.replace(/\s/g,''))){ toast('The customer TRN should have 15 digits.'); return; } c.iban=c.iban.replace(/\s+/g,'').toUpperCase(); if(c.iban&&(!/^AE\d{21}$/.test(c.iban)||!ibanOk(c.iban))){ toast('This IBAN does not pass the bank check (a UAE IBAN is AE + 21 digits). Please check it with your bank.'); return; } if(c.trn&&!/^\d{15}$/.test(c.trn.replace(/\s/g,''))){ toast('A UAE TRN has 15 digits. Please check it.'); return; }
     const d=Object.assign({},finSettings.main||{},{company:c}); delete d.id; await saveDoc('finSettings','main',d,finSettings); logAction('Updated company profile'); toast('Company profile saved'); return; }
   if(id==='fcnform'){ const c=fui.cn, inv=c&&invoices[c.id]; if(!inv) return; const el=e.target.elements, net=r2(el.net.value), room=r2(invGross(inv)-creditsFor(inv)); if(!(net>0)) return; if(r2(net*(1+VAT_RATE))>room+0.01){ toast('That is more than is left on '+inv.invoiceNo+' ('+money(room)+' incl. VAT).'); return; }
     const n=Object.values(invoices).filter(x=>isCredit(x)&&invKey(x.refInvoice)===invKey(inv.invoiceNo)).length+1, no='CN-'+inv.invoiceNo.replace(/\s+/g,'')+(n>1?'-'+n:'');
@@ -2106,7 +2226,8 @@ document.addEventListener('submit',async e=>{
     logAction('Recorded stock count',{detail:d.item+' ('+d.month+'): '+d.counted+' of '+d.expected}); await saveDoc('stock',newId('s'),d,stock); toast('Count recorded for '+d.item); return; }
 });
 document.addEventListener('keydown',e=>{
-  if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='k'&&can('tickets')&&!['none','loading'].includes(access())){ e.preventDefault(); if(modal){ modal=null; } if(route!=='tickets'||sel){ sel=null; mode='view'; draft=null; go('tickets'); } const i=document.getElementById('l-q'); if(i){ i.focus(); i.select(); } return; }
+  if(document.getElementById('gsearch')){ const n=(gs.list||[]).length; if(e.key==='Escape'){ e.preventDefault(); gsShow(false); return; } if(e.key==='ArrowDown'||e.key==='ArrowUp'){ e.preventDefault(); if(n){ gs.i=(gs.i+(e.key==='ArrowDown'?1:n-1))%n; gsRender(); document.querySelector('.gs-item.on')?.scrollIntoView({block:'nearest'}); } return; } if(e.key==='Enter'){ e.preventDefault(); gsOpen(gs.i); return; } }
+  if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='k'&&!['none','loading'].includes(access())&&!needsSignIn()){ e.preventDefault(); if(modal){ modal=null; render(); } gsShow(true); return; }
   if(e.key==='Escape'&&modal){ modal=null; render(); return; }
   if(route!=='review'||e.metaKey||e.ctrlKey||e.altKey||typing()) return;
   const k=e.key.toLowerCase(); if(k!=='j'&&k!=='k') return;
@@ -2119,6 +2240,9 @@ document.addEventListener('click',async e=>{
   const b=e.target.closest('button,[data-act]'); if(!b) return;
   const ds=b.dataset, v=sel&&visits[sel];
   if(ds.nsec!==undefined){ const i=+ds.nsec, inSheet=!!b.closest('#msheet'); if(inSheet) return; const cs=curNavKey(), isCur=cs&&+cs.split('.')[0]===i, was=(navOpen&&navOpen.has(i))||(isCur&&!navClosedCur); navClosedCur=isCur&&was; navOpen=new Set(was?[]:[i]); navHtml(); return; }
+  if(ds.act==='gsopen'){ mnavShow(false); gsShow(true); return; }
+  if(ds.act==='gsclose'){ gsShow(false); return; }
+  if(ds.gs!==undefined){ gsOpen(+ds.gs); return; }
   if(ds.act==='mnav'){ mnavShow(true); return; }
   if(ds.act==='mnavclose'){ mnavShow(false); return; }
   if(ds.nav){ mnavShow(false); openNav(ds.nav); return; }
@@ -2170,6 +2294,7 @@ document.addEventListener('click',async e=>{
   if(ds.act==='autosort'){ await autoSort(); render(); return; }
   if(ds.gofin){ const [tab,x]=ds.gofin.split(':'); fui.tab=tab; fui.form=null; fui.del=null; if(tab==='invoices'&&x) fui.invStatus=x; render(); if(tab==='bank'&&x==='newacct'){ const b=document.querySelector('[data-act=newacct]'); if(b) b.click(); } return; }
   if(ds.act==='billnow'){ const xs=unbilled().filter(v=>(fui.ub||new Set()).has(v.id)); if(!xs.length) return; const no=await billTickets(xs,'created by hand'); fui.ub=null; toast('Invoice '+no+' created for '+xs.length+' ticket'+(xs.length>1?'s':'')); scheduleFinAuto(); return; }
+  if(ds.invpdf){ await invoicePdf(ds.invpdf); return; }
   if(ds.invissue){ const i=invoices[ds.invissue]; if(!i) return; if(!invGross(i)){ toast('Enter the amount before issuing.'); return; } const d=Object.assign({},i,{status:'issued',locked:true,issuedAt:new Date().toISOString()}); delete d.id; await saveDoc('invoices',i.id,d,invoices); logAction('Issued invoice',{detail:i.invoiceNo+' · '+money(invGross(i))}); toast(i.invoiceNo+' issued and locked'); return; }
   if(ds.invcn){ const i=invoices[ds.invcn]; if(!i) return; fui.cn={id:i.id,net:'',reason:''}; render(); setTimeout(()=>{ const el=document.getElementById('cn-net'); if(el) el.focus(); },30); return; }
   if(ds.act==='cncancel'){ fui.cn=null; render(); return; }
