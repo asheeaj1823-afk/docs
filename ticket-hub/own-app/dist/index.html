@@ -905,7 +905,7 @@ function integrationsView(){
     ${row('WhatsApp','Links','plain','Ticket pages open WhatsApp with the customer’s number. Nothing is sent automatically.')}
     ${row('QuickBooks','Not used','plain','Your QuickBooks company is set up in US dollars, so the hub does not use it. Xero (AED) is used instead.')}
     ${(()=>{ const a=atui; const cfg=atCfg(), where='Reads <b>'+esc(cfg.baseName||cfg.base)+' → '+esc(cfg.tableName||cfg.table)+'</b> and never writes to Airtable. Tickets match by the number at the end of the Ticket ID (EZR-KOHLER-SRV-26-0224 → #0224); filled-in Airtable fields update the hub, empty ones never erase hub data, and nothing is deleted. Syncs every 5 minutes while an administrator has the hub open.';
-      return a.st==='ok'?row('Airtable','Syncing · read only','ok',`Last sync ${esc(dmhm(a.at))}: ${a.read} ticket${a.read===1?'':'s'} read · ${a.made} new · ${a.upd} updated${a.skip?' · '+a.skip+' without a ticket number skipped':''}. Every 30 minutes while the hub is open. Airtable is the master: its values replace the hub's (empty Airtable fields never erase). ${a.conflicts?'<b>'+a.conflicts+' ticket'+(a.conflicts>1?'s have':' has')+' a new invoice number from Airtable ('+esc(atConflicts.slice(0,5).map(c=>tref(c)+': was '+c.hub+', now '+c.at).join('; '))+'). Check those invoices.</b> ':''}${where}`,`<button class="btn" data-act="atsync">Sync now</button><button class="btn" data-act="atpick">Choose base &amp; table</button>`)
+      return a.st==='ok'?row('Airtable','Syncing · read only','ok',`Last sync ${esc(dmhm(a.at))}: ${a.read} ticket${a.read===1?'':'s'} read · ${a.made} new · ${a.upd} updated${a.skip?' · '+a.skip+' without a ticket number skipped':''}. New tickets are checked every 2 minutes and everything is updated every 30 minutes while the hub is open. Airtable is the master: its values replace the hub's (empty Airtable fields never erase). ${a.conflicts?'<b>'+a.conflicts+' ticket'+(a.conflicts>1?'s have':' has')+' a new invoice number from Airtable ('+esc(atConflicts.slice(0,5).map(c=>tref(c)+': was '+c.hub+', now '+c.at).join('; '))+'). Check those invoices.</b> ':''}${where}`,`<button class="btn" data-act="atsync">Sync now</button><button class="btn" data-act="atpick">Choose base &amp; table</button>`)
        :a.st==='busy'?row('Airtable','Syncing…','plain','Reading your Airtable tickets…','')
        :a.st==='err'?row('Airtable','Not syncing','bad',esc(a.err)+' '+where,`<button class="btn" data-act="atsync">Try again</button><button class="btn" data-act="atpick">Choose base &amp; table</button>`)
        :row('Airtable','Ready to connect','plain',(mcpApi?'':'Open the hub in claude.ai to connect. ')+where,mcpApi?`<button class="btn primary" data-act="atpick">Choose base &amp; table</button><button class="btn" data-act="atsync">Sync now</button>`:''); })()}
@@ -1112,7 +1112,7 @@ function atAutoMap(t){ const F=t.fields||[], used=new Set(), m={}; const pick=(k
   pick('id',/ticket\s*(id|no|number|#|ref)|^ticket$|^ref|reference/); if(!m.id&&t.primaryFieldId){ m.id=t.primaryFieldId; used.add(t.primaryFieldId); }
   pick('done',/complet|finish|closed on|closing date/); pick('date',/service date|visit date|schedul|appointment|^date$|date/,/creat|modif|due|invoice|payment/); pick('status',/service status|ticket status|job status|^status$|status/,/billing|review|payment|invoice|vat/); pick('emirate',/emirate|region|city/); pick('site',/site|project|customer name|^customer$/,/address|location/); pick('loc',/location|address|area/); pick('product',/product|item|model|unit|equipment/); pick('desc',/description|issue|problem|complaint|fault|work/); pick('tech',/technician|engineer|assigned|staff/); pick('inv',/z invoice|invoice no|invoice number|linked invoice|billing ref|invoice/,/status|date|amount|total/); pick('notes',/note|remark|comment/);
   return m; }
-let atui={st:'idle',at:null,read:0,made:0,upd:0,skip:0,err:''}, permApi=null, atTimer=null, atConflicts=[], atUrls={}, atCopy={busy:false,blocked:false,done:0};
+let atui={st:'idle',at:null,read:0,made:0,upd:0,skip:0,err:''}, permApi=null, atTimer=null, atConflicts=[], atUrls={}, atCopy={busy:false,blocked:false,done:0}, atChanges=[], atLog=[], atQuickT=null, atQuickAt=0;
 const atTxt=v=>v==null?'':Array.isArray(v)?v.map(atTxt).filter(x=>x&&!/^rec[A-Za-z0-9]{14}$/.test(x)).join(', '):typeof v==='object'?String(v.name??v.value??v.text??v.label??''):String(v).trim();
 function atStatus(v){ const t=atTxt(v).toLowerCase(); if(!t) return null; if(/cancel/.test(t)) return 'cancelled'; if(/complet|done|closed|finish/.test(t)) return 'completed'; if(/review/.test(t)) return 'review'; if(/recheck|return|revisit/.test(t)) return 'recheck'; if(/new|open|schedul|pending|progress|assign/.test(t)) return 'new'; return null; }
 const AT_FIX={needs_reauth:'Reconnect Airtable in claude.ai → Settings → Connectors, then try again.',server_not_connected:'Add the Airtable connector in claude.ai → Settings → Connectors, then try again.',selection_required:'You have more than one Airtable connector — choose one when claude.ai asks, then try again.',approval_required:'This page needs your approval to read Airtable. Press the button again and choose Allow.',not_in_manifest:'Airtable is turned off for this page. Turn it on in the page’s Permissions menu.',blocked_by_policy:'Your organisation’s policy blocks Airtable for this page.',not_granted:'Connectors are not available in this view. Open the hub in claude.ai.',capability_disabled:'Connectors are not available in this view. Open the hub in claude.ai.',server_unavailable:'Airtable did not answer just now. Try again in a minute.',tool_error:'Airtable refused the request. Check that the chosen base and table still exist and are shared with your Airtable connector.'};
@@ -1144,11 +1144,15 @@ async function mergeTicket(tid,g,src){
   put('region',atTxt(g('emirate'))); put('site',atTxt(g('site'))); put('address',atTxt(g('loc'))); put('product',atTxt(g('product'))); put('issue',atTxt(g('desc'))); put('technician',atTxt(g('tech'))); put('airtableNotes',atTxt(g('notes')));
   { const inv=atTxt(g('inv')); if(!blank(inv)){ if(ex&&(ex.billingRef||'').trim()&&invKey(ex.billingRef)!==invKey(inv)) atConflicts.push({id,hub:ex.billingRef,at:inv}); put('billingRef',inv); } }
   if(!ex){ const v=Object.assign({id,ref:'EZR-KOHLER-SRV-26-'+id,status:'new',type:'Inspection',priority:'Normal',category:'',product:'',site:'',address:'',region:'',issue:'',prepared:false,contactedAt:null,arrived:null,finished:null,findings:'',work:'',nextAction:'',outcome:'',returnVisit:'No',technician:'',internalNotes:'',parts:[],evidence:[],billingRef:''},patch,{source:src.source});
-    if(src.recId) v.airtableId=src.recId; v.history=[Object.assign(hist(v.status),{note:'Imported from '+src.label})]; await save(v,null); return 'new'; }
+    if(src.recId) v.airtableId=src.recId; v.history=[Object.assign(hist(v.status),{note:'Imported from '+src.label})]; await save(v,null); if(src.source==='airtable') atChanges.push({id,kind:'new',f:[]}); return 'new'; }
   const keys=Object.keys(patch).filter(k=>canon(ex[k]??null)!==canon(patch[k])); if(src.recId&&ex.airtableId!==src.recId) keys.push('airtableId');
   if(!keys.length) return 'same';
   const n=clone(ex); keys.forEach(k=>{ if(k!=='airtableId') n[k]=patch[k]; }); if(src.recId) n.airtableId=src.recId; n.source=n.source||('hub+'+src.source);
   if(patch.status&&patch.status!==ex.status) n.history=[...(n.history||[]),Object.assign(hist(patch.status),{note:'Status from '+src.label})];
+  if(src.source==='airtable'){ const sh=x=>{ const t=x==null?'':typeof x==='object'?(Array.isArray(x)?x.length+' file(s)':''):String(x); return t.length>70?t.slice(0,67)+'…':t; };
+    const fl=keys.filter(k=>k!=='airtableId').map(k=>({k,a:sh(k==='status'?STATUS[ex[k]]||ex[k]:/^(arrived|finished|scheduled|contactedAt)$/.test(k)&&ex[k]?dmhm(ex[k]):ex[k]),b:sh(k==='status'?STATUS[patch[k]]||patch[k]:/^(arrived|finished|scheduled|contactedAt)$/.test(k)&&patch[k]?dmhm(patch[k]):patch[k])}));
+    fl.forEach(x=>{ if(x.a===x.b){ x.a=x.a.slice(0,40)+'…'; x.b='(text updated)'; } });
+    if(fl.length) atChanges.push({id,kind:'upd',f:fl}); }
   await save(n,null); return 'upd';
 }
 /* ticket import from a CSV or Excel file (e.g. downloaded from Airtable) */
@@ -1190,18 +1194,38 @@ async function airtableSync(manual){
     for(let i=0;i<20;i++){ const AT=atCfg(), page=AT.mode==='page'; const input=page?{baseId:AT.base,interfaceId:AT.iface,pageId:AT.page,pageSize:1000,fieldIds:Object.values(AT.f).filter(Boolean)}:{baseId:AT.base,tableId:AT.table,pageSize:1000,fieldIds:Object.values(AT.f).filter(Boolean)}; if(cursor) input.cursor=cursor;
       const r=await mcpApi.callTool(AT.server,page?'list_records_for_page':'list_records_for_table',input,{cache:false}); const pl=r&&r.payload||{};
       const got=page?((pl.recordsByTableId||{})[AT.table]||Object.values(pl.recordsByTableId||{})[0]||[]):pl.records; recs.push(...(Array.isArray(got)?got:[])); cursor=pl.nextCursor||null; if(!cursor) break; }
-    let made=0, upd=0, skip=0; atConflicts=[];
+    let made=0, upd=0, skip=0; atConflicts=[]; atChanges=[];
     const AT=atCfg(); for(const rec of recs){ const c=rec.cellValuesByFieldId||rec.fields||{}, g=k=>AT.f[k]?c[AT.f[k]]:undefined;
       const r=await mergeTicket(atTxt(g('id')),g,{recId:rec.id,label:'Airtable',source:'airtable',inout:!!(AT.f.arrived&&AT.f.doneAt),files:!!AT.f.photos}); if(r==='skip') skip++; else if(r==='new') made++; else if(r==='upd') upd++; }
     atui={st:'ok',at:new Date().toISOString(),read:recs.length,made,upd,skip,err:'',conflicts:atConflicts.length};
+    if(atChanges.length) await atLogSave(atChanges);
     if(made||upd) logAction('Synced tickets from Airtable',{detail:recs.length+' read · '+made+' new · '+upd+' updated'});
     if(manual||made||upd) toast('Airtable: '+recs.length+' ticket'+(recs.length===1?'':'s')+' read · '+made+' new · '+upd+' updated');
     if(!atTimer) atTimer=setInterval(()=>airtableSync(false),1800000);
+    if(!atQuickT&&atCfg().mode==='page') atQuickT=setInterval(()=>atQuickCheck(),120000);
     setTimeout(()=>atCopyFiles(),500);
   }catch(e){ const c=(e&&e.code)||'upstream_error'; atui={...atui,st:'err',err:AT_FIX[c]||('Airtable sync failed ('+c+'). Try again.')}; if(['needs_reauth','server_not_connected','not_in_manifest','blocked_by_policy','not_granted'].includes(c)&&atTimer){ clearInterval(atTimer); atTimer=null; } }
   if(manual||route==='integrations') render();
 }
 /* keep a permanent copy of Airtable photos and PDFs (links from Airtable expire after a few hours) */
+/* quick check every 2 minutes: read only the ticket numbers; a new ticket in Airtable starts a full sync at once */
+async function atQuickCheck(){
+  if(!mcpApi||atui.st==='busy'||access()!=='admin'||demo||!loaded) return; atQuickAt=Date.now();
+  try{ const AT=atCfg(); if(AT.mode!=='page') return; let cursor=null; const ids=[];
+    for(let i=0;i<10;i++){ const input={baseId:AT.base,interfaceId:AT.iface,pageId:AT.page,pageSize:1000,fieldIds:[AT.f.id]}; if(cursor) input.cursor=cursor;
+      const r=await mcpApi.callTool(AT.server,'list_records_for_page',input,{cache:false}); const pl=r&&r.payload||{};
+      const got=(pl.recordsByTableId||{})[AT.table]||Object.values(pl.recordsByTableId||{})[0]||[]; got.forEach(rec=>{ const m=atTxt((rec.cellValuesByFieldId||{})[AT.f.id]).match(/(\d{1,5})\s*$/); if(m) ids.push(m[1].padStart(4,'0')); }); cursor=pl.nextCursor||null; if(!cursor) break; }
+    if(ids.some(id=>!visits[id])) await airtableSync(false);
+  }catch(e){}
+}
+document.addEventListener('visibilitychange',()=>{ if(document.visibilityState==='visible'&&atQuickT&&Date.now()-atQuickAt>60000) atQuickCheck(); });
+/* keep a day-by-day log of what changed in Airtable */
+async function atLogSave(list){
+  if(!db) return; const day=todayDxb(), at=new Date().toISOString();
+  try{ const ref=db.doc('atlog/'+day), sn=await ref.get(), prev=sn.exists&&Array.isArray((sn.data()||{}).entries)?sn.data().entries:[];
+    await ref.set({entries:[...prev,...list.map(c=>Object.assign({at},c))].slice(-400)}); }catch(e){}
+}
+const AT_FLD={status:'Status',scheduled:'Scheduled',arrived:'Time In',finished:'Time Out',contactedAt:'Contacted',region:'Emirate',site:'Customer',address:'Address',product:'Product',issue:'Reported issue',technician:'Technician',billingRef:'Z Invoice No.',contact:'Contact',email:'Email',type:'Visit type',category:'Category',model:'SKU / Model',serial:'Serial',instructions:'Instructions',findings:'Findings',work:'Action taken',nextAction:'Next action',outcome:'Outcome',returnVisit:'Return visit',customerFeedback:'Customer feedback',internalNotes:'Internal notes',washroom:'Washroom',airtableFiles:'Photos',ref:'Reference',airtableNotes:'Notes'};
 async function atCopyFiles(){
   if(atCopy.busy||atCopy.blocked||!assets||!db) return; atCopy.busy=true; let n=0;
   try{
@@ -1295,6 +1319,38 @@ function todayHtml(all){
   return `<div class="card"><div class="card-h"><div><h3>Today's visits</h3><div class="sub">${xs.length?xs.length+' booked · '+left+' still to do':'Nothing booked for today'}</div></div></div>
     ${xs.length?`<div class="attn">${xs.slice(0,8).map(v=>`<button data-open="${esc(v.id)}"><span class="idn">${esc(hm(v.scheduled))}</span><span style="min-width:0"><span style="display:block;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(tref(v))} · ${esc((v.site||'').split('|')[0].trim()||'Site not set')}</span><span class="sub">${esc([v.region,v.technician||assigneeName(v)].filter(Boolean).join(' · ')||'Not assigned')}</span></span>${v.finished||['completed','review'].includes(v.status)?'<span class="chip completed">Done</span>':v.arrived?'<span class="chip review">On site</span>':chip(v)}</button>`).join('')}</div>`:''}</div>`;
 }
+/* Airtable-driven dashboard cards */
+function atFixList(){
+  const t=todayDxb(), out=[]; const add=(v,why)=>out.push({v,why});
+  Object.values(visits).forEach(v=>{ if(v.status==='cancelled') return; const d=(v.scheduled||'').slice(0,10);
+    if(['completed','review'].includes(v.status)){ if(!v.arrived||!v.finished) add(v,'Time In / Time Out missing'); if(!(v.technician||'').trim()) add(v,'Technician missing'); if(!(v.outcome||'').trim()) add(v,'Outcome missing'); }
+    if(!(v.region||'').trim()) add(v,'Emirate missing (needed for the rate card)');
+    if(v.status==='review'){ const last=[...(v.history||[])].reverse().find(h=>h.status==='review'); const since=(last&&last.at)||v.scheduled; if(since&&(Date.now()-new Date(since))>2*864e5) add(v,'Waiting for review for more than 2 days'); }
+    if(v.status==='new'&&d&&d<addDays(t,-1)) add(v,'Visit date passed but still New'); });
+  return out;
+}
+function atCardsHtml(){
+  if(!reportFromAirtable()||!['admin','office'].includes(access())) return '';
+  const a=atui, ok=a.st==='ok', fix=atFixList(), byT={}; fix.forEach(x=>{ (byT[x.v.id]=byT[x.v.id]||{v:x.v,w:[]}).w.push(x.why); });
+  const sync=`<div class="card"><div class="card-h"><div><h3>Airtable sync</h3><div class="sub">${a.st==='busy'?'Syncing now…':ok?'Last sync '+esc(dmhm(a.at))+' · '+a.read+' tickets · '+a.made+' new · '+a.upd+' updated':a.st==='err'?esc(a.err):'Not synced in this session yet'} · read only · new tickets checked every 2 minutes, full update every 30 minutes</div></div>${access()==='admin'?'<button class="btn" data-act="atsync">Sync now</button>':''}</div></div>`;
+  const ch=atLog.slice(0,25);
+  const changes=`<div class="card"><div class="card-h"><div><h3>Changes from Airtable</h3><div class="sub">${atLog.length?atLog.length+' recent change'+(atLog.length>1?'s':''):'No changes recorded yet'}</div></div></div>${ch.length?`<div class="card-b" style="display:grid;gap:10px;max-height:360px;overflow:auto">${ch.map(c=>`<div style="border-bottom:1px solid var(--line);padding-bottom:8px"><div style="display:flex;gap:8px;flex-wrap:wrap;align-items:baseline"><button class="linkbtn" data-open="${esc(c.id)}" style="font-weight:700">${esc(tref(c.id))}</button><span class="sub">${esc(dmhm(c.at))}</span>${c.kind==='new'?'<span class="chip new">New ticket</span>':''}</div>${(c.f||[]).map(x=>`<div style="font-size:13px"><b>${esc(AT_FLD[x.k]||x.k)}</b>: <span style="color:var(--muted);text-decoration:line-through">${esc(x.a||'empty')}</span> → ${esc(x.b||'empty')}</div>`).join('')}</div>`).join('')}</div>`:''}</div>`;
+  const fixC=`<div class="card"><div class="card-h"><div><h3>Fix in Airtable</h3><div class="sub">${Object.keys(byT).length?Object.keys(byT).length+' ticket'+(Object.keys(byT).length>1?'s need':' needs')+' a correction in Airtable':'Nothing to fix — Airtable data looks complete'}</div></div></div>${Object.keys(byT).length?`<div class="card-b" style="display:grid;gap:8px;max-height:360px;overflow:auto">${Object.values(byT).sort((x,y)=>x.v.id.localeCompare(y.v.id)).map(x=>`<div><button class="linkbtn" data-open="${esc(x.v.id)}" style="font-weight:700">${esc(tref(x.v))}</button> <span class="sub">${esc(STATUS[x.v.status]||'')}</span><div style="font-size:13px;color:var(--bad)">${esc(x.w.join(' · '))}</div></div>`).join('')}</div>`:''}</div>`;
+  return `<div class="dgrid" style="margin-bottom:16px">${sync}${nextInvHtml()}</div><div class="dgrid" style="margin-bottom:16px">${changes}${fixC}</div>`;
+}
+function nextInvHtml(){
+  if(!can('finance')) return '';
+  const mode=FS().autoNumber==='half'?'half':FS().autoNumber==='ticket'?'month':'month', p=periodOf(todayDxb(),mode==='ticket'?'month':mode), no=nextInvoiceNo();
+  const ready=unbilled().filter(v=>ticketDate(v)<=p.end), lines=ready.map(v=>({v,c:ticketCharge(v)})), net=r2(lines.reduce((a,x)=>a+x.c.net,0)), vat=r2(net*0.05);
+  const waiting=Object.values(visits).filter(v=>['new','review','recheck'].includes(v.status)&&(v.scheduled||'').slice(0,10)>=p.key&&(v.scheduled||'').slice(0,10)<=p.end);
+  const miss=lines.filter(x=>x.c.missing);
+  return `<div class="card"><div class="card-h"><div><h3>Next invoice · ${esc(no)}</h3><div class="sub">Cycle ${esc(p.label)} · raised automatically on ${esc(p.end.split('-').reverse().join('/'))}</div></div></div><div class="card-b" style="display:grid;gap:8px">
+    <div style="display:flex;gap:16px;flex-wrap:wrap"><div><div class="sub">Tickets</div><b style="font-size:20px">${lines.length}</b></div><div><div class="sub">Net</div><b style="font-size:20px">${esc(money(net))}</b></div><div><div class="sub">VAT 5%</div><b style="font-size:20px">${esc(money(vat))}</b></div><div><div class="sub">Total</div><b style="font-size:20px;color:var(--navy)">${esc(money(r2(net+vat)))}</b></div></div>
+    ${lines.length?`<div style="max-height:200px;overflow:auto;font-size:13px">${lines.map(x=>`<div style="display:flex;justify-content:space-between;gap:8px;border-bottom:1px solid var(--line);padding:4px 0"><button class="linkbtn" data-open="${esc(x.v.id)}">${esc(tref(x.v))}</button><span class="sub">${esc(x.c.emirate||'—')}</span><span class="num" style="${x.c.missing?'color:var(--bad)':''}">${x.c.missing?'No rate':esc(money(x.c.net))}</span></div>`).join('')}</div>`:''}
+    ${miss.length?`<div style="color:var(--bad);font-size:13px">${miss.length} ticket${miss.length>1?'s have':' has'} no emirate on the rate card — fix the emirate in Airtable.</div>`:''}
+    ${waiting.length?`<div style="color:var(--warn);font-size:13px"><b>${waiting.length} ticket${waiting.length>1?'s':''} in this cycle not completed in Airtable yet</b> (${esc(waiting.slice(0,6).map(v=>tref(v)).join(', '))}${waiting.length>6?'…':''}). Complete them in Airtable before ${esc(p.end.split('-').reverse().join('/'))} to include them.</div>`:''}
+  </div></div>`;
+}
 function dashView(){
   const all=Object.values(visits);
   const c=k=>all.filter(v=>v.status===k).length;
@@ -1320,6 +1376,7 @@ function dashView(){
       ${kpi('Avg time on site',dur(avg),times.length+' timed visits')}
     </div>
     ${billDayHtml()}
+    ${atCardsHtml()}
     <div class="card"><div class="card-b" style="display:flex;flex-direction:column;gap:10px">
       <div class="row"><span class="lbl">Pipeline</span><span class="sub">${all.length} tickets</span></div>
       <div class="stack" role="img" aria-label="${corder.map(k=>STATUS[k]+' '+c(k)).join(', ')}">${corder.filter(k=>c(k)).map(k=>`<span style="flex:${c(k)};background:var(--s-${k})" data-tip="${STATUS[k]}: ${c(k)} of ${all.length}"></span>`).join('')}</div>
@@ -3012,6 +3069,7 @@ function goDemo(){ if(loaded) return; demo=true; loaded=true; visits=demoData();
   fsub('bankAccounts',bankAccounts); fsub('bankTx',bankTx); fsub('invoices',invoices); fsub('partnerTx',partnerTx); fsub('finSettings',finSettings); fsub('statements',statements); fsub('journals',journals); fsub('bills',bills);
   db.collection('roles').onSnapshot(snap=>{ roles={}; snap.docs.forEach(d=>{ const x=d.data(); if(x) roles[d.id]=x; }); rolesLoaded=true; render(); resolveNames(); },()=>{ rolesLoaded=true; render(); });
   db.collection('requests').onSnapshot(snap=>{ requests={}; snap.docs.forEach(d=>{ const x=d.data(); if(x) requests[d.id]=x; }); if(route==='admin'||access()==='none') safeRender(); resolveNames(); },()=>{});
+  db.collection('atlog').onSnapshot(snap=>{ atLog=snap.docs.flatMap(d=>((d.data()||{}).entries)||[]).sort((a,b)=>(b.at||'').localeCompare(a.at||'')).slice(0,300); if(route==='dashboard') safeRender(); },()=>{});
   db.collection('audit').onSnapshot(snap=>{ audit=snap.docs.flatMap(d=>(((d.data()||{}).entries)||[]).map(x=>Object.assign({by:d.id},x))).sort((a,b)=>(b.at||'').localeCompare(a.at||'')).slice(0,300); if(route==='admin') safeRender(); resolveNames(); },()=>{});
   db.collection('visits').onSnapshot(snap=>{
     clearTimeout(fallback); if(demo) return;
