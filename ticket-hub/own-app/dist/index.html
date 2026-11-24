@@ -200,8 +200,8 @@ details.tv td,details.tv th{padding:4px 8px;text-align:left;border-top:1px solid
 .titem:hover{background:var(--surface2)}
 .titem[aria-current="true"]{background:var(--goldSoft)}
 .titem[aria-current="true"]::before{content:"";position:absolute;left:0;top:0;bottom:0;width:3px;background:var(--gold)}
-.titem .top{display:flex;align-items:center;gap:8px}
-.titem .idn{font-weight:700;color:var(--navy);font-variant-numeric:tabular-nums}
+.titem .top{display:flex;align-items:center;gap:6px 8px;flex-wrap:wrap}
+.titem .idn{font-weight:700;color:var(--navy);font-variant-numeric:tabular-nums;white-space:nowrap;font-size:13px;letter-spacing:.1px}
 .titem .site{font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .titem .meta{font-size:12px;color:var(--muted);display:flex;gap:6px;flex-wrap:wrap;align-items:center}
 .groupl{padding:10px 14px 6px;font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);font-weight:700;background:var(--surface2);border-bottom:1px solid var(--line)}
@@ -462,6 +462,8 @@ window.HUB_CONFIG = {
 <script src="backend.js"></script>
 <script type="text/hub-app" id="hub-app">
 (() => {
+/* full ticket reference, e.g. EZR-KOHLER-SRV-26-0223 */
+const tref=x=>{ const o=x&&typeof x==='object'?x:null, id=String(o?o.id:x||''), v=o&&o.ref?o:(typeof visits!=='undefined'&&visits[id])||o; return (v&&v.ref)||('EZR-KOHLER-SRV-26-'+id.padStart(4,'0')); };
 const STATUS={new:'New',review:'Ready for review',completed:'Completed',recheck:'Recheck',cancelled:'Cancelled'};
 const SLA_HOURS={Urgent:4,High:24,Normal:72};
 const OUTCOMES=['Resolved','Pending Parts','Further Action Required','Inspection Completed','No Issue Found','Other'];
@@ -629,7 +631,9 @@ function access(){
 const can=r=>{ const a=access(); return !!(PERMS[a]&&PERMS[a].includes(r)); };
 const isOffice=()=>['admin','office'].includes(access());
 // who may change a ticket: office and admins any ticket, technicians only tickets assigned to them, viewers none
-const canEditTicket=v=>{ const a=access(); return a==='admin'||a==='office'||(a==='technician'&&!!me.id&&v.assignedTo===me.id); };
+const reportFromAirtable=()=>typeof atCfg==='function'&&atCfg().mode==='page';
+const AT_LOCK_NOTE='This service report comes from Airtable. Make any change in Airtable — the hub updates itself within 30 minutes.';
+const canEditTicket=v=>{ if(reportFromAirtable()) return false; const a=access(); return a==='admin'||a==='office'||(a==='technician'&&!!me.id&&v.assignedTo===me.id); };
 // each person appends to their own audit record (audit/<their id>); the store lets nobody else, the owner included, change it, and only admins read others' records
 let auditChain=Promise.resolve();
 function logAction(action,data={}){
@@ -755,11 +759,11 @@ function openNav(key){
 /* ---------- My tasks & notifications ---------- */
 function tasksView(){
   const a=access(), items=[], mineT=Object.values(visits).filter(v=>v.assignedTo&&v.assignedTo===me.id&&!['completed','cancelled'].includes(v.status));
-  mineT.forEach(v=>items.push(['warn','#'+v.id+' · '+(v.site||'Site'),(v.scheduled?dmhm(v.scheduled)+' · ':'')+(v.issue||v.type||''),`<button class="btn" data-open="${esc(v.id)}">Open</button>`]));
+  mineT.forEach(v=>items.push(['warn',tref(v)+' · '+(v.site||'Site'),(v.scheduled?dmhm(v.scheduled)+' · ':'')+(v.issue||v.type||''),`<button class="btn" data-open="${esc(v.id)}">Open</button>`]));
   if(isOffice()){
     const rq=reviewQueue(); if(rq.length) items.push(['warn',rq.length+' ticket'+(rq.length>1?'s':'')+' waiting for office review','Approve or send back for recheck.',`<button class="btn" data-route="review">Review</button>`]);
-    const late=Object.values(visits).filter(v=>!['completed','cancelled'].includes(v.status)&&sla(v).late); if(late.length) items.push(['bad',late.length+' ticket'+(late.length>1?'s':'')+' past the response time',late.slice(0,5).map(v=>'#'+v.id).join(', '),`<button class="btn" data-open="${esc(late[0].id)}">Open #${esc(late[0].id)}</button>`]);
-    const un=Object.values(visits).filter(v=>v.status==='new'&&!v.assignedTo); if(un.length) items.push(['warn',un.length+' new ticket'+(un.length>1?'s':'')+' with no technician',un.slice(0,6).map(v=>'#'+v.id).join(', '),`<button class="btn" data-open="${esc(un[0].id)}">Assign</button>`]);
+    const late=Object.values(visits).filter(v=>!['completed','cancelled'].includes(v.status)&&sla(v).late); if(late.length) items.push(['bad',late.length+' ticket'+(late.length>1?'s':'')+' past the response time',late.slice(0,5).map(v=>tref(v)).join(', '),`<button class="btn" data-open="${esc(late[0].id)}">Open #${esc(late[0].id)}</button>`]);
+    const un=Object.values(visits).filter(v=>v.status==='new'&&!v.assignedTo); if(un.length) items.push(['warn',un.length+' new ticket'+(un.length>1?'s':'')+' with no technician',un.slice(0,6).map(v=>tref(v)).join(', '),`<button class="btn" data-open="${esc(un[0].id)}">Assign</button>`]);
     const dq=qualityIssues().reduce((s,g)=>s+g.list.length,0); if(dq) items.push(['warn',dq+' data issue'+(dq>1?'s':'')+' to fix','Missing dates, emirates, invoice numbers and more.',`<button class="btn" data-route="quality">See them</button>`]);
   }
   if(can('finance')) finTodo().filter(t=>t[0]!=='plain').forEach(t=>items.push(t));
@@ -768,7 +772,7 @@ function tasksView(){
   return `<div class="page"><div class="phead"><div><h1>${tui.tab==='notes'?'Notifications':'My tasks'}</h1><div class="sub">${tui.tab==='notes'?'Latest activity across the hub':'Everything waiting for you, most urgent first'}</div></div>
     <div class="tabs" role="group"><button data-tui="mine" aria-pressed="${tui.tab==='mine'}">My tasks</button><button data-tui="notes" aria-pressed="${tui.tab==='notes'}">Notifications</button></div></div>
     ${tui.tab==='mine'?`<div class="card"><div>${items.length?items.map(row).join(''):'<div class="empty">Nothing waiting for you. 🎉</div>'}</div></div>`
-    :`<div class="card">${notes.length?`<div class="tblwrap"><table class="tbl"><thead><tr><th>When</th><th>Who</th><th>What</th><th>Ticket</th><th>Detail</th></tr></thead><tbody>${notes.map(e=>`<tr><td class="num" style="white-space:nowrap">${esc(dmy(e.at))} · ${esc(hm(e.at))}</td><td>${esc(nameOf(e.by)||'')}</td><td>${esc(e.action||'')}</td><td>${e.ticket?`<button class="linkbtn" data-open="${esc(e.ticket)}">#${esc(e.ticket)}</button>`:''}</td><td class="sub">${esc(e.detail||'')}</td></tr>`).join('')}</tbody></table></div>`:`<div class="empty">${can('admin')?'No activity yet.':'Notifications show here for administrators. Your tasks are under “My tasks”.'}</div>`}</div>`}</div>`;
+    :`<div class="card">${notes.length?`<div class="tblwrap"><table class="tbl"><thead><tr><th>When</th><th>Who</th><th>What</th><th>Ticket</th><th>Detail</th></tr></thead><tbody>${notes.map(e=>`<tr><td class="num" style="white-space:nowrap">${esc(dmy(e.at))} · ${esc(hm(e.at))}</td><td>${esc(nameOf(e.by)||'')}</td><td>${esc(e.action||'')}</td><td>${e.ticket?`<button class="linkbtn" data-open="${esc(e.ticket)}">${esc(tref(e.ticket))}</button>`:''}</td><td class="sub">${esc(e.detail||'')}</td></tr>`).join('')}</tbody></table></div>`:`<div class="empty">${can('admin')?'No activity yet.':'Notifications show here for administrators. Your tasks are under “My tasks”.'}</div>`}</div>`}</div>`;
 }
 
 /* ---------- Customers & sites (from the tickets) ---------- */
@@ -788,7 +792,7 @@ function customersView(){
    <div class="card">${cui.tab==='dir'?`<div class="tblwrap"><table class="tbl"><thead><tr><th>Customer / site name</th><th>Contacts</th><th>Phone</th><th>Emirates</th><th class="amt">Tickets</th><th class="amt">Open</th><th>Last visit</th>${can('finance')&&pricingOn()?'<th class="amt">Charges</th>':''}</tr></thead><tbody>
      ${cl.map(x=>{ const open=x.tickets.filter(v=>!['completed','cancelled'].includes(v.status)); return `<tr><td><b>${esc(x.name)}</b></td><td class="sub">${esc([...x.contacts].slice(0,3).join(', ')||'—')}</td><td class="num">${[...x.phones].slice(0,2).map(p=>esc(p)).join('<br>')||'—'}</td><td>${esc([...x.regions].join(', ')||'—')}</td><td class="amt">${x.tickets.length}</td><td class="amt">${open.length?`<button class="linkbtn" data-open="${esc(open[0].id)}">${open.length}</button>`:'0'}</td><td class="num">${esc(last(x.tickets)?dmy(last(x.tickets)):'—')}</td>${can('finance')&&pricingOn()?`<td class="amt">${esc(money2(x.tickets))}</td>`:''}</tr>`; }).join('')}</tbody></table></div>`
    :`<div class="tblwrap"><table class="tbl"><thead><tr><th>Site / address</th><th>Customer</th><th>Emirate</th><th class="amt">Tickets</th><th>Last visit</th><th>Latest ticket</th></tr></thead><tbody>
-     ${sl.map(x=>{ const lt=x.tickets.slice().sort((a,b)=>b.id.localeCompare(a.id))[0]; return `<tr><td style="max-width:340px">${esc(x.addr)}</td><td>${esc(x.customer)}</td><td>${esc(x.region||'—')}</td><td class="amt">${x.tickets.length}</td><td class="num">${esc(last(x.tickets)?dmy(last(x.tickets)):'—')}</td><td><button class="linkbtn" data-open="${esc(lt.id)}">#${esc(lt.id)}</button></td></tr>`; }).join('')}</tbody></table></div>`}</div>
+     ${sl.map(x=>{ const lt=x.tickets.slice().sort((a,b)=>b.id.localeCompare(a.id))[0]; return `<tr><td style="max-width:340px">${esc(x.addr)}</td><td>${esc(x.customer)}</td><td>${esc(x.region||'—')}</td><td class="amt">${x.tickets.length}</td><td class="num">${esc(last(x.tickets)?dmy(last(x.tickets)):'—')}</td><td><button class="linkbtn" data-open="${esc(lt.id)}">${esc(tref(lt))}</button></td></tr>`; }).join('')}</tbody></table></div>`}</div>
    <div class="sub" style="font-size:12.5px">Names come from the tickets as typed, so the same customer written two ways shows twice. Fix the site name on the ticket to merge them.</div></div>`;
 }
 
@@ -800,7 +804,7 @@ function documentsView(){
   return `<div class="page"><div class="phead"><div><h1>Document center</h1><div class="sub">${all.length} photos and documents attached to tickets</div></div>
    <div class="actions"><label class="search">${svg('search',16)}<input id="d-q" class="field" type="search" placeholder="Search ticket, site or file" value="${esc(dui.q)}"></label></div></div>
    <div class="tabs" role="group">${[['all','All'],['photo','Photos'],['pdf','PDFs']].map(([k,l])=>`<button data-dui="${k}" aria-pressed="${dui.kind===k}">${l}</button>`).join('')}</div>
-   ${xs.length?`<div class="card"><div class="card-b"><div class="thumbs" style="grid-template-columns:repeat(auto-fill,minmax(150px,1fr))">${xs.slice(0,300).map(({v,e})=>{ const u=safeUrl(e.url); return `<a class="thumb" ${u?`href="${esc(u)}" target="_blank" rel="noopener"`:''} title="${esc(e.name)}">${u&&!isPdf(e)?`<img src="${esc(u)}" alt="${esc(e.name)}" loading="lazy">`:`<span style="padding:8px;text-align:center">${isPdf(e)?'PDF · ':''}${esc(e.name)}</span>`}<span class="tag">#${esc(v.id)}</span></a>`; }).join('')}</div></div></div>`
+   ${xs.length?`<div class="card"><div class="card-b"><div class="thumbs" style="grid-template-columns:repeat(auto-fill,minmax(150px,1fr))">${xs.slice(0,300).map(({v,e})=>{ const u=safeUrl(e.url); return `<a class="thumb" ${u?`href="${esc(u)}" target="_blank" rel="noopener"`:''} title="${esc(e.name)}">${u&&!isPdf(e)?`<img src="${esc(u)}" alt="${esc(e.name)}" loading="lazy">`:`<span style="padding:8px;text-align:center">${isPdf(e)?'PDF · ':''}${esc(e.name)}</span>`}<span class="tag">${esc(tref(v))}</span></a>`; }).join('')}</div></div></div>`
    :`<div class="card"><div class="empty">${all.length?'No documents match.':'No photos or documents yet. They are added on each ticket’s “Complete visit” step.'}</div></div>`}
    <div class="sub" style="font-size:12.5px">Each file is stored once and shown on its ticket. Open a ticket to add or remove files.</div></div>`;
 }
@@ -824,7 +828,7 @@ function qualityView(){
   const qs=qualityIssues(), n=qs.reduce((a,g)=>a+g.list.length,0);
   return `<div class="page"><div class="phead"><div><h1>Data quality</h1><div class="sub">${n?n+' item'+(n>1?'s':'')+' to check':'Everything looks complete'} · checked live from your tickets and invoices</div></div></div>
    ${qs.length?qs.map(g=>`<div class="card"><div class="card-h"><div><h3>${esc(g.t)} <span class="chip sla-risk">${g.list.length}</span></h3><div class="sub">${esc(g.d)}</div></div></div><div class="card-b" style="display:flex;flex-wrap:wrap;gap:8px">
-     ${g.inv?g.list.map(i=>`<button class="btn" data-gofin="invoices">${esc(i.invoiceNo)}</button>`).join(''):g.list.slice(0,60).map(v=>`<button class="btn" data-open="${esc(v.id)}">#${esc(v.id)}${v.site?' · '+esc(String(v.site).split('|')[0].trim().slice(0,22)):''}</button>`).join('')+(g.list.length>60?`<span class="sub">+${g.list.length-60} more</span>`:'')}</div></div>`).join('')
+     ${g.inv?g.list.map(i=>`<button class="btn" data-gofin="invoices">${esc(i.invoiceNo)}</button>`).join(''):g.list.slice(0,60).map(v=>`<button class="btn" data-open="${esc(v.id)}">${esc(tref(v))}${v.site?' · '+esc(String(v.site).split('|')[0].trim().slice(0,22)):''}</button>`).join('')+(g.list.length>60?`<span class="sub">+${g.list.length-60} more</span>`:'')}</div></div>`).join('')
    :'<div class="card"><div class="empty">No data problems found.</div></div>'}</div>`;
 }
 
@@ -901,7 +905,7 @@ function integrationsView(){
     ${row('WhatsApp','Links','plain','Ticket pages open WhatsApp with the customer’s number. Nothing is sent automatically.')}
     ${row('QuickBooks','Not used','plain','Your QuickBooks company is set up in US dollars, so the hub does not use it. Xero (AED) is used instead.')}
     ${(()=>{ const a=atui; const cfg=atCfg(), where='Reads <b>'+esc(cfg.baseName||cfg.base)+' → '+esc(cfg.tableName||cfg.table)+'</b> and never writes to Airtable. Tickets match by the number at the end of the Ticket ID (EZR-KOHLER-SRV-26-0224 → #0224); filled-in Airtable fields update the hub, empty ones never erase hub data, and nothing is deleted. Syncs every 5 minutes while an administrator has the hub open.';
-      return a.st==='ok'?row('Airtable','Syncing · read only','ok',`Last sync ${esc(dmhm(a.at))}: ${a.read} ticket${a.read===1?'':'s'} read · ${a.made} new · ${a.upd} updated${a.skip?' · '+a.skip+' without a ticket number skipped':''}. Every 30 minutes while the hub is open. Airtable is the master: its values replace the hub's (empty Airtable fields never erase). ${a.conflicts?'<b>'+a.conflicts+' ticket'+(a.conflicts>1?'s have':' has')+' a new invoice number from Airtable ('+esc(atConflicts.slice(0,5).map(c=>'#'+c.id+': was '+c.hub+', now '+c.at).join('; '))+'). Check those invoices.</b> ':''}${where}`,`<button class="btn" data-act="atsync">Sync now</button><button class="btn" data-act="atpick">Choose base &amp; table</button>`)
+      return a.st==='ok'?row('Airtable','Syncing · read only','ok',`Last sync ${esc(dmhm(a.at))}: ${a.read} ticket${a.read===1?'':'s'} read · ${a.made} new · ${a.upd} updated${a.skip?' · '+a.skip+' without a ticket number skipped':''}. Every 30 minutes while the hub is open. Airtable is the master: its values replace the hub's (empty Airtable fields never erase). ${a.conflicts?'<b>'+a.conflicts+' ticket'+(a.conflicts>1?'s have':' has')+' a new invoice number from Airtable ('+esc(atConflicts.slice(0,5).map(c=>tref(c)+': was '+c.hub+', now '+c.at).join('; '))+'). Check those invoices.</b> ':''}${where}`,`<button class="btn" data-act="atsync">Sync now</button><button class="btn" data-act="atpick">Choose base &amp; table</button>`)
        :a.st==='busy'?row('Airtable','Syncing…','plain','Reading your Airtable tickets…','')
        :a.st==='err'?row('Airtable','Not syncing','bad',esc(a.err)+' '+where,`<button class="btn" data-act="atsync">Try again</button><button class="btn" data-act="atpick">Choose base &amp; table</button>`)
        :row('Airtable','Ready to connect','plain',(mcpApi?'':'Open the hub in claude.ai to connect. ')+where,mcpApi?`<button class="btn primary" data-act="atpick">Choose base &amp; table</button><button class="btn" data-act="atsync">Sync now</button>`:''); })()}
@@ -967,7 +971,7 @@ function aedWords(n){
 }
 function invRows(inv){
   if(isCredit(inv)) return [{d:'Credit against invoice '+(inv.refInvoice||'')+(inv.notes?' — '+inv.notes:''),q:1,u:-inv.net}];
-  const L=(inv.lines||[]).slice().sort((a,b)=>a.ticket.localeCompare(b.ticket)); if(!L.length) return [{d:'Technical services'+(ticketsForInv(inv).length?' — '+ticketsForInv(inv).map(v=>v.ref||'#'+v.id).join(', '):''),q:1,u:inv.net}];
+  const L=(inv.lines||[]).slice().sort((a,b)=>a.ticket.localeCompare(b.ticket)); if(!L.length) return [{d:'Technical services'+(ticketsForInv(inv).length?' — '+ticketsForInv(inv).map(v=>v.ref||tref(v)).join(', '):''),q:1,u:inv.net}];
   const ref=id=>(visits[id]&&visits[id].ref)||('EZR-KOHLER-SRV-26-'+id), site=id=>String((visits[id]||{}).site||'').split('|')[0].trim().toLowerCase();
   const col={}, wait=[], svc={}, rows=[];
   L.forEach(l=>{ if(l.collection){ const k=l.emirate+'|'+l.collection; (col[k]=col[k]||{em:l.emirate,u:l.collection,n:0}).n++; } if(l.waiting) wait.push(l); if(l.service){ const k=site(l.ticket)+'|'+l.service; (svc[k]=svc[k]||{u:l.service,ids:[]}).ids.push(l.ticket); } });
@@ -1053,7 +1057,7 @@ function gsResults(){
   if(can('finance')) Object.values(invoices).filter(i=>invKey(i.invoiceNo).includes(qk)||hit(i.customer)||hit(i.notes)).sort((a,b)=>(b.date||'').localeCompare(a.date||'')).slice(0,10)
     .forEach(i=>out.push({g:isCredit(i)?'Credit notes':'Invoices',t:i.invoiceNo,s:[fdx(i.date),money(invGross(i)),invoiceState(i).label].join(' · '),go:{inv:i.invoiceNo}}));
   if(can('tickets')) Object.values(visits).filter(v=>canSeeTicket(v)&&(hit(v.id)||hit(v.ref)||hit(v.site)||hit(v.product)||hit(v.model)||hit(v.serial)||hit(v.issue)||hit(v.technician)||(v.billingRef&&invKey(v.billingRef).includes(qk)))).sort((a,b)=>b.id.localeCompare(a.id)).slice(0,12)
-    .forEach(v=>out.push({g:'Tickets',t:'#'+v.id+' · '+(v.site||'Site'),s:[STATUS[v.status],v.product,v.billingRef].filter(Boolean).join(' · '),go:{ticket:v.id}}));
+    .forEach(v=>out.push({g:'Tickets',t:tref(v)+' · '+(v.site||'Site'),s:[STATUS[v.status],v.product,v.billingRef].filter(Boolean).join(' · '),go:{ticket:v.id}}));
   if(can('customers')){ const seen=new Set(); Object.values(visits).forEach(v=>{ const c=custOf(v); if(!seen.has(c)&&hit(c)){ seen.add(c); out.push({g:'Customers',t:c,s:'Customer directory',go:{cust:c}}); } }); }
   return out.slice(0,40);
 }
@@ -1099,7 +1103,7 @@ function syncLabel(){ if(!loaded) return ['Connecting…','wait']; if(demo) retu
 
 
 /* ---------- Airtable: read-only ticket sync (Ziara Financial Command Center → Service Tickets) ---------- */
-const AT_DEFAULT={server:'Airtable',mode:'page',base:'apprDoCCtkJQl0E4E',baseName:'Kohler UAE Service Ticket Manager',iface:'pbdYSC8OPffPXIXY3',page:'paghs6IWDHle1Xj3P',table:'tblPc4XGpCiDkHYsl',tableName:'Service Visits',f:{id:'fldeQqv7lHTCmVUEY',status:'fldBrRSoOS3ALf4uE',site:'fldts2oyConVvqDmh',sched:'fld3VOpNMNrwy7E2t',date:'fldQlpYIMVxZFdi8Y',emirate:'fldBAbXWQtEHmUZab',product:'fldmJb515lAik5tbn',contactedAt:'fldrVenEEAswYeLIJ',contact:'fldW97kxlOhPHNb8T',email:'fldItWS4tKxqMpNUT',loc:'fldNu75wRq85SaP2P',type:'fldV09dkwHvxVfvcr',category:'fldBCPLmttHp6OBFy',model:'fldsECcbBWn7WOaES',serial:'fld4ETvDvSpb68E4v',desc:'fldhjPID30gPkzfFi',instructions:'fldQWNzkLZTpIwCGQ',arrived:'fldV79ygiWwU5Vh9x',doneAt:'fldq6zc0sR0VCtgAk',washroom:'fldnyTAfRn2qRyb3l',findings:'fldQDk0DHtK82LOFF',work:'fldiMPrCFrpFkFCBs',nextAction:'fld1atTS7cL2GsG6V',outcome:'fldMrRIXmPWHBWh5T',returnVisit:'fldQrO3WyT2JV3Vwl',tech:'fldYitTWznnCfFgAV',feedback:'fldFLx49TnFbeULKp',inotes:'fldARE9VnNDZ2pHB8',inv:'fldP83r75NAb13cmF'}};
+const AT_DEFAULT={server:'Airtable',mode:'page',base:'apprDoCCtkJQl0E4E',baseName:'Kohler UAE Service Ticket Manager',iface:'pbdYSC8OPffPXIXY3',page:'paghs6IWDHle1Xj3P',table:'tblPc4XGpCiDkHYsl',tableName:'Service Visits',f:{id:'fldeQqv7lHTCmVUEY',status:'fldBrRSoOS3ALf4uE',site:'fldts2oyConVvqDmh',sched:'fld3VOpNMNrwy7E2t',date:'fldQlpYIMVxZFdi8Y',emirate:'fldBAbXWQtEHmUZab',product:'fldmJb515lAik5tbn',contactedAt:'fldrVenEEAswYeLIJ',contact:'fldW97kxlOhPHNb8T',email:'fldItWS4tKxqMpNUT',loc:'fldNu75wRq85SaP2P',type:'fldV09dkwHvxVfvcr',category:'fldBCPLmttHp6OBFy',model:'fldsECcbBWn7WOaES',serial:'fld4ETvDvSpb68E4v',desc:'fldhjPID30gPkzfFi',instructions:'fldQWNzkLZTpIwCGQ',arrived:'fldV79ygiWwU5Vh9x',doneAt:'fldq6zc0sR0VCtgAk',washroom:'fldnyTAfRn2qRyb3l',findings:'fldQDk0DHtK82LOFF',work:'fldiMPrCFrpFkFCBs',nextAction:'fld1atTS7cL2GsG6V',outcome:'fldMrRIXmPWHBWh5T',returnVisit:'fldQrO3WyT2JV3Vwl',tech:'fldYitTWznnCfFgAV',feedback:'fldFLx49TnFbeULKp',inotes:'fldARE9VnNDZ2pHB8',inv:'fldP83r75NAb13cmF',photos:'fldHCRES1wYfgHoT8',issuePhotos:'fldO1omAQhREgmqyW'}};
 const AT_OLD_BASE='appnqZO5v0DyFIpwY';
 const atCfg=()=>{ const c=FS().airtable; return c&&c.base&&c.table&&c.f&&c.base!==AT_OLD_BASE?Object.assign({server:'Airtable'},c):AT_DEFAULT; };
 const AT_KEYS=[['id','Ticket ID / number',true],['date','Service date'],['status','Status'],['emirate','Emirate'],['site','Customer site'],['loc','Location / address'],['product','Product / service'],['desc','Description / issue'],['tech','Technician'],['done','Completion date'],['inv','Invoice number'],['notes','Notes']];
@@ -1108,7 +1112,7 @@ function atAutoMap(t){ const F=t.fields||[], used=new Set(), m={}; const pick=(k
   pick('id',/ticket\s*(id|no|number|#|ref)|^ticket$|^ref|reference/); if(!m.id&&t.primaryFieldId){ m.id=t.primaryFieldId; used.add(t.primaryFieldId); }
   pick('done',/complet|finish|closed on|closing date/); pick('date',/service date|visit date|schedul|appointment|^date$|date/,/creat|modif|due|invoice|payment/); pick('status',/service status|ticket status|job status|^status$|status/,/billing|review|payment|invoice|vat/); pick('emirate',/emirate|region|city/); pick('site',/site|project|customer name|^customer$/,/address|location/); pick('loc',/location|address|area/); pick('product',/product|item|model|unit|equipment/); pick('desc',/description|issue|problem|complaint|fault|work/); pick('tech',/technician|engineer|assigned|staff/); pick('inv',/z invoice|invoice no|invoice number|linked invoice|billing ref|invoice/,/status|date|amount|total/); pick('notes',/note|remark|comment/);
   return m; }
-let atui={st:'idle',at:null,read:0,made:0,upd:0,skip:0,err:''}, permApi=null, atTimer=null, atConflicts=[];
+let atui={st:'idle',at:null,read:0,made:0,upd:0,skip:0,err:''}, permApi=null, atTimer=null, atConflicts=[], atUrls={}, atCopy={busy:false,blocked:false,done:0};
 const atTxt=v=>v==null?'':Array.isArray(v)?v.map(atTxt).filter(x=>x&&!/^rec[A-Za-z0-9]{14}$/.test(x)).join(', '):typeof v==='object'?String(v.name??v.value??v.text??v.label??''):String(v).trim();
 function atStatus(v){ const t=atTxt(v).toLowerCase(); if(!t) return null; if(/cancel/.test(t)) return 'cancelled'; if(/complet|done|closed|finish/.test(t)) return 'completed'; if(/review/.test(t)) return 'review'; if(/recheck|return|revisit/.test(t)) return 'recheck'; if(/new|open|schedul|pending|progress|assign/.test(t)) return 'new'; return null; }
 const AT_FIX={needs_reauth:'Reconnect Airtable in claude.ai → Settings → Connectors, then try again.',server_not_connected:'Add the Airtable connector in claude.ai → Settings → Connectors, then try again.',selection_required:'You have more than one Airtable connector — choose one when claude.ai asks, then try again.',approval_required:'This page needs your approval to read Airtable. Press the button again and choose Allow.',not_in_manifest:'Airtable is turned off for this page. Turn it on in the page’s Permissions menu.',blocked_by_policy:'Your organisation’s policy blocks Airtable for this page.',not_granted:'Connectors are not available in this view. Open the hub in claude.ai.',capability_disabled:'Connectors are not available in this view. Open the hub in claude.ai.',server_unavailable:'Airtable did not answer just now. Try again in a minute.',tool_error:'Airtable refused the request. Check that the chosen base and table still exist and are shared with your Airtable connector.'};
@@ -1123,13 +1127,20 @@ async function mergeTicket(tid,g,src){
   if(/[A-Za-z]/.test(tid)) put('ref',tid);
   const sch=dts(g('sched')); if(sch){ if(!(ex&&same16(ex.scheduled,sch))) put('scheduled',sch); }
   else { const dt=iso(g('date')); if(dt&&!(ex&&ex.scheduled&&dayKey(ex.scheduled)===dt)) put('scheduled',dt+'T04:00:00.000Z'); }
-  const fin=iso(g('done')); if(fin&&!(ex&&ex.finished)) put('finished',fin+'T08:00:00.000Z');
-  [['arrived','arrived'],['doneAt','finished'],['contactedAt','contactedAt']].forEach(([k,h])=>{ const t=dts(g(k)); if(t&&!(ex&&same16(ex[h],t))) put(h,t); });
+  if(src.inout){ /* Time In / Time Out always come from the Airtable report, also when it is empty */
+    [['arrived','arrived'],['doneAt','finished']].forEach(([k,h])=>{ const t=dts(g(k))||null; if(ex?!same16(ex[h],t):t) patch[h]=t; }); }
+  else { const fin=iso(g('done')); if(fin&&!(ex&&ex.finished)) put('finished',fin+'T08:00:00.000Z'); }
+  { const t=dts(g('contactedAt')); if(t&&!(ex&&same16(ex.contactedAt,t))) put('contactedAt',t); }
   const st=atStatus(g('status')); if(st) put('status',st);   /* Airtable is the master record: its status always wins */
   [['contact','contact'],['type','type'],['category','category'],['model','model'],['serial','serial'],['instructions','instructions'],['findings','findings'],['work','work'],['nextAction','nextAction'],['outcome','outcome'],['feedback','customerFeedback'],['inotes','internalNotes']].forEach(([k,h])=>put(h,atTxt(g(k))));
   { const e=atTxt(g('email')).replace(/^mailto:/i,''); if(/@/.test(e)) put('email',e); }
   { const w=g('washroom'); put('washroom',Array.isArray(w)?w.map(atTxt).filter(Boolean).join('\n'):atTxt(w)); }
   { const rv=g('returnVisit'); if(rv===true) put('returnVisit','Yes'); }
+  if(src.files){ const old={}; ((ex&&ex.airtableFiles)||[]).forEach(f=>{ old[f.att]=f; }); const list=[];
+    [['photos','report'],['issuePhotos','issue']].forEach(([k,fld])=>{ const arr=g(k); if(!Array.isArray(arr)) return; arr.forEach(a=>{ if(!a||!a.id) return;
+      const th=a.thumbnails&&(a.thumbnails.large||a.thumbnails.full); atUrls[a.id]={url:a.url,thumb:th&&th.url,at:Date.now()};
+      const f={att:a.id,name:String(a.filename||'file'),type:String(a.type||''),size:+a.size||0,field:fld}; if(old[a.id]&&old[a.id].asset) f.asset=old[a.id].asset; list.push(f); }); });
+    if(list.length||(ex&&ex.airtableFiles&&ex.airtableFiles.length)) patch.airtableFiles=list; }
   put('region',atTxt(g('emirate'))); put('site',atTxt(g('site'))); put('address',atTxt(g('loc'))); put('product',atTxt(g('product'))); put('issue',atTxt(g('desc'))); put('technician',atTxt(g('tech'))); put('airtableNotes',atTxt(g('notes')));
   { const inv=atTxt(g('inv')); if(!blank(inv)){ if(ex&&(ex.billingRef||'').trim()&&invKey(ex.billingRef)!==invKey(inv)) atConflicts.push({id,hub:ex.billingRef,at:inv}); put('billingRef',inv); } }
   if(!ex){ const v=Object.assign({id,ref:'EZR-KOHLER-SRV-26-'+id,status:'new',type:'Inspection',priority:'Normal',category:'',product:'',site:'',address:'',region:'',issue:'',prepared:false,contactedAt:null,arrived:null,finished:null,findings:'',work:'',nextAction:'',outcome:'',returnVisit:'No',technician:'',internalNotes:'',parts:[],evidence:[],billingRef:''},patch,{source:src.source});
@@ -1181,13 +1192,28 @@ async function airtableSync(manual){
       const got=page?((pl.recordsByTableId||{})[AT.table]||Object.values(pl.recordsByTableId||{})[0]||[]):pl.records; recs.push(...(Array.isArray(got)?got:[])); cursor=pl.nextCursor||null; if(!cursor) break; }
     let made=0, upd=0, skip=0; atConflicts=[];
     const AT=atCfg(); for(const rec of recs){ const c=rec.cellValuesByFieldId||rec.fields||{}, g=k=>AT.f[k]?c[AT.f[k]]:undefined;
-      const r=await mergeTicket(atTxt(g('id')),g,{recId:rec.id,label:'Airtable',source:'airtable'}); if(r==='skip') skip++; else if(r==='new') made++; else if(r==='upd') upd++; }
+      const r=await mergeTicket(atTxt(g('id')),g,{recId:rec.id,label:'Airtable',source:'airtable',inout:!!(AT.f.arrived&&AT.f.doneAt),files:!!AT.f.photos}); if(r==='skip') skip++; else if(r==='new') made++; else if(r==='upd') upd++; }
     atui={st:'ok',at:new Date().toISOString(),read:recs.length,made,upd,skip,err:'',conflicts:atConflicts.length};
     if(made||upd) logAction('Synced tickets from Airtable',{detail:recs.length+' read · '+made+' new · '+upd+' updated'});
     if(manual||made||upd) toast('Airtable: '+recs.length+' ticket'+(recs.length===1?'':'s')+' read · '+made+' new · '+upd+' updated');
     if(!atTimer) atTimer=setInterval(()=>airtableSync(false),1800000);
+    setTimeout(()=>atCopyFiles(),500);
   }catch(e){ const c=(e&&e.code)||'upstream_error'; atui={...atui,st:'err',err:AT_FIX[c]||('Airtable sync failed ('+c+'). Try again.')}; if(['needs_reauth','server_not_connected','not_in_manifest','blocked_by_policy','not_granted'].includes(c)&&atTimer){ clearInterval(atTimer); atTimer=null; } }
   if(manual||route==='integrations') render();
+}
+/* keep a permanent copy of Airtable photos and PDFs (links from Airtable expire after a few hours) */
+async function atCopyFiles(){
+  if(atCopy.busy||atCopy.blocked||!assets||!db) return; atCopy.busy=true; let n=0;
+  try{
+    for(const v of Object.values(visits)){ if(n>=40) break; const fs=v.airtableFiles||[]; let changed=false; const list=fs.map(f=>Object.assign({},f));
+      for(const f of list){ if(n>=40) break; if(f.asset||!/^image\/|pdf/i.test(f.type)||f.size>5*1024*1024) continue; const u=atUrls[f.att]; if(!u||!u.url) continue;
+        let blob; try{ const r=await fetch(u.url,{mode:'cors',credentials:'omit'}); if(!r.ok) continue; blob=await r.blob(); }catch(e){ atCopy.blocked=true; break; }
+        try{ const up=await assets.upload(new File([blob],f.name,{type:f.type||blob.type})); f.asset={id:up.id,url:up.url}; changed=true; n++; atCopy.done++; }catch(e){ if(e&&/quota|limit|too_large|not_granted/i.test(String(e.code||e.message))){ atCopy.blocked=true; break; } }
+      }
+      if(changed){ const nv=clone(v); nv.airtableFiles=list; await save(nv,null); }
+      if(atCopy.blocked) break; }
+  }finally{ atCopy.busy=false; }
+  if(n&&route==='tickets') render();
 }
 async function atLoadBases(){ if(!mcpApi){ toast(AT_FIX.not_granted); return; } atPick={st:'busy'}; render();
   try{ let bases=[], off=null; for(let i=0;i<10;i++){ const r=await mcpApi.callTool('Airtable','list_bases',off?{offset:off}:{},{cache:false}); const pl=r.payload||{}; bases.push(...(pl.bases||[])); off=pl.offset||null; if(!off) break; }
@@ -1267,7 +1293,7 @@ function todayHtml(all){
   const t=todayDxb(), xs=all.filter(v=>v.scheduled&&dayKey(v.scheduled)===t&&v.status!=='cancelled').sort((a,b)=>(a.scheduled||'').localeCompare(b.scheduled||''));
   const left=xs.filter(v=>!v.finished&&['new','recheck'].includes(v.status)).length;
   return `<div class="card"><div class="card-h"><div><h3>Today's visits</h3><div class="sub">${xs.length?xs.length+' booked · '+left+' still to do':'Nothing booked for today'}</div></div></div>
-    ${xs.length?`<div class="attn">${xs.slice(0,8).map(v=>`<button data-open="${esc(v.id)}"><span class="idn">${esc(hm(v.scheduled))}</span><span style="min-width:0"><span style="display:block;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">#${esc(v.id)} · ${esc((v.site||'').split('|')[0].trim()||'Site not set')}</span><span class="sub">${esc([v.region,v.technician||assigneeName(v)].filter(Boolean).join(' · ')||'Not assigned')}</span></span>${v.finished||['completed','review'].includes(v.status)?'<span class="chip completed">Done</span>':v.arrived?'<span class="chip review">On site</span>':chip(v)}</button>`).join('')}</div>`:''}</div>`;
+    ${xs.length?`<div class="attn">${xs.slice(0,8).map(v=>`<button data-open="${esc(v.id)}"><span class="idn">${esc(hm(v.scheduled))}</span><span style="min-width:0"><span style="display:block;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(tref(v))} · ${esc((v.site||'').split('|')[0].trim()||'Site not set')}</span><span class="sub">${esc([v.region,v.technician||assigneeName(v)].filter(Boolean).join(' · ')||'Not assigned')}</span></span>${v.finished||['completed','review'].includes(v.status)?'<span class="chip completed">Done</span>':v.arrived?'<span class="chip review">On site</span>':chip(v)}</button>`).join('')}</div>`:''}</div>`;
 }
 function dashView(){
   const all=Object.values(visits);
@@ -1304,7 +1330,7 @@ function dashView(){
       ${monthChart(all)}
       <div class="card"><div class="card-h"><h3>Needs attention</h3>${can('review')?'<button class="linkbtn" data-route="review">Review queue →</button>':''}</div>
         ${can('parts')&&Object.values(inventory).some(i=>invState(i).cls!=='completed')?`<button class="banner bad" data-route="parts" style="margin:12px 16px 0;width:calc(100% - 32px);text-align:left"><div><b>${Object.values(inventory).filter(i=>invState(i).cls!=='completed').length} inventory parts low or out of stock</b>Open Parts &amp; stock to reorder.</div></button>`:''}
-        <div class="attn">${attn.length?attn.map(v=>`<button data-open="${esc(v.id)}"><span class="idn">#${esc(v.id)}</span><span style="min-width:0"><span style="display:block;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(siteOf(v))}</span><span class="sub">${esc(v.product||'')} · ${esc(dm(v.scheduled))}</span></span>${why(v)}</button>`).join(''):'<div class="empty">Nothing needs attention right now.</div>'}</div></div>
+        <div class="attn">${attn.length?attn.map(v=>`<button data-open="${esc(v.id)}"><span class="idn">${esc(tref(v))}</span><span style="min-width:0"><span style="display:block;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(siteOf(v))}</span><span class="sub">${esc(v.product||'')} · ${esc(dm(v.scheduled))}</span></span>${why(v)}</button>`).join(''):'<div class="empty">Nothing needs attention right now.</div>'}</div></div>
     </div>
     <div class="charts">
       <div class="card"><div class="card-h"><div><h3>Tickets by emirate</h3><div class="sub">All ${all.length} tickets</div></div></div><div class="card-b">${hbars(counts(all,v=>v.region||'Not recorded'))}</div></div>
@@ -1328,7 +1354,7 @@ function listRows(){
 function itemHtml(v){
   const s=sla(v), e=escal(v), miss=v.status==='review'?missingChecks(v).length:0;
   return `<button class="titem" data-sel="${esc(v.id)}" aria-current="${sel===v.id}">
-    <div class="top"><span class="idn">#${esc(v.id)}</span>${chip(v)}${e?`<span class="chip sla-late" style="margin-left:auto">${esc(e.label)}</span>`:editable(v)&&s.label!=='—'?`<span class="chip ${s.cls}" style="margin-left:auto">${esc(s.label)}</span>`:miss?`<span class="sub" style="margin-left:auto;color:var(--bad);font-weight:600">⚠ ${miss} missing</span>`:''}</div>
+    <div class="top"><span class="idn">${esc(tref(v))}</span>${chip(v)}${e?`<span class="chip sla-late" style="margin-left:auto">${esc(e.label)}</span>`:editable(v)&&s.label!=='—'?`<span class="chip ${s.cls}" style="margin-left:auto">${esc(s.label)}</span>`:miss?`<span class="sub" style="margin-left:auto;color:var(--bad);font-weight:600">⚠ ${miss} missing</span>`:''}</div>
     <div class="site">${esc(siteOf(v))}</div>
     <div class="meta"><span>${esc(v.product||'—')}</span><span>·</span><span class="num">${esc(dayLong(v.scheduled))}</span>${v.priority&&v.priority!=='Normal'?`<span class="prio ${esc(v.priority)}">${esc(v.priority)}</span>`:''}${editable(v)?`<span style="margin-left:auto;font-weight:600;color:${v.assignedTo?'var(--ink2)':'var(--warn)'}">${v.assignedTo?esc(assigneeName(v)):'Unassigned'}</span>`:(v.billingRef||'').trim()?`<span class="num" style="margin-left:auto;font-weight:600;color:var(--ink2)" title="Z Invoice No.">${esc(v.billingRef)}</span>`:v.status==='completed'?`<span style="margin-left:auto;color:var(--warn);font-weight:600">Not invoiced yet</span>`:''}</div>
   </button>`;
@@ -1354,7 +1380,7 @@ function myJobsHtml(){
   const next=mine.filter(v=>v.scheduled&&dayKey(v.scheduled)>t&&editable(v)).length;
   const card=v=>{ const late=dayKey(v.scheduled)<t, done=!editable(v)||!!v.finished, ph=String(phoneOf(v)).replace(/[\s-]/g,''), place=[(v.address||''),(v.site||'').split('|')[0].trim(),v.region].filter(Boolean).join(', ');
     return `<div class="myjob${done?' done':late?' late':''}"><div class="t"><b>${late?esc(dm(v.scheduled)):esc(hm(v.scheduled))}</b>${done?'<span class="chip completed">Done</span>':v.arrived?'<span class="chip review">On site</span>':late?'<span class="chip sla-late">Overdue</span>':chip(v)}</div>
-      <div class="site">#${esc(v.id)} · ${esc((v.site||'').split('|')[0].trim()||'Site not set')}</div><div class="sub">${esc([v.product,v.issue].filter(Boolean).join(' · ').slice(0,120)||v.type||'')}</div>
+      <div class="site">${esc(tref(v))} · ${esc((v.site||'').split('|')[0].trim()||'Site not set')}</div><div class="sub">${esc([v.product,v.issue].filter(Boolean).join(' · ').slice(0,120)||v.type||'')}</div>
       <div class="acts"><button class="btn primary" data-open="${esc(v.id)}">${done?'View':v.arrived?'Continue':'Open job'}</button>${ph?`<a class="btn" href="tel:${esc(ph)}">Call</a>`:''}${place?`<a class="btn" target="_blank" rel="noopener" href="https://www.google.com/maps/search/?api=1&amp;query=${encodeURIComponent(place)}">Map</a>`:''}</div></div>`; };
   return `<div style="margin-bottom:6px;display:flex;justify-content:space-between;align-items:baseline;gap:8px;flex-wrap:wrap"><h2 style="margin:0;font-size:17px">My jobs today</h2><span class="sub">${jobs.length?jobs.filter(v=>editable(v)&&!v.finished).length+' to do':'Nothing booked for today'}${next?' · '+next+' coming up':''}</span></div>
     ${jobs.length?`<div class="myjobs">${jobs.map(card).join('')}</div>`:'<div style="height:10px"></div>'}`;
@@ -1385,7 +1411,7 @@ function headCard(v,opts={}){
     <div class="dhead">
       ${opts.back!==false?`<button class="btn ghost backlink" data-act="back" style="align-self:flex-start;padding:0;height:28px">${svg('back',16)} All tickets</button>`:''}
       <div class="row" style="align-items:flex-start;flex-wrap:wrap">
-        <div style="min-width:0"><div class="mono" style="font-weight:700">${esc(v.ref||'')}</div><h2 style="margin-top:2px">#${esc(v.id)} · ${esc(siteOf(v))}</h2>${v.issue?`<div style="color:var(--ink2);margin-top:2px">${esc(v.issue)}</div>`:''}</div>
+        <div style="min-width:0"><div class="mono" style="font-weight:700">${esc(tref(v))}</div><h2 style="margin-top:2px">${esc(siteOf(v))}</h2>${v.issue?`<div style="color:var(--ink2);margin-top:2px">${esc(v.issue)}</div>`:''}</div>
         <div class="actions">${canPdf()?`<button class="btn" data-pdf="${esc(v.id)}">${svg('doc',16)}Service report</button>`:''}</div>
       </div>
       <div class="chips">${chip(v)}${slaChip(v)}<span class="prio ${esc(v.priority||'Normal')}">${esc(v.priority||'Normal')} priority</span></div>
@@ -1406,8 +1432,8 @@ function headCard(v,opts={}){
       <button class="btn" data-act="call">${svg('phone',16)}Call</button>
       <a class="btn" href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent((v.address||v.site||'')+', '+(v.region||'Dubai')+', UAE')}" target="_blank" rel="noopener">${svg('map',16)}Directions</a>
       <span style="margin-left:auto;display:flex;align-items:center;gap:8px" class="sub">Assigned to ${isOffice()&&editable(v)?`<select class="field" data-assign="${esc(v.id)}" style="margin:0;width:auto;padding:7px 30px 7px 10px"><option value="">Unassigned</option>${[...new Set([...techIds(),...(v.assignedTo?[v.assignedTo]:[])])].map(id=>`<option value="${esc(id)}" ${v.assignedTo===id?'selected':''}>${esc(nameOf(id)||'Technician')}</option>`).join('')}</select>`:`<b style="color:var(--ink)">${esc(assigneeName(v)||'Nobody yet')}</b>`}</span>
-      ${(()=>{ const out=[]; const sl=waLink(phoneOf(v),`Hello, this is Ziar Imaar Technical Services, Kohler UAE service partner. Your service visit #${v.id} for ${v.product||'your Kohler product'} is scheduled for ${dayLong(v.scheduled)}${v.assignedTo?' with our technician '+assigneeName(v):''}. Please reply here if the time needs to change.`); if(sl&&editable(v)) out.push(`<a class="btn" href="${esc(sl)}" target="_blank" rel="noopener">${svg('wa',16)}WhatsApp site</a>`);
-        const tl=v.assignedTo&&isOffice()?waLink(techPhone(v.assignedTo),`Ziar Imaar · Ticket #${v.id}\n${siteOf(v)}${v.address?' · '+v.address:''}\n${v.product||''} ${v.model||''}\nVisit: ${dayLong(v.scheduled)}\nIssue: ${v.issue||'—'}\nContact: ${v.contact||'—'}${escal(v)?'\nESCALATED '+escal(v).label:''}\nPlease update the visit in the ticket hub.`):''; if(tl&&editable(v)) out.push(`<a class="btn" href="${esc(tl)}" target="_blank" rel="noopener">${svg('wa',16)}Message technician</a>`); return out.join(''); })()}
+      ${(()=>{ const out=[]; const sl=waLink(phoneOf(v),`Hello, this is Ziar Imaar Technical Services, Kohler UAE service partner. Your service visit ${tref(v)} for ${v.product||'your Kohler product'} is scheduled for ${dayLong(v.scheduled)}${v.assignedTo?' with our technician '+assigneeName(v):''}. Please reply here if the time needs to change.`); if(sl&&editable(v)) out.push(`<a class="btn" href="${esc(sl)}" target="_blank" rel="noopener">${svg('wa',16)}WhatsApp site</a>`);
+        const tl=v.assignedTo&&isOffice()?waLink(techPhone(v.assignedTo),`Ziar Imaar · Ticket ${tref(v)}\n${siteOf(v)}${v.address?' · '+v.address:''}\n${v.product||''} ${v.model||''}\nVisit: ${dayLong(v.scheduled)}\nIssue: ${v.issue||'—'}\nContact: ${v.contact||'—'}${escal(v)?'\nESCALATED '+escal(v).label:''}\nPlease update the visit in the ticket hub.`):''; if(tl&&editable(v)) out.push(`<a class="btn" href="${esc(tl)}" target="_blank" rel="noopener">${svg('wa',16)}Message technician</a>`); return out.join(''); })()}
       ${showCall?`<span class="callbox"><span class="num" id="phone-num" style="user-select:all">${esc(ph||'No phone number on this ticket')}</span>${ph?'<button class="btn" style="height:30px" data-act="copy">Copy</button>':''}</span>`:''}
     </div>
   </div>`;
@@ -1439,7 +1465,8 @@ function detailHtml(v){
   if(v.status==='cancelled') banner=`<div class="banner bad"><div><b>Cancelled</b>${lastClose.note?esc(lastClose.note):''}</div></div>`;
   const ro=editable(v)&&!canEditTicket(v)?`<div class="banner gold"><div><b>Read only</b>${access()==='viewer'?'Viewers can see tickets and download service reports, but not change them.':'Only the assigned technician or the office can update this visit.'}</div></div>`:'';
   const ins=v.instructions?`<div class="banner gold"><div><b>Service instructions</b>${esc(v.instructions)}</div></div>`:'';
-  return headCard(v)+escB+banner+ins+ro+(editable(v)&&canEditTicket(v)?stepsCard(v):'')+bodyHtml(v);
+  const lockB=reportFromAirtable()?`<div class="banner" style="margin-bottom:12px"><div><b>Read only · from Airtable</b>${esc(AT_LOCK_NOTE)}</div></div>`:'';
+  return headCard(v)+escB+banner+ins+lockB+(reportFromAirtable()?'':ro)+(editable(v)&&canEditTicket(v)?stepsCard(v):'')+bodyHtml(v);
 }
 function bodyHtml(v){
   const ev=evItems(v);
@@ -1449,6 +1476,9 @@ function bodyHtml(v){
     <div style="display:flex;flex-direction:column;gap:16px;min-width:0">
       <div class="card"><div class="card-h"><h3>Visit report</h3><span class="sub num">${v.arrived?'On site '+hm(v.arrived)+' – '+(hm(v.finished)||'…')+' · '+dur(onsite(v)):'Times not stamped'}</span></div>
         <div class="card-b prose">${hasWork?block('Findings',v.findings)+block('Action taken',v.work)+block('Required next action',v.nextAction):'<div class="sub">No visit report recorded yet.</div>'}</div></div>
+      ${(v.airtableFiles||[]).length?(()=>{ const fs=v.airtableFiles, items=fs.map(f=>{ const live=atUrls[f.att]; const url=f.asset?f.asset.url:(live&&(/^image\//.test(f.type)?(live.thumb||live.url):live.url)); const full=f.asset?f.asset.url:(live&&live.url); return {name:f.name,type:f.type,url:url||'',full:full||''}; });
+        const missing=items.filter(i=>!i.url).length;
+        return `<div class="card"><div class="card-h"><h3>Site photos &amp; documents</h3><span class="sub">${fs.length} from Airtable</span></div><div class="card-b">${`<div class="thumbs">${items.map(e=>{ const u=safeUrl(e.url), fu=safeUrl(e.full)||u, img=/^image\//.test(e.type); const inner=u&&img?`<img src="${esc(u)}" alt="${esc(e.name)}" loading="lazy">`:`<span>${esc(/^video\//.test(e.type)?'▶ ':'')}${esc(e.name)}</span>`; return fu?`<a class="thumb" href="${esc(fu)}" target="_blank" rel="noopener" title="${esc(e.name)}">${inner}${isPdf(e)?'<span class="tag">PDF</span>':''}</a>`:`<div class="thumb" title="${esc(e.name)}">${inner}</div>`; }).join('')}</div>`}${missing?`<div class="sub" style="margin-top:8px">${missing} file${missing>1?'s':''} will show after the next Airtable sync (an admin opening the hub).</div>`:''}</div></div>`; })():''}
       <div class="card"><div class="card-h"><h3>Evidence</h3><span class="sub">${esc(evidenceLabel(v))}</span></div><div class="card-b">${ev.length?thumbsHtml(ev,false):'<div class="sub">No photos or documents attached.</div>'}
         ${v.signature?`<div style="margin-top:14px"><div class="lbl" style="margin-bottom:6px">Customer sign-off · ${esc(v.signerName||'Unnamed')}</div>${sigHtml(v)}</div>`:''}</div></div>
       ${(v.parts||[]).length?`<div class="card"><div class="card-h"><h3>Parts used</h3><span class="sub">${partsCount(v)} total</span></div><div class="card-b">${v.parts.map(p=>`<div class="kv"><span>${esc(p.name)}</span><span class="num">× ${p.qty}</span></div>`).join('')}</div></div>`:''}
@@ -1520,12 +1550,12 @@ function reviewView(){
   if(!rev.id||!visits[rev.id]||visits[rev.id].status!=='review') rev.id=queue[0]?.id||null;
   const v=rev.id&&visits[rev.id];
   const qcol=`<section class="card queue" aria-label="Review queue"><div class="card-h"><h3>Ready for review</h3><span class="sub num">${queue.length}</span></div>
-    ${queue.length?queue.map(q=>{ const b=missingChecks(q).length; return `<button class="qitem" data-rsel="${esc(q.id)}" aria-current="${q.id===rev.id}"><div class="row" style="gap:6px"><b class="num" style="color:var(--navy)">#${esc(q.id)}</b><span class="sub" style="color:${b?'var(--bad)':'var(--ok)'};font-weight:600">${b?'⚠ '+b+' missing':'✓ Ready'}</span></div><div style="font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(siteOf(q))}</div><div class="sub">Sent ${esc(dmhm(lastAt(q)))}</div></button>`; }).join(''):'<div class="empty">Nothing waiting. Submitted visits appear here.</div>'}
-    <div class="card-b" style="border-top:1px solid var(--line)"><div class="lbl" style="margin-bottom:8px">With technician for recheck · ${rechecks.length}</div><div style="display:flex;gap:6px;flex-wrap:wrap">${rechecks.length?rechecks.map(r=>`<button class="chip recheck" data-open="${esc(r.id)}">#${esc(r.id)}</button>`).join(''):'<span class="sub">None</span>'}</div></div></section>`;
+    ${queue.length?queue.map(q=>{ const b=missingChecks(q).length; return `<button class="qitem" data-rsel="${esc(q.id)}" aria-current="${q.id===rev.id}"><div class="row" style="gap:6px"><b class="num" style="color:var(--navy)">${esc(tref(q))}</b><span class="sub" style="color:${b?'var(--bad)':'var(--ok)'};font-weight:600">${b?'⚠ '+b+' missing':'✓ Ready'}</span></div><div style="font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(siteOf(q))}</div><div class="sub">Sent ${esc(dmhm(lastAt(q)))}</div></button>`; }).join(''):'<div class="empty">Nothing waiting. Submitted visits appear here.</div>'}
+    <div class="card-b" style="border-top:1px solid var(--line)"><div class="lbl" style="margin-bottom:8px">With technician for recheck · ${rechecks.length}</div><div style="display:flex;gap:6px;flex-wrap:wrap">${rechecks.length?rechecks.map(r=>`<button class="chip recheck" data-open="${esc(r.id)}">${esc(tref(r))}</button>`).join(''):'<span class="sub">None</span>'}</div></div></section>`;
   if(!v) return `<div class="page"><div class="phead"><div><h1>Review queue</h1><div class="sub">Check submitted visits and close them out.</div></div></div><div class="rgrid">${qcol}<div class="card"><div class="empty" style="padding:64px 24px">${loaded?'The queue is clear. Submitted visits show up here for review.':'Loading…'}</div></div></div></div>`;
   if(!rev.edit||rev.edit.id!==v.id) rev.edit={id:v.id,inv:v.billingRef||'',int:v.internalNotes||''};
   const miss=missingChecks(Object.assign(clone(v),{billingRef:rev.edit.inv.trim()}));
-  const dec=`<aside class="card decide" aria-label="Decision"><div class="card-h"><h3>Decision</h3><span class="sub"><kbd>J</kbd> <kbd>K</kbd> to move</span></div><div class="card-b">
+  const dec=reportFromAirtable()?`<aside class="card decide" aria-label="Decision"><div class="card-h"><h3>Decision</h3></div><div class="card-b"><div class="sub">Review and complete this visit in <b>Airtable</b> (set Ticket - Status). The hub follows Airtable within 30 minutes.</div></div></aside>`:`<aside class="card decide" aria-label="Decision"><div class="card-h"><h3>Decision</h3><span class="sub"><kbd>J</kbd> <kbd>K</kbd> to move</span></div><div class="card-b">
     <label class="flabel" for="o-inv">Z Invoice No.<input id="o-inv" class="field" value="${esc(rev.edit.inv)}" placeholder="e.g. ZRA1853" autocomplete="off"></label>
     <label class="flabel" for="o-int">Internal notes<textarea id="o-int" class="field" rows="2" placeholder="Visible to the office only">${esc(rev.edit.int)}</textarea></label>
     <button class="btn" data-act="savedetails">Save details</button>
@@ -1560,7 +1590,7 @@ function partsView(){
     <div class="pgrid">
       <div class="card"><div class="card-h"><h3>Parts register</h3><span class="sub">Needed, used and received</span></div>
         <div class="card-b" style="border-bottom:1px solid var(--line)"><form id="pform" class="fgrid" style="grid-template-columns:repeat(2,minmax(0,1fr))">
-          <label>Ticket<select class="field" name="ticket" required><option value="">Choose a ticket</option>${tickets.map(v=>`<option value="${esc(v.id)}">#${esc(v.id)} · ${esc(siteOf(v))} · ${esc(dm(v.scheduled))}</option>`).join('')}</select></label>
+          <label>Ticket<select class="field" name="ticket" required><option value="">Choose a ticket</option>${tickets.map(v=>`<option value="${esc(v.id)}">${esc(tref(v))} · ${esc(siteOf(v))} · ${esc(dm(v.scheduled))}</option>`).join('')}</select></label>
           <label>Entry type<select class="field" name="type">${PTYPES.map(t=>`<option ${t===pui.type?'selected':''}>${t}</option>`).join('')}</select></label>
           <label>Part name<input class="field" name="name" required placeholder="e.g. Seat sensor" list="partlist2" autocomplete="off"></label>
           <label>SKU<input class="field" name="sku" placeholder="e.g. 1311753" autocomplete="off"></label>
@@ -1571,7 +1601,7 @@ function partsView(){
         </form></div>
         <div class="card-b" style="padding-bottom:8px"><div class="tabs" role="group" aria-label="Entry type">${PTYPES.map((t,i)=>`<button data-ptype="${t}" aria-pressed="${pui.type===t}">${t} <span class="c">${cnt[i]}</span></button>`).join('')}</div></div>
         <div>${entries.length?entries.map(p=>`<div class="entry"><div style="min-width:0"><div style="font-weight:600">${esc(p.name)} <span class="num" style="color:var(--goldInk)">× ${esc(p.qty)}</span></div><div class="sub">${[p.sku,p.note].filter(Boolean).map(esc).join(' · ')}${p.sku||p.note?' · ':''}${esc(dm(p.at))}${p.by?' · '+esc(nameOf(p.by)):''}</div></div>
-          <div style="display:flex;gap:14px;align-items:center"><button class="linkbtn" data-open="${esc(p.ticket)}">#${esc(p.ticket)}</button><button class="linkbtn danger" data-delpart="${esc(p.id)}">${pui.del===p.id?'Confirm delete':'Delete'}</button></div></div>`).join(''):`<div class="empty">No ${pui.type.toLowerCase()} recorded${pui.dmOnly?' for Dubai Mall':''} yet. Add the first entry above.</div>`}</div>
+          <div style="display:flex;gap:14px;align-items:center"><button class="linkbtn" data-open="${esc(p.ticket)}">${esc(tref(p.ticket))}</button><button class="linkbtn danger" data-delpart="${esc(p.id)}">${pui.del===p.id?'Confirm delete':'Delete'}</button></div></div>`).join(''):`<div class="empty">No ${pui.type.toLowerCase()} recorded${pui.dmOnly?' for Dubai Mall':''} yet. Add the first entry above.</div>`}</div>
       </div>
       <div class="card"><div class="card-h"><h3>Outstanding parts</h3><span class="sub">Needed minus received</span></div>
         ${rows.length?`<div class="tblwrap"><table class="tbl"><thead><tr><th>Part</th><th>Needed</th><th>Received</th><th>Used</th><th>Outstanding</th></tr></thead><tbody>${rows.map(b=>`<tr><td>${esc(b.name)}${b.sku?`<div class="mono">${esc(b.sku)}</div>`:''}</td><td class="num">${b.need}</td><td class="num">${b.rec}</td><td class="num">${b.used}</td><td class="num ${b.out?'var-neg':'var-ok'}">${b.out?b.out:'✓ 0'}</td></tr>`).join('')}</tbody></table></div>`:'<div class="empty">Outstanding parts appear here once you record parts needed and received.</div>'}
@@ -1623,7 +1653,7 @@ function reportsView(){
     </div>
     <div style="display:flex;flex-direction:column;gap:16px">
       <div class="card"><div class="card-h"><h3>Visits in ${mlab(rui.month)}</h3><span class="sub">${d.xs.length} tickets · ${st.map(([k,n])=>n+' '+STATUS[k].toLowerCase()).join(' · ')}</span></div>
-        ${d.xs.length?`<div class="tblwrap"><table class="tbl"><thead><tr><th>Ticket</th><th>Date</th><th>Site</th><th>Product</th><th>Status</th><th>Outcome</th><th>Z Invoice</th></tr></thead><tbody>${d.xs.map(v=>`<tr><td><button class="linkbtn" data-open="${esc(v.id)}">#${esc(v.id)}</button></td><td class="num" style="white-space:nowrap">${esc(dm(v.scheduled))}</td><td>${esc(siteOf(v))}</td><td>${esc(v.product||'—')}</td><td>${chip(v)}</td><td>${esc(v.outcome||'—')}</td><td class="num" style="white-space:nowrap">${esc(v.billingRef||'—')}</td></tr>`).join('')}</tbody></table></div>`:'<div class="empty">No visits this month.</div>'}</div>
+        ${d.xs.length?`<div class="tblwrap"><table class="tbl"><thead><tr><th>Ticket</th><th>Date</th><th>Site</th><th>Product</th><th>Status</th><th>Outcome</th><th>Z Invoice</th></tr></thead><tbody>${d.xs.map(v=>`<tr><td><button class="linkbtn" data-open="${esc(v.id)}">${esc(tref(v))}</button></td><td class="num" style="white-space:nowrap">${esc(dm(v.scheduled))}</td><td>${esc(siteOf(v))}</td><td>${esc(v.product||'—')}</td><td>${chip(v)}</td><td>${esc(v.outcome||'—')}</td><td class="num" style="white-space:nowrap">${esc(v.billingRef||'—')}</td></tr>`).join('')}</tbody></table></div>`:'<div class="empty">No visits this month.</div>'}</div>
       <div class="charts">
         <div class="card"><div class="card-h"><div><h3>Busiest sites</h3><div class="sub">${mlab(rui.month)}</div></div></div><div class="card-b">${d.xs.length?hbars(counts(d.xs,v=>(v.site||'').split('|')[0].trim(),6)):'<div class="sub">No visits.</div>'}</div></div>
         ${(()=>{ const dmx=d.xs.filter(isDM); const m={}; dmx.forEach(v=>areasOf(v).forEach(a=>{ const k=areaShort(a); m[k]=(m[k]||0)+1; })); const rows=Object.entries(m).map(([label,n])=>({label,n})).sort((a,b)=>b.n-a.n); return `<div class="card"><div class="card-h"><div><h3>Dubai Mall washroom areas</h3><div class="sub">Visits per area · ${mlab(rui.month)}</div></div></div><div class="card-b">${rows.length?hbars(rows):'<div class="sub">No Dubai Mall areas recorded this month.</div>'}</div></div>`; })()}
@@ -1647,7 +1677,7 @@ async function reportPdf(){
   const cw=(W-2*M)/6; k.forEach(([l,v],i)=>{ const x=M+i*cw; doc.setFont('helvetica','normal'); doc.setFontSize(7.5); doc.setTextColor(...muted); doc.text(l.toUpperCase(),x,y); doc.setFont('helvetica','bold'); doc.setFontSize(15); doc.setTextColor(...ink); doc.text(String(v),x,y+18); }); y+=44;
   thead();
   d.xs.forEach(v=>{ if(y>H-60){ doc.addPage(); header(); thead(); } doc.setFont('helvetica','normal'); doc.setFontSize(8.5); doc.setTextColor(...ink);
-    const row=['#'+v.id,dm(v.scheduled),siteOf(v),v.product||'—',STATUS[v.status],v.billingRef||'—'];
+    const row=[tref(v),dm(v.scheduled),siteOf(v),v.product||'—',STATUS[v.status],v.billingRef||'—'];
     row.forEach((t,i)=>{ const w=(cols[i+1]?cols[i+1][0]:W-M)-cols[i][0]-6; doc.text(doc.splitTextToSize(String(t),w)[0]||'',cols[i][0],y); }); y+=15; });
   const tp=techPerf(d.xs); if(tp.length){ if(y>H-120){ doc.addPage(); header(); } y+=14; doc.setFont('helvetica','bold'); doc.setFontSize(11); doc.setTextColor(...ink); doc.text('Technicians this month',M,y); y+=16; doc.setFont('helvetica','normal'); doc.setFontSize(9); tp.forEach(r=>{ doc.text(r.name+' — '+r.visits+' visits, '+r.done+' completed, avg on site '+dur(r.mins.length?r.mins.reduce((a,b)=>a+b,0)/r.mins.length:null),M,y); y+=14; }); }
   const pages=doc.getNumberOfPages(); for(let i=1;i<=pages;i++){ doc.setPage(i); doc.setFont('helvetica','normal'); doc.setFontSize(8); doc.setTextColor(...muted); doc.text('Generated '+dmhm(new Date().toISOString())+' · Ziar Imaar Technical Services L.L.C.',M,H-28); doc.text('Page '+i+' of '+pages,W-M,H-28,{align:'right'}); }
@@ -1726,7 +1756,7 @@ function finTodo(){
   const bd=openBills().filter(b=>(b.dueDate||'')<=addDays(todayDxb(),7)); if(bd.length) todo.push([bd.some(b=>billState(b).k==='overdue')?'bad':'warn',bd.length+' supplier bill'+(bd.length>1?'s':'')+' due within 7 days',money(bd.reduce((s,b)=>s+billTotal(b)-billPaid(b),0))+' to pay.',`<button class="btn" data-gofin="bills">See bills</button>`]);
   const ub=unbilled(); if(ub.length) todo.push(['warn',ub.length+' completed ticket'+(ub.length>1?'s':'')+' not invoiced',(pricingOn()?money(ub.reduce((a,v)=>a+ticketCharge(v).net,0))+' + VAT · ':'')+(autoNumOn()?'They get an invoice number automatically.':'Create the invoice with the next number in one click.'),`<button class="btn" data-gofin="invoices">Invoice now</button>`]);
   if(noamt.length) todo.push(['warn',noamt.length+' invoice'+(noamt.length>1?'s have':' has')+' no amount',rateRows()?'Their tickets have no emirate on the rate card.':'Fill in the rate card so amounts come in automatically.',`<button class="btn" data-gofin="${rateRows()?'invoices:noamt':'statements'}">Fix</button>`]);
-  if(noRate.length) todo.push(['warn',noRate.length+' ticket'+(noRate.length>1?'s':'')+' without an emirate','Set the emirate on '+noRate.slice(0,4).map(v=>'#'+v.id).join(', ')+' so it can be priced.',`<button class="btn" data-open="${esc(noRate[0].id)}">Open #${esc(noRate[0].id)}</button>`]);
+  if(noRate.length) todo.push(['warn',noRate.length+' ticket'+(noRate.length>1?'s':'')+' without an emirate','Set the emirate on '+noRate.slice(0,4).map(v=>tref(v)).join(', ')+' so it can be priced.',`<button class="btn" data-open="${esc(noRate[0].id)}">Open #${esc(noRate[0].id)}</button>`]);
   if(!Object.keys(bankAccounts).length) todo.push(['warn','Add your bank account','Then upload the bank statement (Excel or CSV) each month.',`<button class="btn" data-gofin="bank:newacct">Add account</button>`]);
   if(unsorted.length) todo.push(['warn',unsorted.length+' bank line'+(unsorted.length>1?'s':'')+' not sorted','Let the hub sort them by description and match payments to invoices.',`<button class="btn primary" data-act="autosort">Sort automatically</button>`]);
   if(unmatched.length) todo.push(['warn',unmatched.length+' payment'+(unmatched.length>1?'s':'')+' not linked to an invoice','Linking marks the invoice as paid.',`<button class="btn" data-act="autosort">Match automatically</button>`]);
@@ -1766,7 +1796,7 @@ function unbilledCard(){
   return `<div class="card"><div class="card-h"><div><h3>Completed work not invoiced</h3><div class="sub">${xs.length} ticket${xs.length>1?'s':''} without a Z invoice number${autoNumOn()?' · numbered automatically ('+esc(FS().autoNumber==='ticket'?'per ticket':FS().autoNumber==='weekly'?'weekly':FS().autoNumber==='half'?'1–15 and 16–end':'monthly')+')':''}</div></div>
    <button class="btn primary" data-act="billnow" ${pick.length?'':'disabled'}>Create invoice ${esc(nextInvoiceNo())} · ${pick.length} ticket${pick.length===1?'':'s'}${pricingOn()?' · '+esc(money(tot))+' + VAT':''}</button></div>
    <div class="tblwrap"><table class="tbl"><thead><tr><th style="width:36px"><input type="checkbox" data-uball ${pick.length===xs.length?'checked':''} aria-label="Select all"></th><th>Ticket</th><th>Date</th><th>Site</th><th>Emirate</th><th class="amt">Charge</th></tr></thead><tbody>
-   ${xs.map(v=>{ const c=ticketCharge(v); return `<tr><td><input type="checkbox" data-ub="${esc(v.id)}" ${sel.has(v.id)?'checked':''} aria-label="Include #${esc(v.id)}"></td><td><button class="linkbtn" data-open="${esc(v.id)}">#${esc(v.id)}</button></td><td class="num">${esc(ticketDate(v).split('-').reverse().join('/'))}</td><td>${esc(siteOf(v))}</td><td>${esc(v.region||'—')}</td><td class="amt">${c.missing?'<span class="chip sla-risk">No rate</span>':esc(money(c.net))}</td></tr>`; }).join('')}</tbody></table></div></div>`;
+   ${xs.map(v=>{ const c=ticketCharge(v); return `<tr><td><input type="checkbox" data-ub="${esc(v.id)}" ${sel.has(v.id)?'checked':''} aria-label="Include ${esc(tref(v))}"></td><td><button class="linkbtn" data-open="${esc(v.id)}">${esc(tref(v))}</button></td><td class="num">${esc(ticketDate(v).split('-').reverse().join('/'))}</td><td>${esc(siteOf(v))}</td><td>${esc(v.region||'—')}</td><td class="amt">${c.missing?'<span class="chip sla-risk">No rate</span>':esc(money(c.net))}</td></tr>`; }).join('')}</tbody></table></div></div>`;
 }
 function finInvoices(){
   const all=Object.values(invoices), q=fui.invQ.trim().toLowerCase();
@@ -1780,7 +1810,7 @@ function finInvoices(){
     ${f?invForm(f):''}${cnForm()}${unbilledCard()}
     ${['overdue','open'].includes(fui.invStatus)&&all.some(i=>['open','overdue'].includes(invoiceState(i).k))?`<form id="fbulkpaid" class="notice" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap"><span><b>Already paid?</b> Mark every unpaid invoice dated up to</span><input class="field" type="date" name="upto" required style="width:auto;height:34px" value="${esc(fui.bulkUpto||'')}"><span>as paid on</span><input class="field" type="date" name="on" style="width:auto;height:34px" value="${todayDxb()}"><button class="btn" type="submit">${fui.bulkConfirm?'Confirm — mark '+fui.bulkConfirm+' paid':'Mark paid'}</button></form>`:''}
     <div class="card"><div class="card-h"><h3>Invoice register</h3><span class="sub">${all.length} invoices · issued ${esc(money(totals.gross))} · received ${esc(money(totals.paid))}</span></div>
-    ${list.length?`<div class="tblwrap"><table class="tbl"><thead><tr><th>Invoice</th><th>Date</th><th>Customer</th><th>Tickets</th><th class="amt">Net</th><th class="amt">VAT</th><th class="amt">Gross</th><th class="amt">Paid</th><th>Status</th><th></th></tr></thead><tbody>${list.slice(0,fui.limit).map(i=>{ const st=invoiceState(i), tk=ticketsForInv(i); return `<tr${sel&&sel.id===i.id?' style="background:var(--goldSoft)"':''}><td><b>${esc(i.invoiceNo)}</b></td><td class="num" style="white-space:nowrap">${i.date?esc(dmy(i.date+'T08:00:00Z')):'—'}</td><td>${esc(i.customer||'—')}</td><td>${tk.length?tk.slice(0,4).map(v=>`<button class="linkbtn" data-open="${esc(v.id)}">#${esc(v.id)}</button>`).join(' ')+(tk.length>4?` <span class="sub">+${tk.length-4}</span>`:''):'<span class="sub">—</span>'}</td><td class="amt">${(+i.net)?esc(money(i.net)):'—'}</td><td class="amt">${(+i.vat)?esc(money(i.vat)):'—'}</td><td class="amt"><b>${invGross(i)?esc(money(invGross(i))):'—'}</b></td><td class="amt">${invPaid(i)?esc(money(invPaid(i))):'—'}</td><td><span class="chip ${st.cls}">${st.label}</span></td><td style="white-space:nowrap;text-align:right">${canPdf()&&invGross(i)?`<button class="linkbtn" data-invpdf="${esc(i.id)}" title="Download ${isCredit(i)?'tax credit note':'tax invoice'} PDF">PDF</button> `:''}${i.status==='draft'&&!isCredit(i)?`<button class="btn primary" style="height:30px" data-invissue="${esc(i.id)}">Issue</button> `:''}${['open','overdue'].includes(st.k)?`<button class="btn" style="height:30px" data-invpaid="${esc(i.id)}">Mark paid</button> `:''}${!isCredit(i)&&!['draft','void'].includes(i.status)&&invGross(i)?`<button class="linkbtn" data-invcn="${esc(i.id)}">Credit note</button> `:''}${invLocked(i)?`<span class="chip plain" title="${i.locked?'Locked by hand':'Locked because a payment is recorded'}">🔒 Locked</span>${i.locked&&!(+i.paidOther)&&!isCredit(i)?` <button class="linkbtn" data-invlock="${esc(i.id)}" data-on="0">Unlock</button>`:''} `:i.amountAuto?`<button class="linkbtn" data-invlock="${esc(i.id)}" data-on="1" title="Stop automatic changes to this invoice">Lock</button> `:''}<button class="linkbtn" data-invedit="${esc(i.id)}">Edit</button> <button class="linkbtn danger" data-invdel="${esc(i.id)}">${fui.del===i.id?'Confirm':'Delete'}</button></td></tr>`; }).join('')}</tbody></table></div>${list.length>fui.limit?`<div class="more"><button class="btn block" data-act="finmore">Show more</button></div>`:''}`:`<div class="empty">${all.length?'No invoices in this view.':pend.length?'No invoices yet. '+pend.length+' Z invoice numbers are on your tickets — use “Create from tickets”.':'No invoices yet. Add one with “New invoice”.'}</div>`}</div>`;
+    ${list.length?`<div class="tblwrap"><table class="tbl"><thead><tr><th>Invoice</th><th>Date</th><th>Customer</th><th>Tickets</th><th class="amt">Net</th><th class="amt">VAT</th><th class="amt">Gross</th><th class="amt">Paid</th><th>Status</th><th></th></tr></thead><tbody>${list.slice(0,fui.limit).map(i=>{ const st=invoiceState(i), tk=ticketsForInv(i); return `<tr${sel&&sel.id===i.id?' style="background:var(--goldSoft)"':''}><td><b>${esc(i.invoiceNo)}</b></td><td class="num" style="white-space:nowrap">${i.date?esc(dmy(i.date+'T08:00:00Z')):'—'}</td><td>${esc(i.customer||'—')}</td><td>${tk.length?tk.slice(0,4).map(v=>`<button class="linkbtn" data-open="${esc(v.id)}">${esc(tref(v))}</button>`).join(' ')+(tk.length>4?` <span class="sub">+${tk.length-4}</span>`:''):'<span class="sub">—</span>'}</td><td class="amt">${(+i.net)?esc(money(i.net)):'—'}</td><td class="amt">${(+i.vat)?esc(money(i.vat)):'—'}</td><td class="amt"><b>${invGross(i)?esc(money(invGross(i))):'—'}</b></td><td class="amt">${invPaid(i)?esc(money(invPaid(i))):'—'}</td><td><span class="chip ${st.cls}">${st.label}</span></td><td style="white-space:nowrap;text-align:right">${canPdf()&&invGross(i)?`<button class="linkbtn" data-invpdf="${esc(i.id)}" title="Download ${isCredit(i)?'tax credit note':'tax invoice'} PDF">PDF</button> `:''}${i.status==='draft'&&!isCredit(i)?`<button class="btn primary" style="height:30px" data-invissue="${esc(i.id)}">Issue</button> `:''}${['open','overdue'].includes(st.k)?`<button class="btn" style="height:30px" data-invpaid="${esc(i.id)}">Mark paid</button> `:''}${!isCredit(i)&&!['draft','void'].includes(i.status)&&invGross(i)?`<button class="linkbtn" data-invcn="${esc(i.id)}">Credit note</button> `:''}${invLocked(i)?`<span class="chip plain" title="${i.locked?'Locked by hand':'Locked because a payment is recorded'}">🔒 Locked</span>${i.locked&&!(+i.paidOther)&&!isCredit(i)?` <button class="linkbtn" data-invlock="${esc(i.id)}" data-on="0">Unlock</button>`:''} `:i.amountAuto?`<button class="linkbtn" data-invlock="${esc(i.id)}" data-on="1" title="Stop automatic changes to this invoice">Lock</button> `:''}<button class="linkbtn" data-invedit="${esc(i.id)}">Edit</button> <button class="linkbtn danger" data-invdel="${esc(i.id)}">${fui.del===i.id?'Confirm':'Delete'}</button></td></tr>`; }).join('')}</tbody></table></div>${list.length>fui.limit?`<div class="more"><button class="btn block" data-act="finmore">Show more</button></div>`:''}`:`<div class="empty">${all.length?'No invoices in this view.':pend.length?'No invoices yet. '+pend.length+' Z invoice numbers are on your tickets — use “Create from tickets”.':'No invoices yet. Add one with “New invoice”.'}</div>`}</div>`;
 }
 function invForm(f){
   const v=k=>esc(f[k]??'');
@@ -1794,7 +1824,7 @@ function invForm(f){
     <label>Status<select class="field" name="status">${[['issued','Issued'],['draft','Draft'],['void','Void']].map(([k,l])=>`<option value="${k}" ${(f.status||'issued')===k?'selected':''}>${l}</option>`).join('')}</select></label>
     <label>Paid outside bank import (AED)<input class="field" type="number" step="0.01" min="0" name="paidOther" value="${v('paidOther')}" placeholder="Optional"></label>
     <label class="span4">Notes<input class="field" name="notes" value="${v('notes')}" placeholder="Optional"></label>
-  </div>${f.id?`<div class="sub" style="margin-top:10px">Tickets on this invoice: ${ticketsForInv(f).map(t=>'#'+t.id).join(', ')||'none'} · Bank receipts matched: ${esc(money(invPaid(f)-(+f.paidOther||0)))}</div>`:''}
+  </div>${f.id?`<div class="sub" style="margin-top:10px">Tickets on this invoice: ${ticketsForInv(f).map(t=>tref(t)).join(', ')||'none'} · Bank receipts matched: ${esc(money(invPaid(f)-(+f.paidOther||0)))}</div>`:''}
   <div class="row" style="justify-content:flex-end;margin-top:14px"><button type="button" class="btn" data-act="closefin">Cancel</button><button class="btn primary" type="submit">Save invoice</button></div></div></form>`;
 }
 function finBank(){
@@ -1941,10 +1971,10 @@ function parseDate(v){ if(!v) return null; if(v instanceof Date&&!isNaN(v)) retu
 async function finExport(){
   if(!window.XLSX){ toast('The Excel writer did not load. Try again in a moment.'); return; }
   const wb=XLSX.utils.book_new(), add=(name,rows)=>XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet(rows),name);
-  add('Invoices',Object.values(invoices).map(i=>({'Invoice no.':i.invoiceNo,Customer:i.customer,Date:i.date,'Due date':i.dueDate,Net:+i.net||0,VAT:+i.vat||0,Gross:invGross(i),Paid:invPaid(i),Status:invoiceState(i).label,Tickets:ticketsForInv(i).map(t=>'#'+t.id).join(' '),Notes:i.notes||''})));
+  add('Invoices',Object.values(invoices).map(i=>({'Invoice no.':i.invoiceNo,Customer:i.customer,Date:i.date,'Due date':i.dueDate,Net:+i.net||0,VAT:+i.vat||0,Gross:invGross(i),Paid:invPaid(i),Status:invoiceState(i).label,Tickets:ticketsForInv(i).map(t=>tref(t)).join(' '),Notes:i.notes||''})));
   add('Bank transactions',Object.values(bankTx).sort((a,b)=>(a.date||'').localeCompare(b.date||'')).map(t=>({Account:(bankAccounts[t.account]||{}).name,Date:t.date,Description:t.desc,Reference:t.ref,'Money in':+t.amount>0?+t.amount:'','Money out':+t.amount<0?-t.amount:'',Category:t.category||'Uncategorised','Input VAT':+t.vat||'',Invoice:t.invoiceNo||''})));
   add('Bank accounts',Object.values(bankAccounts).map(a=>({Account:a.name,Bank:a.bank,'Last 4':a.last4,Opening:+a.opening||0,'Opening date':a.openingDate,'Book balance':acctBal(a),'Statement balance':a.stmtClosing,'Statement date':a.stmtDate})));
-  add('Ticket charges',Object.values(visits).filter(v=>v.billingRef).sort((a,b)=>a.id.localeCompare(b.id)).map(v=>{ const c=ticketCharge(v); return {Ticket:'#'+v.id,Invoice:v.billingRef,Emirate:v.region||'',Site:v.site||'','Job type':v.type||'','Charged as':(BILL_KINDS.find(b=>b[0]===c.kind)||[,''])[1],Service:c.service,'Part collection':c.collection,'Waiting minutes':+v.waitMins||0,Waiting:c.waiting,Net:c.net,VAT:r2(c.net*VAT_RATE),Total:r2(c.net*(1+VAT_RATE)),Note:c.missing?'No rate for this emirate':''}; }));
+  add('Ticket charges',Object.values(visits).filter(v=>v.billingRef).sort((a,b)=>a.id.localeCompare(b.id)).map(v=>{ const c=ticketCharge(v); return {Ticket:tref(v),Invoice:v.billingRef,Emirate:v.region||'',Site:v.site||'','Job type':v.type||'','Charged as':(BILL_KINDS.find(b=>b[0]===c.kind)||[,''])[1],Service:c.service,'Part collection':c.collection,'Waiting minutes':+v.waitMins||0,Waiting:c.waiting,Net:c.net,VAT:r2(c.net*VAT_RATE),Total:r2(c.net*(1+VAT_RATE)),Note:c.missing?'No rate for this emirate':''}; }));
   add('Statements',Object.values(statements).sort((a,b)=>a.month.localeCompare(b.month)).map(x=>({Month:x.month,Customer:x.customer,Opening:x.opening,Invoiced:r2(x.lines.filter(l=>l.type==='Invoice').reduce((a,l)=>a+l.debit,0)),Received:r2(x.lines.reduce((a,l)=>a+l.credit,0)),'Closing due':x.closing,Income:x.pl.income,Expenses:x.pl.expenses,Profit:x.pl.profit,'Output VAT':x.vat.output,'Input VAT':x.vat.input,Generated:x.generatedAt,Automatic:x.auto?'Yes':'No'})));
   add('Partner capital',Object.values(partnerTx).map(t=>({Date:t.date,Partner:t.partner,Type:t.type,Amount:+t.amount||0,Note:t.note||''})));
   const data=XLSX.write(wb,{bookType:'xlsx',type:'array'});
@@ -2412,7 +2442,7 @@ function assetsView(){
     <div class="card"><div class="card-h"><h3>Registered units</h3><span class="sub">Select a unit to see its service history</span></div>
       ${reg.length?`<div class="tblwrap"><table class="tbl"><thead><tr><th>Unit</th><th>Site · location</th><th>Serial</th><th>Installed</th><th>Warranty</th><th>Visits</th><th></th></tr></thead><tbody>${reg.map(a=>{ const w=warranty(a), h=assetHistory(a), open=aui.open===a.id;
         return `<tr data-aexp="${esc(a.id)}" style="cursor:pointer;${open?'background:var(--goldSoft)':''}"><td><b>${esc(a.product||'Unit')}</b><div class="mono">${esc(a.model)}</div></td><td>${esc(a.site)}${a.location?`<div class="sub">${esc(a.location)}</div>`:''}</td><td class="num">${esc(a.serial)||'—'}</td><td class="num">${a.installed?esc(dmy(a.installed+'T08:00:00Z')):'—'}</td><td>${w?`<span class="chip ${w.cls}">${esc(w.label)}</span><div class="sub num">${esc(dmy(a.warranty+'T08:00:00Z'))}</div>`:'<span class="sub">Not recorded</span>'}</td><td class="num">${h.length}${h[0]?`<div class="sub">Last ${esc(dm(h[0].scheduled))}</div>`:''}</td><td style="text-align:right;white-space:nowrap"><button class="linkbtn" data-aedit="${esc(a.id)}">Edit</button> <button class="linkbtn danger" data-adel="${esc(a.id)}">${aui.del===a.id?'Confirm':'Delete'}</button></td></tr>
-        ${open?`<tr><td colspan="7" style="background:var(--surface2)">${h.length?`<div class="lbl" style="margin-bottom:6px">Service history · ${h.length} visits</div>${h.slice(0,12).map(v=>`<div class="kv"><span><button class="linkbtn" data-open="${esc(v.id)}">#${esc(v.id)}</button> ${esc(dm(v.scheduled))} · ${esc(v.issue||v.type||'Visit')}</span><span>${chip(v)}${v.outcome?' <span class="sub">'+esc(v.outcome)+'</span>':''}</span></div>`).join('')}`:'<div class="sub">No tickets match this site and model yet.</div>'}${a.notes?`<div class="sub" style="margin-top:8px">Notes: ${esc(a.notes)}</div>`:''}</td></tr>`:''}`; }).join('')}</tbody></table></div>`:`<div class="empty">${q?'No registered units match this search.':'No units registered yet. Register one, or pick from the units found in tickets below.'}</div>`}
+        ${open?`<tr><td colspan="7" style="background:var(--surface2)">${h.length?`<div class="lbl" style="margin-bottom:6px">Service history · ${h.length} visits</div>${h.slice(0,12).map(v=>`<div class="kv"><span><button class="linkbtn" data-open="${esc(v.id)}">${esc(tref(v))}</button> ${esc(dm(v.scheduled))} · ${esc(v.issue||v.type||'Visit')}</span><span>${chip(v)}${v.outcome?' <span class="sub">'+esc(v.outcome)+'</span>':''}</span></div>`).join('')}`:'<div class="sub">No tickets match this site and model yet.</div>'}${a.notes?`<div class="sub" style="margin-top:8px">Notes: ${esc(a.notes)}</div>`:''}</td></tr>`:''}`; }).join('')}</tbody></table></div>`:`<div class="empty">${q?'No registered units match this search.':'No units registered yet. Register one, or pick from the units found in tickets below.'}</div>`}
     </div>
     <div class="card"><div class="card-h"><h3>Found in tickets, not registered</h3><span class="sub">${det.length} site and model combinations</span></div>
       ${det.length?`<div class="tblwrap"><table class="tbl"><thead><tr><th>Unit</th><th>Site</th><th>Visits</th><th>Last visit</th><th></th></tr></thead><tbody>${det.slice(0,40).map((d,i)=>`<tr><td><b>${esc(d.product||'Unit')}</b><div class="mono">${esc(d.model)}</div></td><td>${esc(d.site||'—')}</td><td class="num">${d.n}</td><td class="num">${esc(dm(d.last))||'—'}</td><td style="text-align:right"><button class="btn" style="height:32px" data-areg="${i}">Register</button></td></tr>`).join('')}</tbody></table></div>`:'<div class="empty">Every unit seen in tickets is registered.</div>'}
@@ -2458,7 +2488,7 @@ function adminView(){
     </tbody></table></div><div class="card-b sub">Role changes and the audit log are protected by the shared store: only admins can change roles or read the log. Who sees which page is applied by the app for each signed-in person.</div></div>`;
   }
   if(adminTab==='audit') body=`<div class="card"><div class="card-h"><h3>Audit log</h3><span class="sub">Latest ${audit.length} actions</span></div>
-    ${audit.length?`<div class="tblwrap"><table class="tbl"><thead><tr><th>When</th><th>Who</th><th>Role</th><th>Action</th><th>Ticket</th><th>Detail</th></tr></thead><tbody>${audit.map(e=>`<tr><td class="num" style="white-space:nowrap">${esc(dmy(e.at))} · ${esc(hm(e.at))}</td><td>${esc(nameOf(e.by)||'—')}</td><td>${ROLE_NAME[e.role]?`<span class="rolepill ${esc(e.role)}">${ROLE_NAME[e.role]}</span>`:'—'}</td><td>${esc(e.action)}</td><td>${e.ticket?`<button class="linkbtn" data-open="${esc(e.ticket)}">#${esc(e.ticket)}</button>`:'—'}</td><td>${esc(e.detail||'')}</td></tr>`).join('')}</tbody></table></div>`:'<div class="empty">No actions recorded yet. Ticket updates, reviews, parts, stock counts and role changes appear here.</div>'}</div>`;
+    ${audit.length?`<div class="tblwrap"><table class="tbl"><thead><tr><th>When</th><th>Who</th><th>Role</th><th>Action</th><th>Ticket</th><th>Detail</th></tr></thead><tbody>${audit.map(e=>`<tr><td class="num" style="white-space:nowrap">${esc(dmy(e.at))} · ${esc(hm(e.at))}</td><td>${esc(nameOf(e.by)||'—')}</td><td>${ROLE_NAME[e.role]?`<span class="rolepill ${esc(e.role)}">${ROLE_NAME[e.role]}</span>`:'—'}</td><td>${esc(e.action)}</td><td>${e.ticket?`<button class="linkbtn" data-open="${esc(e.ticket)}">${esc(tref(e.ticket))}</button>`:'—'}</td><td>${esc(e.detail||'')}</td></tr>`).join('')}</tbody></table></div>`:'<div class="empty">No actions recorded yet. Ticket updates, reviews, parts, stock counts and role changes appear here.</div>'}</div>`;
   return `<div class="page"><div class="phead"><div><h1>Administration</h1><div class="sub">Users, roles and the audit trail for the Kohler UAE ticket hub.</div></div>
     <div class="tabs" role="group" aria-label="Administration sections">${tabs.map(([k,l])=>`<button data-atab="${k}" aria-pressed="${adminTab===k}">${l}</button>`).join('')}</div></div>${body}</div>`;
 }
@@ -2487,7 +2517,7 @@ function modalHtml(){
   const defDt=new Date(Date.now()+28*3600000).toISOString().slice(0,10)+'T09:00';
   const sel=(name,opts,def)=>`<select class="field" name="${name}">${opts.map(o=>`<option value="${esc(o)}" ${(f[name]||def)===o?'selected':''}>${esc(o)}${name==='priority'?' ('+SLA_HOURS[o]+'h SLA)':''}</option>`).join('')}</select>`;
   return `<div class="overlay" data-act="closemodal"><div class="modal" role="dialog" aria-modal="true" aria-labelledby="nv-t">
-    <div class="card-h"><div><h3 id="nv-t" style="font-size:17px">New visit</h3><div class="sub">#${esc(nextId())} · ${esc(refFor(nextId()))}</div></div><button class="btn ghost" data-act="closemodal" aria-label="Close">${svg('x',18)}</button></div>
+    <div class="card-h"><div><h3 id="nv-t" style="font-size:17px">New visit</h3><div class="sub">${esc(refFor(nextId()))}</div></div><button class="btn ghost" data-act="closemodal" aria-label="Close">${svg('x',18)}</button></div>
     <form id="nvform" class="card-b"><div class="fgrid">
       <label class="span2">Site<input class="field" name="site" required value="${val('site')}" placeholder="e.g. Dubai Mall"></label>
       <label>Emirate${sel('region',['Dubai','Abu Dhabi','Sharjah','Ajman','Ras Al Khaimah','Fujairah','Umm Al Quwain','Al Ain'],'Dubai')}</label>
@@ -2517,12 +2547,12 @@ async function downloadReport(v){
     doc.setTextColor(255,255,255); doc.setFont('helvetica','bold'); doc.setFontSize(19); doc.text('ZIAR  IMAAR',M,40);
     doc.setFont('helvetica','normal'); doc.setFontSize(7.5); doc.setTextColor(201,211,234); doc.text('T E C H N I C A L   S E R V I C E S   L . L . C .',M,55);
     doc.setFontSize(10); doc.setTextColor(241,210,127); doc.text('Kohler UAE  ·  Service report',W-M,38,{align:'right'});
-    doc.setFontSize(9); doc.setTextColor(255,255,255); doc.text(v.ref||('#'+v.id),W-M,54,{align:'right'}); y=116; };
+    doc.setFontSize(9); doc.setTextColor(255,255,255); doc.text(v.ref||(tref(v)),W-M,54,{align:'right'}); y=116; };
   const need=h=>{ if(y+h>H-56){ doc.addPage(); header(); } };
   header();
   doc.setTextColor(...ink); doc.setFont('helvetica','bold'); doc.setFontSize(15);
   const title=doc.splitTextToSize(siteOf(v)+(v.issue?': '+v.issue:''),W-2*M); doc.text(title,M,y); y+=title.length*18+6;
-  const kv=[['Ticket','#'+v.id+(v.airtableId?' · from Airtable':'')],['Status',STATUS[v.status]],['Visit date',v.scheduled?dayLong(v.scheduled):'—'],['Emirate',v.region||'—'],['Product',v.product||'—'],['Model / SKU',v.model||'—'],['Serial no.',v.serial||'—'],['Category',v.category||'—'],['Visit type',v.type||'—'],['Technicians',v.technician||'—'],['Time in / out',v.arrived?hm(v.arrived)+' – '+(hm(v.finished)||'—'):'—'],['Outcome',v.outcome||'—'],['Return visit',v.returnVisit||'No'],['Z Invoice No.',v.billingRef||'—'],['Contact',v.contact||'—']];
+  const kv=[['Ticket',tref(v)+(v.airtableId?' · from Airtable':'')],['Status',STATUS[v.status]],['Visit date',v.scheduled?dayLong(v.scheduled):'—'],['Emirate',v.region||'—'],['Product',v.product||'—'],['Model / SKU',v.model||'—'],['Serial no.',v.serial||'—'],['Category',v.category||'—'],['Visit type',v.type||'—'],['Technicians',v.technician||'—'],['Time in / out',v.arrived?hm(v.arrived)+' – '+(hm(v.finished)||'—'):'—'],['Outcome',v.outcome||'—'],['Return visit',v.returnVisit||'No'],['Z Invoice No.',v.billingRef||'—'],['Contact',v.contact||'—']];
   doc.setDrawColor(227,231,239); const colW=(W-2*M)/2;
   for(let i=0;i<kv.length;i+=2){ need(34); for(let c=0;c<2;c++){ const k=kv[i+c]; if(!k) continue; const x=M+c*colW;
       doc.setFont('helvetica','normal'); doc.setFontSize(7.5); doc.setTextColor(...muted); doc.text(k[0].toUpperCase(),x,y);
@@ -2620,7 +2650,7 @@ document.addEventListener('change',async e=>{
   const t=e.target;
   if(t.form&&t.form.id==='nvform'&&t.name) nform[t.name]=t.value;
   if(t.dataset&&t.dataset.tphone){ const id=t.dataset.tphone, r=roles[id]; if(!r||!db) return; try{ await db.doc('roles/'+id).set(Object.assign({},r,{phone:t.value.trim()})); logAction('Updated technician phone',{detail:nameOf(id)}); toast('Phone saved for '+(nameOf(id)||'technician')); }catch(e){ toast('Only admins can change this.'); } return; }
-  if(t.dataset&&t.dataset.assign){ const ov=visits[t.dataset.assign]; if(!ov) return; const n=clone(ov); n.assignedTo=t.value; await save(n,t.value?'Assigned to '+(nameOf(t.value)||'technician'):'Unassigned technician'); toast(t.value?'#'+n.id+' assigned to '+(nameOf(t.value)||'technician'):'#'+n.id+' is unassigned'); return; }
+  if(t.dataset&&t.dataset.assign){ const ov=visits[t.dataset.assign]; if(!ov) return; const n=clone(ov); n.assignedTo=t.value; await save(n,t.value?'Assigned to '+(nameOf(t.value)||'technician'):'Unassigned technician'); toast(t.value?tref(n)+' assigned to '+(nameOf(t.value)||'technician'):tref(n)+' is unassigned'); return; }
   if(t.dataset&&t.dataset.setrole){ await setRole(t.dataset.setrole,t.value); return; }
   if(t.dataset&&t.dataset.txcat){ const x=bankTx[t.dataset.txcat]; if(!x) return; const {id,...rest}=x; await saveDoc('bankTx',id,Object.assign(rest,{category:t.value}),bankTx); return; }
   if(t.dataset&&t.dataset.txvat!==undefined&&t.dataset.txvat){ const x=bankTx[t.dataset.txvat]; if(!x) return; const {id,...rest}=x; await saveDoc('bankTx',id,Object.assign(rest,{vat:r2(t.value)}),bankTx); return; }
@@ -2664,7 +2694,7 @@ document.addEventListener('submit',async e=>{
     if(isNaN(sched)){ toast('Pick a valid date and time for the visit.'); return; }
     const v={id:vid,ref:refFor(vid),site:g('site'),region:g('region')||'Dubai',contact:g('contact'),address:g('address'),product:g('product'),model:g('model'),category:g('category'),type:g('type')||'Inspection',priority:g('priority')||'Normal',issue:g('issue'),scheduled:sched.toISOString(),rate:Number(g('rate'))||0,assignedTo:g('assignedTo'),
       status:'new',prepared:false,contactedAt:null,arrived:null,finished:null,findings:'',work:'',nextAction:'',outcome:'',returnVisit:'No',technician:'',internalNotes:'',parts:[],evidence:[],billingRef:'',history:[hist('new')]};
-    modal=null; nform={}; list.status='open'; route='tickets'; sel=vid; mode='view'; await save(v); logAction('Created visit',{ticket:vid}); go('tickets',vid); toast('Visit #'+vid+' created'); return; }
+    modal=null; nform={}; list.status='open'; route='tickets'; sel=vid; mode='view'; await save(v); logAction('Created visit',{ticket:vid}); go('tickets',vid); toast('Visit '+tref(vid)+' created'); return; }
   if(id==='otpsetup'||id==='otplogin'){
     if(signBusy) return; const code=(document.getElementById('otp').value||'').replace(/\D/g,''); const f=fails(); if(f.until>Date.now()){ render(); return; }
     if(code.length!==6){ signErr='Enter the 6 digits shown in the app.'; render(); return; }
@@ -2803,6 +2833,7 @@ document.addEventListener('click',async e=>{
   if(ds.act==='bkcancel'){ bk=null; render(); return; }
   if(ds.act==='bkgo'){ if(!bk) return; if(!bk.confirm){ bk.confirm=true; render(); return; } await backupRestore(); return; }
   if(ds.act==='closemodal'){ if(b.classList.contains('overlay')&&e.target!==b) return; modal=null; render(); return; }
+  if(ds.act==='newvisit'&&reportFromAirtable()){ toast('New tickets are created in Airtable. They appear in the hub within 30 minutes.'); return; }
   if(ds.act==='newvisit'&&!isOffice()) return;
   if(ds.act==='newvisit'){ modal='new'; render(); const i=document.querySelector('#nvform input'); if(i) i.focus(); return; }
   if(ds.route&&!can(ds.route)) return;
@@ -2888,7 +2919,7 @@ document.addEventListener('click',async e=>{
     if(ds.decide==='completed'&&missingChecks(n).length&&rev.confirm!==ov.id){ rev.confirm=ov.id; render(); return; }
     n.status=ds.decide; n.history=[...(n.history||[]),hist(ds.decide,note)];
     rev.note=''; rev.confirm=null; rev.edit=null; rev.id=null; await save(n,{completed:'Marked completed',recheck:'Returned for recheck',cancelled:'Cancelled visit'}[ds.decide]);
-    toast({completed:'#'+n.id+' marked completed',recheck:'#'+n.id+' returned to the technician',cancelled:'#'+n.id+' cancelled'}[ds.decide]); return;
+    toast({completed:tref(n)+' marked completed',recheck:tref(n)+' returned to the technician',cancelled:tref(n)+' cancelled'}[ds.decide]); return;
   }
   const act=ds.act;
   if(act==='back'){ sel=null; mode='view'; draft=null; try{ history.replaceState(null,'','#tickets'); }catch(_){} render(); return; }
@@ -2918,7 +2949,7 @@ document.addEventListener('click',async e=>{
     const prompt=`You help an office reviewer at a UAE technical-services company write a short note to a field technician about a Kohler service visit.
 Write 1 to 3 plain sentences addressed to the technician, saying exactly what to fix or add before the visit can be closed. If nothing needs fixing, write a one-sentence approval note. No greeting, no sign-off, no markdown.
 
-Ticket #${ov.id} at ${siteOf(ov)} (${ov.product||'product not recorded'}, ${ov.model||'model not recorded'}). Issue: ${ov.issue||'not recorded'}.
+Ticket ${tref(ov)} at ${siteOf(ov)} (${ov.product||'product not recorded'}, ${ov.model||'model not recorded'}). Issue: ${ov.issue||'not recorded'}.
 Time in ${hm(ov.arrived)||'not stamped'}, time out ${hm(ov.finished)||'not stamped'}. Outcome: ${ov.outcome||'not set'}. Technicians: ${ov.technician||'not named'}.
 Findings: ${ov.findings||'none'}. Action taken: ${ov.work||'none'}. Next action: ${ov.nextAction||'none'}. Return visit: ${ov.returnVisit||'No'}.
 Parts: ${(ov.parts||[]).map(p=>p.name+' x'+p.qty).join(', ')||'none'}. Evidence files: ${evItems(ov).length}. Customer signature: ${ov.signature?'yes':'no'}.
@@ -2987,7 +3018,7 @@ function goDemo(){ if(loaded) return; demo=true; loaded=true; visits=demoData();
     const next={}; snap.docs.forEach(d=>{ const x=d.data(); if(x){ const v=Object.assign({id:d.id,history:[],parts:[],evidence:[]},x); if(!STATUS[v.status]) v.status=(v.history[v.history.length-1]||{}).status||'new'; next[d.id]=v; } });
     syncQ.filter(q=>q.col==='visits'&&q.data).forEach(q=>{ next[q.id]=Object.assign({id:q.id,history:[],parts:[],evidence:[]},q.data); });
     if(loaded){ const now=Date.now(), ch=Object.keys(next).filter(id=>(!visits[id]||(visits[id].updatedAt||'')!==(next[id].updatedAt||''))&&!(mineRecent['visits/'+id]&&now-mineRecent['visits/'+id]<6000));
-      if(ch.length){ if(sel&&ch.includes(sel)&&mode!=='view') toast('Ticket #'+sel+' was just changed by someone else — check before you save, or your save will replace their change.'); else toast(ch.length===1?(visits[ch[0]]?'Ticket #'+ch[0]+' was just updated by your team':'New ticket #'+ch[0]+' added by your team'):ch.length+' tickets were just updated by your team'); } }
+      if(ch.length){ if(sel&&ch.includes(sel)&&mode!=='view') toast('Ticket '+tref(sel)+' was just changed by someone else — check before you save, or your save will replace their change.'); else toast(ch.length===1?(visits[ch[0]]?'Ticket '+tref(ch[0])+' was just updated by your team':'New ticket '+tref(ch[0])+' added by your team'):ch.length+' tickets were just updated by your team'); } }
     lastSync=Date.now(); visits=next; loaded=true; safeRender(); resolveNames(); scheduleFinAuto();
   },()=>{ clearTimeout(fallback); db=null; goDemo(); toast('Could not reach the shared store, showing demo data.'); });
 })();
