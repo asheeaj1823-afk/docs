@@ -532,7 +532,7 @@ const initials=n=>(n||'?').split(/\s+/).filter(Boolean).map(w=>w[0]).slice(0,2).
 const isDM=v=>(v&&v.site||'').trim().toLowerCase()==='dubai mall';
 const siteOf=v=>v.site||'Site not recorded';
 const chip=v=>`<span class="chip ${v.status}">${STATUS[v.status]}</span>`;
-function toast(msg){ const t=document.getElementById('toast'); t.textContent=msg; t.hidden=false; clearTimeout(toast.t); toast.t=setTimeout(()=>t.hidden=true,2800); }
+function toast(msg){ if(window.__lockAt&&Date.now()-window.__lockAt<1500&&!/books are closed/i.test(msg)) return; const t=document.getElementById('toast'); t.textContent=msg; t.hidden=false; clearTimeout(toast.t); toast.t=setTimeout(()=>t.hidden=true,2800); }
 
 /* ---------- authenticator codes (TOTP, RFC 6238: SHA-1, 6 digits, 30 s) ---------- */
 const B32='ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
@@ -661,8 +661,8 @@ async function save(v,action){
 }
 function hist(status,note){ const h={status,at:new Date().toISOString()}; if(note) h.note=note; if(me.id) h.by=me.id; return h; }
 const newId=p=>p+Date.now().toString(36)+Math.random().toString(36).slice(2,6);
-async function saveDoc(col,id,data,store){ store[id]=Object.assign({id},data); setTimeout(render,0); if(db){ try{ await db.doc(col+'/'+id).set(data); }catch(e){ toast('Could not save. Check your access and connection.'); } } }
-async function delDoc(col,id,store){ delete store[id]; setTimeout(render,0); if(db){ try{ await db.doc(col+'/'+id).delete(); }catch(e){ toast('Could not delete. Check your access and connection.'); } } }
+async function saveDoc(col,id,data,store){ if(typeof lockBlocks==='function'&&lockBlocks(col,id,data,store)){ lockToast(); window.__lockAt=Date.now(); setTimeout(render,0); return false; } store[id]=Object.assign({id},data); setTimeout(render,0); if(db){ try{ await db.doc(col+'/'+id).set(data); }catch(e){ toast('Could not save. Check your access and connection.'); } } }
+async function delDoc(col,id,store){ if(typeof lockBlocks==='function'&&lockBlocks(col,id,null,store)){ lockToast(); window.__lockAt=Date.now(); return false; } delete store[id]; setTimeout(render,0); if(db){ try{ await db.doc(col+'/'+id).delete(); }catch(e){ toast('Could not delete. Check your access and connection.'); } } }
 async function resolveNames(){
   if(!userApi||!userApi.profiles) return;
   const ids=new Set(); Object.values(visits).forEach(v=>(v.history||[]).forEach(h=>h.by&&ids.add(h.by))); Object.values(parts).forEach(p=>p.by&&ids.add(p.by)); Object.keys(roles).forEach(i=>ids.add(i)); Object.keys(requests).forEach(i=>ids.add(i)); audit.forEach(e=>e.by&&ids.add(e.by)); Object.values(roles).forEach(r=>r.by&&ids.add(r.by));
@@ -693,7 +693,7 @@ const NAV=[
  ['02','Service Management','tickets',[['Service Tickets',{r:'tickets',f:'all'}],['Technician Workspace',{r:'tickets',f:'mine'}],['Office Review',{r:'review'}],['Service Reports',{r:'reports'}],['Service Analytics',{r:'dashboard',h:'Charts'}]]],
  ['03','Customers & Assets','assets',[['Customer Directory',{r:'customers',t:'dir'}],['Customer Sites',{r:'customers',t:'sites'}],['Asset Register',{r:'assets'}],['Asset 360°',{r:'assets'}],['Document Center',{r:'documents'}]]],
  ['04','Inventory','parts',[['Parts Catalog',{r:'parts',h:'Inventory'}],['Stock Movements',{r:'parts',h:'Part entries'}],['Warehouse',{r:'parts',h:'Monthly stock check'}],['Procurement',{r:'planned',t:'Procurement'}]]],
- ['05','Finance & Accounting','finance',[['Finance Dashboard',{r:'finance',t:'overview'}],['Billing Workbench',{r:'finance',t:'invoices'}],['Invoices',{r:'finance',t:'invoices'}],['Customer Receipts',{r:'finance',t:'bank'}],['General Ledger',{r:'finance',t:'gl'}],['Banking & Reconciliation',{r:'finance',t:'recon'}],['Partner Accounts',{r:'finance',t:'partners'}],['VAT & Tax',{r:'finance',t:'vat'}],['Financial Reports',{r:'finance',t:'statements'}]]],
+ ['05','Finance & Accounting','finance',[['Finance Dashboard',{r:'finance',t:'overview'}],['Billing Workbench',{r:'finance',t:'invoices'}],['Invoices',{r:'finance',t:'invoices'}],['Supplier Bills',{r:'finance',t:'bills'}],['Customer Receipts',{r:'finance',t:'bank'}],['General Ledger',{r:'finance',t:'gl'}],['Banking & Reconciliation',{r:'finance',t:'recon'}],['Partner Accounts',{r:'finance',t:'partners'}],['VAT & Tax',{r:'finance',t:'vat'}],['Financial Reports',{r:'finance',t:'statements'}]]],
  ['06','Company Management','company',[['Legal Entities',{r:'company',t:'entities'}],['Company Profiles',{r:'company',t:'profile'}],['Bank Accounts',{r:'finance',t:'bank'}],['Accounting Settings',{r:'finance',t:'statements',h:'Automation'}]]],
  ['07','Reports & Analytics','reports',[['Operations Reports',{r:'reports'}],['Financial Reports',{r:'finance',t:'gl'}],['Customer Reports',{r:'customers',t:'dir'}],['Data Quality Reports',{r:'quality'}]]],
  ['08','Administration','admin',[['Users & Roles',{r:'admin',t:'users'}],['Permissions',{r:'admin',t:'roles'}],['Audit Logs',{r:'admin',t:'audit'}],['Integrations',{r:'integrations'}],['Backup & Recovery',{r:'backup'}],['System Settings',{r:'company',t:'system'}]]]
@@ -1444,7 +1444,7 @@ async function reportPdf(){
 const VAT_RATE=0.05;
 const r2=n=>Math.round((Number(n)||0)*100)/100;
 const money=n=>(Number(n)<0?'−':'')+'AED '+Math.abs(r2(n)).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});
-const BANK_CATS=['Uncategorised','Customer receipt','Kohler service income','Other income','Parts & materials','Subcontractor','Salaries & wages','Transport & fuel','Rent & utilities','Telephone & internet','Government, visa & licence','Bank charges','VAT payment','Partner capital in','Partner drawings','Loan in / out','Transfer between accounts','Other expense'];
+const BANK_CATS=['Uncategorised','Customer receipt','Kohler service income','Other income','Parts & materials','Subcontractor','Salaries & wages','Transport & fuel','Rent & utilities','Telephone & internet','Government, visa & licence','Bank charges','VAT payment','Partner capital in','Partner drawings','Loan in / out','Transfer between accounts','Supplier bill payment','Other expense'];
 const INCOME_CATS=['Customer receipt','Kohler service income','Other income'];
 const NON_PL=['Partner capital in','Partner drawings','Loan in / out','Transfer between accounts','VAT payment'];
 const invKey=x=>String(x||'').replace(/[\s\-_]/g,'').toUpperCase();
@@ -1470,9 +1470,9 @@ function finTotals(){
   return {cash:r2(cash),recv:r2(recv),rev:r2(rev),exp:r2(exp),profit:r2(rev-exp),vatQ:q,vat:r2(outV-inV),uncat:tx.filter(t=>!t.category||t.category==='Uncategorised').length};
 }
 function financeView(){
-  const T=finTotals(), main=[['overview','Home'],['invoices','Invoices'],['bank','Bank'],['gl','Accounts'],['statements','Statements & rates']], extra=[['recon','Reconciliation'],['vat','VAT'],['partners','Partner capital'],['controls','Checks']];
+  const T=finTotals(), main=[['overview','Home'],['invoices','Invoices'],['bills','Bills'],['bank','Bank'],['gl','Accounts'],['statements','Statements & rates']], extra=[['recon','Reconciliation'],['vat','VAT'],['partners','Partner capital'],['controls','Checks']];
   const showMore=fui.more||extra.some(([k])=>k===fui.tab), tabs=showMore?[...main,...extra]:main;
-  const body={overview:finOverview,invoices:finInvoices,bank:finBank,gl:finGL,statements:finStatements,recon:finRecon,vat:finVat,partners:finPartners,controls:finControls}[fui.tab]();
+  const body={overview:finOverview,invoices:finInvoices,bills:finBills,bank:finBank,gl:finGL,statements:finStatements,recon:finRecon,vat:finVat,partners:finPartners,controls:finControls}[fui.tab]();
   return `<div class="page"><div class="phead"><div><h1>Finance</h1><div class="sub">Ziar Imaar Technical Services · invoices, bank, VAT and partner capital · admins only</div></div>
     <div class="actions">${downloadsApi?'<button class="btn" data-act="finxls">'+svg('doc',16)+'Export finance (.xlsx)</button>':''}</div></div>
     <nav class="ftabs" aria-label="Finance sections">${tabs.map(([k,l])=>`<button data-ftab="${k}" aria-pressed="${fui.tab===k}">${l}</button>`).join('')}<button data-act="finmoretabs" style="margin-left:auto" aria-expanded="${showMore}">${showMore?'Fewer ▴':'More ▾'}</button></nav>${body}</div>`;
@@ -1488,13 +1488,14 @@ function guessTx(t){
     if(inv){ out.invoiceNo=inv.invoiceNo; out.category='Customer receipt'; return out; }
     if(/easy renovation|kohler/.test(d)){ out.category='Customer receipt'; return out; }
   }
+  if(+t.amount<0){ const ob=openBills().filter(b=>Math.abs(billTotal(b)-billPaid(b)+(+t.amount))<0.01); if(ob.length===1){ out.billNo=ob[0].billNo; out.category='Supplier bill payment'; return out; } }
   const learnt=Object.values(bankTx).filter(x=>x.category&&x.category!=='Uncategorised'&&x.id!==t.id&&descKey(x.desc)===descKey(t.desc)&&Math.sign(+x.amount)===Math.sign(+t.amount)).sort((a,b)=>(b.at||'').localeCompare(a.at||''))[0];
   if(learnt&&descKey(t.desc)){ out.category=learnt.category; return out; }
   const r=CAT_RULES.find(([re])=>re.test(d)); if(r&&(+t.amount<0||r[1]==='Transfer between accounts')) out.category=r[1];
   return out;
 }
 async function autoSort(){
-  let n=0, m=0; for(const t of Object.values(bankTx)){ const need=!t.category||t.category==='Uncategorised'||(+t.amount>0&&['Customer receipt','Kohler service income'].includes(t.category)&&!t.invoiceNo); if(!need) continue;
+  let n=0, m=0; for(const t of Object.values(bankTx)){ const need=!t.category||t.category==='Uncategorised'||(+t.amount<0&&t.category==='Supplier bill payment'&&!t.billNo)||(+t.amount>0&&['Customer receipt','Kohler service income'].includes(t.category)&&!t.invoiceNo); if(!need) continue;
     const g=guessTx(t); if(t.category&&t.category!=='Uncategorised') delete g.category; if(!Object.keys(g).length) continue; const d=Object.assign({},t,g,{autoSorted:true}); delete d.id; await saveDoc('bankTx',t.id,d,bankTx); bankTx[t.id]=Object.assign({id:t.id},d); n++; if(g.invoiceNo) m++; }
   logAction('Sorted bank lines automatically',{detail:n+' lines, '+m+' matched to invoices'}); toast(n?n+' line'+(n>1?'s':'')+' sorted'+(m?', '+m+' matched to invoices':''):'Nothing more could be sorted automatically — pick a category on the remaining lines once and the hub will learn it.');
 }
@@ -1508,6 +1509,7 @@ function finTodo(){
   if(lastSt) todo.push(['ok','Statement ready · '+stLabel(lastSt.month),'Easy to send: balance due '+money(lastSt.closing),canPdf()?`<button class="btn" data-stmtpdf="${lastSt.month}">${svg('doc',14)}Download PDF</button>`:'']);
   if(over.length) todo.push(['bad',over.length+' invoice'+(over.length>1?'s':'')+' overdue',money(over.reduce((a,[i])=>a+invGross(i)-invPaid(i),0))+' to collect. When money arrives, press Mark paid.',`<button class="btn" data-gofin="invoices:overdue">See them</button>`]);
   const drafts=Object.values(invoices).filter(i=>i.status==='draft'&&!isCredit(i)); if(drafts.length) todo.push(['warn',drafts.length+' draft invoice'+(drafts.length>1?'s':'')+' to check',drafts.slice(0,4).map(i=>i.invoiceNo+' '+money(invGross(i))).join(' · ')+'. Press Issue when it is right.',`<button class="btn primary" data-gofin="invoices:draft">Check &amp; issue</button>`]);
+  const bd=openBills().filter(b=>(b.dueDate||'')<=addDays(todayDxb(),7)); if(bd.length) todo.push([bd.some(b=>billState(b).k==='overdue')?'bad':'warn',bd.length+' supplier bill'+(bd.length>1?'s':'')+' due within 7 days',money(bd.reduce((s,b)=>s+billTotal(b)-billPaid(b),0))+' to pay.',`<button class="btn" data-gofin="bills">See bills</button>`]);
   const ub=unbilled(); if(ub.length) todo.push(['warn',ub.length+' completed ticket'+(ub.length>1?'s':'')+' not invoiced',(pricingOn()?money(ub.reduce((a,v)=>a+ticketCharge(v).net,0))+' + VAT · ':'')+(autoNumOn()?'They get an invoice number automatically.':'Create the invoice with the next number in one click.'),`<button class="btn" data-gofin="invoices">Invoice now</button>`]);
   if(noamt.length) todo.push(['warn',noamt.length+' invoice'+(noamt.length>1?'s have':' has')+' no amount',rateRows()?'Their tickets have no emirate on the rate card.':'Fill in the rate card so amounts come in automatically.',`<button class="btn" data-gofin="${rateRows()?'invoices:noamt':'statements'}">Fix</button>`]);
   if(noRate.length) todo.push(['warn',noRate.length+' ticket'+(noRate.length>1?'s':'')+' without an emirate','Set the emirate on '+noRate.slice(0,4).map(v=>'#'+v.id).join(', ')+' so it can be priced.',`<button class="btn" data-open="${esc(noRate[0].id)}">Open #${esc(noRate[0].id)}</button>`]);
@@ -1614,7 +1616,7 @@ function finBank(){
     ${tx.length?`<div class="tblwrap"><table class="tbl" style="min-width:980px"><thead><tr><th>Date</th><th>Description</th><th class="amt">Amount</th><th>Category</th><th class="amt">Input VAT</th><th>Invoice (receipts)</th><th></th></tr></thead><tbody>${tx.slice(0,fui.limit).map(t=>`<tr><td class="num" style="white-space:nowrap">${esc(dm(t.date+'T08:00:00Z'))}<div class="sub">${esc((bankAccounts[t.account]||{}).name||'')}</div></td><td style="max-width:340px">${esc(t.desc)}${t.ref?`<div class="mono">${esc(t.ref)}</div>`:''}</td><td class="amt ${+t.amount>0?'in':'out'}"><b>${esc(money(t.amount))}</b></td>
       <td><select class="field" data-txcat="${esc(t.id)}">${BANK_CATS.map(c=>`<option ${((t.category||'Uncategorised')===c)?'selected':''}>${esc(c)}</option>`).join('')}</select></td>
       <td class="amt">${+t.amount<0?`<input class="field" data-txvat="${esc(t.id)}" type="number" step="0.01" min="0" value="${esc(t.vat||'')}" placeholder="0.00" style="width:90px;text-align:right">`:'<span class="sub">—</span>'}</td>
-      <td>${+t.amount>0?`<select class="field" data-txinv="${esc(t.id)}"><option value="">—</option>${[...(t.invoiceNo&&!openInv.some(i=>invKey(i.invoiceNo)===invKey(t.invoiceNo))?[{invoiceNo:t.invoiceNo}]:[]),...openInv].map(i=>`<option value="${esc(i.invoiceNo)}" ${invKey(i.invoiceNo)===invKey(t.invoiceNo)?'selected':''}>${esc(i.invoiceNo)}${i.net?' · '+esc(money(invGross(i))):''}</option>`).join('')}</select>`:'<span class="sub">—</span>'}</td>
+      <td>${+t.amount>0?`<select class="field" data-txinv="${esc(t.id)}"><option value="">—</option>${[...(t.invoiceNo&&!openInv.some(i=>invKey(i.invoiceNo)===invKey(t.invoiceNo))?[{invoiceNo:t.invoiceNo}]:[]),...openInv].map(i=>`<option value="${esc(i.invoiceNo)}" ${invKey(i.invoiceNo)===invKey(t.invoiceNo)?'selected':''}>${esc(i.invoiceNo)}${i.net?' · '+esc(money(invGross(i))):''}</option>`).join('')}</select>`:(()=>{ const ob=openBills(); return ob.length||t.billNo?`<select class="field" data-txbill="${esc(t.id)}"><option value="">— bill —</option>${[...(t.billNo&&!ob.some(b=>invKey(b.billNo)===invKey(t.billNo))?[{billNo:t.billNo,supplier:''}]:[]),...ob].map(b=>`<option value="${esc(b.billNo)}" ${t.billNo&&invKey(b.billNo)===invKey(t.billNo)?'selected':''}>${esc(b.billNo)}${b.supplier?' · '+esc(b.supplier):''}${b.net?' · '+esc(money(billTotal(b))):''}</option>`).join('')}</select>`:'<span class="sub">—</span>'; })()}</td>
       <td style="text-align:right"><button class="linkbtn danger" data-txdel="${esc(t.id)}">${fui.del===t.id?'Confirm':'Delete'}</button></td></tr>`).join('')}</tbody></table></div>${tx.length>fui.limit?`<div class="more"><button class="btn block" data-act="finmore">Show more (${tx.length-fui.limit} left)</button></div>`:''}`:'<div class="empty">No transactions here yet. Import a statement or add one by hand.</div>'}
   </div>`;
 }
@@ -1928,7 +1930,7 @@ const COA=[['1100','Accounts receivable','asset'],['1200','Input VAT recoverable
  ['4000','Service income','income'],['4100','Other income','income'],
  ['5000','Parts & materials','expense'],['5100','Subcontractors','expense'],['5200','Salaries & wages','expense'],['5300','Transport & fuel','expense'],['5400','Rent & utilities','expense'],['5500','Telephone & internet','expense'],['5600','Government, visa & licence','expense'],['5700','Bank charges','expense'],['5900','Other expenses','expense'],
  ['9999','Suspense (bank lines not sorted)','asset']];
-const CAT_ACCT={'Customer receipt':'1100','Other income':'4100','Parts & materials':'5000','Subcontractor':'5100','Salaries & wages':'5200','Transport & fuel':'5300','Rent & utilities':'5400','Telephone & internet':'5500','Government, visa & licence':'5600','Bank charges':'5700','VAT payment':'2100','Partner capital in':'3000','Partner drawings':'3100','Loan in / out':'2500','Transfer between accounts':'1900','Other expense':'5900','Uncategorised':'9999'};
+const CAT_ACCT={'Customer receipt':'1100','Other income':'4100','Parts & materials':'5000','Subcontractor':'5100','Salaries & wages':'5200','Transport & fuel':'5300','Rent & utilities':'5400','Telephone & internet':'5500','Government, visa & licence':'5600','Bank charges':'5700','VAT payment':'2100','Partner capital in':'3000','Partner drawings':'3100','Loan in / out':'2500','Transfer between accounts':'1900','Supplier bill payment':'2300','Other expense':'5900','Uncategorised':'9999'};
 let journals={}, gui={tab:'pl',from:'',to:'',acct:'',jf:null};
 function chart(){ const banks=Object.values(bankAccounts).sort((a,b)=>(a.name||'').localeCompare(b.name||'')).map((a,i)=>['10'+String(10+i),'Bank · '+(a.name||'Account'),'asset',a.id]); return [...banks,...COA]; }
 const acctName=c=>{ const a=chart().find(x=>x[0]===c); return a?a[1]:c; };
@@ -1944,6 +1946,7 @@ function glEntries(){
     const amt=Math.abs(+t.amount), vat=Math.min(amt,Math.abs(+t.vat||0)), memo=t.desc||'';
     if(+t.amount>0) add(t.date,'Bank',t.ref||'',memo,[{a:b,d:amt},{a:acc,c:amt}],{tx:t.id});
     else add(t.date,'Bank',t.ref||'',memo,acctType(acc)==='expense'&&vat?[{a:acc,d:amt-vat},{a:'1200',d:vat},{a:b,c:amt}]:[{a:acc,d:amt},{a:b,c:amt}],{tx:t.id}); });
+  Object.values(bills).forEach(b=>{ if(!b.date) return; const ex=CAT_ACCT[b.category]||'5900'; add(b.date,'Bill',b.billNo||'',b.supplier||'',[{a:ex,d:+b.net||0},{a:'1200',d:+b.vat||0},{a:'2300',c:billTotal(b)}]); if(+b.paidOther>0) add(b.paidDate||b.date,'Bill payment',b.billNo||'','Paid by partner',[{a:'2300',d:+b.paidOther},{a:'3000',c:+b.paidOther}]); });
   Object.values(journals).forEach(j=>add(j.date,'Journal',j.no||'',j.memo||'',(j.lines||[]).map(l=>({a:l.a,d:+l.d||0,c:+l.c||0})),{jr:j.id}));
   return E.sort((a,b)=>a.date.localeCompare(b.date));
 }
@@ -1951,15 +1954,15 @@ function glBalances(E,from,to){ const m={}; E.forEach(e=>{ if((from&&e.date<from
 const natural=(c,x)=>{ const t=acctType(c); return r2(['asset','expense'].includes(t)?x.d-x.c:x.c-x.d); };
 function glPeriod(){ const y=todayDxb().slice(0,4); return {from:gui.from||y+'-01-01',to:gui.to||todayDxb()}; }
 function finGL(){
-  const E=glEntries(), {from,to}=glPeriod(), tabs=[['pl','Profit & Loss'],['bs','Balance Sheet'],['tb','Trial Balance'],['ledger','General Ledger'],['vat201','VAT return'],['journals','Journals']];
+  const E=glEntries(), {from,to}=glPeriod(), tabs=[['pl','Profit & Loss'],['bs','Balance Sheet'],['tb','Trial Balance'],['ledger','General Ledger'],['ar','Receivables & cash'],['vat201','VAT return'],['journals','Journals']];
   const sel=`<div class="row" style="flex-wrap:wrap;gap:10px;align-items:end"><div class="tabs">${tabs.map(([k,l])=>`<button data-gtab="${k}" aria-pressed="${gui.tab===k}">${l}</button>`).join('')}</div>
     <div class="actions" style="align-items:end">${gui.tab==='bs'?'':`<label class="sub" style="display:grid;gap:2px">From<input type="date" id="g-from" class="field" style="height:36px;width:auto" value="${from}"></label>`}<label class="sub" style="display:grid;gap:2px">${gui.tab==='bs'?'As at':'To'}<input type="date" id="g-to" class="field" style="height:36px;width:auto" value="${to}"></label>
     <select id="g-quick" class="field" style="height:36px;width:auto;margin:0;padding:0 30px 0 10px"><option value="">Quick period…</option><option value="tm">This month</option><option value="lm">Last month</option><option value="tq">This quarter</option><option value="lq">Last quarter</option><option value="ty">This year</option></select>
     ${downloadsApi?'<button class="btn" data-act="glxls">'+svg('doc',16)+'Excel</button>':''}</div></div>`;
   const susp=natural('9999',glBalances(E,'',to)['9999']||{d:0,c:0});
   const warn=Math.abs(susp)>0.004?`<div class="notice">${esc(money(Math.abs(susp)))} of bank lines are not sorted yet, so they sit in Suspense. <button class="linkbtn" data-act="autosort">Sort automatically</button> or pick a category under Bank.</div>`:'';
-  const body={pl:glPL,bs:glBS,tb:glTB,ledger:glLedger,vat201:glVAT,journals:glJournals}[gui.tab](E,from,to);
-  return sel+warn+body+`<div class="sub" style="font-size:12px">Every invoice, credit note, payment and bank line posts its own double entry automatically. These are management accounts — have your accountant review them before filing.</div>`;
+  const body={pl:glPL,bs:glBS,tb:glTB,ledger:glLedger,ar:glAR,vat201:glVAT,journals:glJournals}[gui.tab](E,from,to);
+  return sel+warn+body+lockBar()+`<div class="sub" style="font-size:12px">Every invoice, credit note, payment and bank line posts its own double entry automatically. These are management accounts — have your accountant review them before filing.</div>`;
 }
 const amtCell=n=>`<td class="amt">${Math.abs(n)<0.005?'—':esc((n<0?'(':'')+Math.abs(r2(n)).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})+(n<0?')':''))}</td>`;
 const acctLink=(c,label)=>`<button class="linkbtn" data-gacct="${esc(c)}">${esc(label||(c+' · '+acctName(c)))}</button>`;
@@ -2000,7 +2003,7 @@ function glLedger(E,from,to){
 function glVAT(E,from,to){
   const c=CO(), inv=Object.values(invoices).filter(i=>!['draft','void'].includes(i.status)&&i.date>=from&&i.date<=to);
   const net=r2(inv.reduce((s,i)=>s+(+i.net||0),0)), out=r2(inv.reduce((s,i)=>s+(+i.vat||0),0));
-  const tx=Object.values(bankTx).filter(t=>t.date>=from&&t.date<=to&&+t.amount<0&&+t.vat>0), inV=r2(tx.reduce((s,t)=>s+(+t.vat||0),0)), inNet=r2(tx.reduce((s,t)=>s-(+t.amount)-(+t.vat||0),0));
+  const tx=Object.values(bankTx).filter(t=>t.date>=from&&t.date<=to&&+t.amount<0&&+t.vat>0), bl=Object.values(bills).filter(b=>b.date>=from&&b.date<=to&&+b.vat>0), inV=r2(tx.reduce((s,t)=>s+(+t.vat||0),0)+bl.reduce((s,b)=>s+(+b.vat||0),0)), inNet=r2(tx.reduce((s,t)=>s-(+t.amount)-(+t.vat||0),0)+bl.reduce((s,b)=>s+(+b.net||0),0));
   const em=c.placeOfSupply||'Dubai', EM=['Abu Dhabi','Dubai','Sharjah','Ajman','Umm Al Quwain','Ras Al Khaimah','Fujairah'];
   const r=(box,label,a,v,b)=>`<tr${b?' style="font-weight:700"':''}><td class="num">${box}</td><td>${label}</td>${a===null?'<td></td>':amtCell(a)}${v===null?'<td></td>':amtCell(v)}</tr>`;
   return `<div class="card"><div class="card-h"><h3>VAT return (FTA VAT201 layout)</h3><span class="sub">${esc(fdx(from))} – ${esc(fdx(to))} · TRN ${esc(c.trn||'not set')} · draft for your accountant</span></div><div class="tblwrap"><table class="tbl"><thead><tr><th>Box</th><th>Description</th><th class="amt">Amount (AED)</th><th class="amt">VAT (AED)</th></tr></thead><tbody>
@@ -2012,7 +2015,7 @@ function glVAT(E,from,to){
     ${r('9','Standard rated expenses',inNet,inV)}${r('10','Supplies subject to reverse charge',0,0)}${r('11','Totals',inNet,inV,true)}
     <tr><td colspan="4" style="font-weight:700;padding-top:12px">Net VAT due</td></tr>
     ${r('12','Total value of due tax for the period',null,out)}${r('13','Total value of recoverable tax for the period',null,inV)}${r('14',(out-inV>=0?'Payable':'Repayable')+' tax for the period',null,r2(out-inV),true)}
-   </tbody></table></div><div class="card-b sub" style="font-size:12px">Sales use the invoice date and the place of supply in your company profile (${esc(em)}). Input VAT comes from the VAT you entered on bank payments. Credit notes reduce sales. Check reverse-charge and zero-rated items with your accountant before filing on EmaraTax.</div></div>`;
+   </tbody></table></div><div class="card-b sub" style="font-size:12px">Sales use the invoice date and the place of supply in your company profile (${esc(em)}). Input VAT comes from supplier bills and the VAT entered on bank payments. Credit notes reduce sales. Check reverse-charge and zero-rated items with your accountant before filing on EmaraTax.</div></div>`;
 }
 function glJournals(E,from,to){
   const f=gui.jf, ch=chart(), js=Object.values(journals).sort((a,b)=>(b.date||'').localeCompare(a.date||''));
@@ -2039,6 +2042,60 @@ async function glExport(){
 function quickPeriod(k){ const t=todayDxb(), y=+t.slice(0,4), m=+t.slice(5,7), p=n=>String(n).padStart(2,'0'), q=Math.ceil(m/3);
   if(k==='tm') return [t.slice(0,7)+'-01',t]; if(k==='lm'){ const ly=m===1?y-1:y, lm=m===1?12:m-1, mm=ly+'-'+p(lm); return [mm+'-01',monthEnd(mm)]; }
   if(k==='tq') return [y+'-'+p(q*3-2)+'-01',t]; if(k==='lq'){ const lq=q===1?4:q-1, ly=q===1?y-1:y; return [ly+'-'+p(lq*3-2)+'-01',monthEnd(ly+'-'+p(lq*3))]; } return [y+'-01-01',t]; }
+
+/* ---------- supplier bills (accounts payable), closing the books, receivables ageing and cash forecast ---------- */
+let bills={}, bui={st:'unpaid',form:null,q:''};
+const EXP_CATS=['Parts & materials','Subcontractor','Salaries & wages','Transport & fuel','Rent & utilities','Telephone & internet','Government, visa & licence','Bank charges','Other expense'];
+const billTotal=b=>r2((+b.net||0)+(+b.vat||0));
+const billPaid=b=>r2(Object.values(bankTx).filter(t=>t.billNo&&invKey(t.billNo)===invKey(b.billNo)&&+t.amount<0).reduce((a,t)=>a-(+t.amount),0)+(+b.paidOther||0));
+function billState(b){ const tot=billTotal(b), p=billPaid(b); if(p>=tot-0.005) return {k:'paid',label:'Paid',cls:'completed'}; if(b.dueDate&&b.dueDate<todayDxb()) return {k:'overdue',label:p>0?'Part paid · overdue':'Overdue',cls:'sla-late'}; return {k:'unpaid',label:p>0?'Part paid':'Unpaid',cls:'review'}; }
+const openBills=()=>Object.values(bills).filter(b=>billState(b).k!=='paid');
+function finBills(){
+  const all=Object.values(bills), q=bui.q.trim().toLowerCase(), f=bui.form;
+  const list=all.filter(b=>bui.st==='all'||billState(b).k===bui.st||(bui.st==='unpaid'&&billState(b).k==='overdue')).filter(b=>!q||[b.supplier,b.billNo,b.category,b.notes].join(' ').toLowerCase().includes(q)).sort((a,b)=>(b.date||'').localeCompare(a.date||''));
+  const owe=r2(openBills().reduce((s,b)=>s+billTotal(b)-billPaid(b),0)), over=r2(openBills().filter(b=>billState(b).k==='overdue').reduce((s,b)=>s+billTotal(b)-billPaid(b),0));
+  const form=f?`<form id="fbillform" class="card"><div class="card-h"><h3>${f.id?'Edit bill '+esc(f.billNo||''):'New supplier bill'}</h3><button type="button" class="btn ghost" data-act="billclose" aria-label="Close">${svg('x',18)}</button></div><div class="card-b"><div class="fgrid">
+    <label>Supplier<input class="field" name="supplier" required value="${esc(f.supplier||'')}" list="sup-list"><datalist id="sup-list">${[...new Set(all.map(b=>b.supplier).filter(Boolean))].map(x=>`<option value="${esc(x)}">`).join('')}</datalist></label>
+    <label>Supplier invoice no.<input class="field" name="billNo" required value="${esc(f.billNo||'')}"></label>
+    <label>Date<input class="field" name="date" type="date" required value="${esc(f.date||todayDxb())}"></label>
+    <label>Due date<input class="field" name="dueDate" type="date" value="${esc(f.dueDate||'')}"></label>
+    <label>Expense type<select class="field" name="category">${EXP_CATS.map(c=>`<option${c===(f.category||'Parts & materials')?' selected':''}>${c}</option>`).join('')}</select></label>
+    <label>Amount before VAT (AED)<input class="field" id="bill-net" name="net" type="number" step="0.01" min="0" required value="${f.net??''}"></label>
+    <label>VAT (AED) <span class="sub">— 0 if the supplier is not VAT registered</span><input class="field" id="bill-vat" name="vat" type="number" step="0.01" min="0" value="${f.vat??''}"></label>
+    <label>Supplier TRN<input class="field" name="supTrn" value="${esc(f.supTrn||'')}" placeholder="needed to reclaim VAT"></label>
+    <label class="span2">Notes<input class="field" name="notes" value="${esc(f.notes||'')}"></label></div>
+    <div class="formfoot" style="padding:12px 0 0"><button class="btn primary" type="submit">Save bill</button></div></div></form>`:'';
+  return `<div class="row" style="flex-wrap:wrap"><div class="tabs">${[['unpaid','Unpaid'],['overdue','Overdue'],['paid','Paid'],['all','All']].map(([k,l])=>`<button data-bst="${k}" aria-pressed="${bui.st===k}">${l}</button>`).join('')}</div>
+    <div class="actions"><label class="search">${svg('search',16)}<input id="b-q" class="field" type="search" placeholder="Search supplier or bill no." value="${esc(bui.q)}"></label><button class="btn primary" data-act="billnew">+ New bill</button></div></div>
+    ${form}<div class="card"><div class="card-h"><h3>Supplier bills</h3><span class="sub">You owe ${esc(money(owe))}${over?' · '+esc(money(over))+' overdue':''}</span></div>
+    ${list.length?`<div class="tblwrap"><table class="tbl"><thead><tr><th>Date</th><th>Supplier</th><th>Bill no.</th><th>Type</th><th class="amt">Net</th><th class="amt">VAT</th><th class="amt">Total</th><th class="amt">Paid</th><th>Status</th><th></th></tr></thead><tbody>${list.map(b=>{ const st=billState(b); return `<tr><td class="num">${esc(fdx(b.date))}</td><td><b>${esc(b.supplier)}</b></td><td>${esc(b.billNo)}</td><td class="sub">${esc(b.category)}</td><td class="amt">${esc(money(b.net))}</td><td class="amt">${+b.vat?esc(money(b.vat)):'—'}</td><td class="amt"><b>${esc(money(billTotal(b)))}</b></td><td class="amt">${billPaid(b)?esc(money(billPaid(b))):'—'}</td><td><span class="chip ${st.cls}">${st.label}</span>${b.dueDate&&st.k!=='paid'?`<div class="sub" style="font-size:11px">due ${esc(fdx(b.dueDate))}</div>`:''}</td>
+      <td style="white-space:nowrap;text-align:right">${st.k!=='paid'?`<button class="linkbtn" data-billpp="${esc(b.id)}" title="Paid in cash or by a partner, not from a bank account in the hub">Paid by partner</button> `:''}<button class="linkbtn" data-billedit="${esc(b.id)}">Edit</button> <button class="linkbtn danger" data-billdel="${esc(b.id)}">${bui.del===b.id?'Confirm':'Delete'}</button></td></tr>`; }).join('')}</tbody></table></div>`:`<div class="empty">${all.length?'No bills in this view.':'No supplier bills yet. Add each supplier invoice here: the expense and its VAT go into the accounts and the VAT return, and bank payments are matched to it.'}</div>`}
+    <div class="card-b sub" style="font-size:12px">Bank payments are matched to a bill automatically when the amount equals what is left on it, or pick the bill on the bank line.</div></div>`;
+}
+/* closing the books */
+const LOCK_COLS=['invoices','bankTx','bills','journals'];
+function lockedThrough(){ try{ return (finSettings.main&&finSettings.main.lockedThrough)||''; }catch(e){ return ''; } }
+function lockBlocks(col,id,data,store){
+  const L=lockedThrough(); if(!L||!LOCK_COLS.includes(col)) return false; const old=store&&store[id], od=old&&old.date||'', nd=data&&data.date||'';
+  if(old&&od&&od<=L){ if(col==='invoices'&&data){ return ['net','vat','date','customer','status','type','refInvoice','lines','invoiceNo'].some(k=>canon(old[k]??null)!==canon(data[k]??null)); } return true; }
+  return !!(data&&nd&&nd<=L);
+}
+let lockToastAt=0; const lockToast=()=>{ if(Date.now()-lockToastAt>4000){ lockToastAt=Date.now(); toast('The books are closed through '+fdx(lockedThrough())+'. Reopen them under Finance → Accounts to change this.'); } };
+/* receivables ageing + cash forecast */
+function glAR(){
+  const t=todayDxb(), inv=Object.values(invoices).filter(i=>!isCredit(i)&&!['draft','void'].includes(i.status)&&invGross(i)-invPaid(i)>0.005);
+  const rows=inv.map(i=>{ const due=i.dueDate||addDays(i.date||t,FS().terms); const late=Math.floor((new Date(t+'T00:00:00Z')-new Date(due+'T00:00:00Z'))/864e5); return {i,due,late,o:r2(invGross(i)-invPaid(i))}; }).sort((a,b)=>b.late-a.late);
+  const bk=[['Not yet due',r=>r.late<=0],['1–30 days',r=>r.late>0&&r.late<=30],['31–60 days',r=>r.late>30&&r.late<=60],['61–90 days',r=>r.late>60&&r.late<=90],['Over 90 days',r=>r.late>90]].map(([l,f])=>[l,r2(rows.filter(f).reduce((s,r)=>s+r.o,0))]);
+  const cash=r2(Object.values(bankAccounts).reduce((s,a)=>s+acctBal(a),0)), win=d=>addDays(t,d);
+  const inBy=d=>r2(rows.filter(r=>r.due<=win(d)).reduce((s,r)=>s+r.o,0)), outBy=d=>r2(openBills().filter(b=>(b.dueDate||b.date||t)<=win(d)).reduce((s,b)=>s+billTotal(b)-billPaid(b),0));
+  const fc=[30,60,90].map(d=>({d,inn:inBy(d),out:outBy(d),end:r2(cash+inBy(d)-outBy(d))}));
+  return `<div class="kpis" style="grid-template-columns:repeat(auto-fit,minmax(150px,1fr))">${bk.map(([l,v],k)=>`<div class="card kpi${k>=3&&v?' alert':''}"><span class="lbl">${l}</span><b style="font-size:20px">${esc(money(v))}</b></div>`).join('')}</div>
+   <div class="card"><div class="card-h"><h3>Cash forecast</h3><span class="sub">Bank today ${esc(money(cash))} · expects unpaid invoices to be paid on their due date (overdue ones in the first 30 days) and bills paid when due</span></div><div class="tblwrap"><table class="tbl"><thead><tr><th>By</th><th class="amt">Money expected in</th><th class="amt">Bills to pay</th><th class="amt">Expected bank balance</th></tr></thead><tbody>
+    ${fc.map(x=>`<tr><td><b>Next ${x.d} days</b> <span class="sub">(${esc(fdx(win(x.d)))})</span></td><td class="amt in">${esc(money(x.inn))}</td><td class="amt">${esc(money(x.out))}</td><td class="amt"><b style="color:${x.end<0?'var(--bad)':'inherit'}">${esc(money(x.end))}</b></td></tr>`).join('')}</tbody></table></div></div>
+   <div class="card"><div class="card-h"><h3>Unpaid invoices by age</h3><span class="sub">${rows.length} invoice${rows.length===1?'':'s'} · ${esc(money(r2(rows.reduce((s,r)=>s+r.o,0))))}</span></div>${rows.length?`<div class="tblwrap"><table class="tbl"><thead><tr><th>Invoice</th><th>Customer</th><th>Date</th><th>Due</th><th class="amt">Days late</th><th class="amt">Outstanding</th></tr></thead><tbody>${rows.map(r=>`<tr><td><button class="linkbtn" data-gsinv="${esc(r.i.invoiceNo)}">${esc(r.i.invoiceNo)}</button></td><td>${esc(r.i.customer||'')}</td><td class="num">${esc(fdx(r.i.date))}</td><td class="num">${esc(fdx(r.due))}</td><td class="amt">${r.late>0?'<b style="color:var(--bad)">'+r.late+'</b>':'—'}</td><td class="amt">${esc(money(r.o))}</td></tr>`).join('')}</tbody></table></div>`:'<div class="empty">Nothing outstanding.</div>'}</div>`;
+}
+function lockBar(){ const L=lockedThrough(); return `<div class="card"><div class="card-b" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap"><span>${L?`🔒 Books closed through <b>${esc(fdx(L))}</b> — invoices, bills, bank lines and journals up to that date can no longer change.`:'Books are open. When a month is checked and its VAT filed, close it so nothing in it changes by mistake.'}</span>
+   <span style="margin-left:auto;display:flex;gap:8px;align-items:center;flex-wrap:wrap"><input type="date" id="lock-date" class="field" style="height:36px;width:auto;margin:0" value="${esc(L||(()=>{ const m=todayDxb().slice(0,7), y=+m.slice(0,4), mo=+m.slice(5,7); return monthEnd(mo===1?(y-1)+'-12':y+'-'+String(mo-1).padStart(2,'0')); })())}"><button class="btn" data-act="lockset">${gui.lockConfirm?'Confirm close':'Close books to this date'}</button>${L?'<button class="linkbtn" data-act="lockopen">Reopen</button>':''}</span></div></div>`; }
 
 /* ---------- inventory ---------- */
 const invState=i=>(+i.stock||0)<=0?{cls:'cancelled',label:'Out of stock'}:(+i.stock||0)<=(+i.min||0)?{cls:'review',label:'Low stock'}:{cls:'completed',label:'In stock'};
@@ -2278,6 +2335,9 @@ document.addEventListener('input',e=>{
   const t=e.target, d=draft;
   if(d){ if(t.id==='f-findings') d.findings=t.value; if(t.id==='f-work') d.work=t.value; if(t.id==='f-next') d.nextAction=t.value; if(t.id==='f-tech') d.technician=t.value; if(t.id==='f-serial') d.serial=t.value; if(t.id==='f-fb') d.customerFeedback=t.value; if(t.id==='f-signer') d.signerName=t.value; if(t.id==='f-bill') d.billingRef=t.value.trim(); if(t.id==='f-billkind'){ d.billKind=t.value; render(); } if(t.id==='f-wait') d.waitMins=Math.max(0,parseInt(t.value,10)||0); }
   if(t.dataset&&t.dataset.jl!==undefined&&gui.jf){ const l=gui.jf.lines[+t.dataset.jl]; if(l){ l[t.dataset.jk]=t.value; if(t.dataset.jk!=='a'){ const d=r2(gui.jf.lines.reduce((s,x)=>s+(+x.d||0),0)), c=r2(gui.jf.lines.reduce((s,x)=>s+(+x.c||0),0)), el=document.getElementById('j-diff'); if(el) el.textContent=Math.abs(d-c)<0.005?'✓ balanced':'Difference '+money(d-c); } } return; }
+  if(t.id==='b-q'){ bui.q=t.value; clearTimeout(bui.t); bui.t=setTimeout(()=>{ const pos=t.selectionStart; render(); const el=document.getElementById('b-q'); if(el){ el.focus(); try{ el.setSelectionRange(pos,pos); }catch(e){} } },250); return; }
+  if(t.id==='bill-net'){ const v=document.getElementById('bill-vat'); if(v&&!v.dataset.touched) v.value=t.value?r2(+t.value*VAT_RATE):''; return; }
+  if(t.id==='bill-vat'){ t.dataset.touched='1'; return; }
   if(t.id==='gs-q'){ gs.q=t.value; gs.i=0; gsRender(); return; }
   if(t.id==='c-q'){ cui.q=t.value; clearTimeout(cui.t); cui.t=setTimeout(()=>{ const pos=t.selectionStart; render(); const el=document.getElementById('c-q'); if(el){ el.focus(); try{ el.setSelectionRange(pos,pos); }catch(e){} } },250); return; }
   if(t.id==='d-q'){ dui.q=t.value; clearTimeout(dui.t); dui.t=setTimeout(()=>{ const pos=t.selectionStart; render(); const el=document.getElementById('d-q'); if(el){ el.focus(); try{ el.setSelectionRange(pos,pos); }catch(e){} } },250); return; }
@@ -2301,6 +2361,7 @@ document.addEventListener('change',async e=>{
   if(t.dataset&&t.dataset.setrole){ await setRole(t.dataset.setrole,t.value); return; }
   if(t.dataset&&t.dataset.txcat){ const x=bankTx[t.dataset.txcat]; if(!x) return; const {id,...rest}=x; await saveDoc('bankTx',id,Object.assign(rest,{category:t.value}),bankTx); return; }
   if(t.dataset&&t.dataset.txvat!==undefined&&t.dataset.txvat){ const x=bankTx[t.dataset.txvat]; if(!x) return; const {id,...rest}=x; await saveDoc('bankTx',id,Object.assign(rest,{vat:r2(t.value)}),bankTx); return; }
+  if(t.dataset&&t.dataset.txbill){ const x=bankTx[t.dataset.txbill]; if(!x) return; const {id,...rest}=x; await saveDoc('bankTx',id,Object.assign(rest,{billNo:t.value,category:t.value?'Supplier bill payment':(rest.category==='Supplier bill payment'?'Uncategorised':rest.category)}),bankTx); return; }
   if(t.dataset&&t.dataset.txinv!==undefined&&t.dataset.txinv){ const x=bankTx[t.dataset.txinv]; if(!x) return; const {id,...rest}=x; await saveDoc('bankTx',id,Object.assign(rest,{invoiceNo:t.value,category:t.value&&(!rest.category||rest.category==='Uncategorised')?'Customer receipt':rest.category}),bankTx); if(t.value) logAction('Matched receipt to invoice',{detail:t.value+' · '+money(x.amount)}); return; }
   if(t.id==='fb-acct'){ fui.acct=t.value; fui.limit=100; render(); return; }
   if(t.id==='fb-month'){ fui.month=t.value; fui.limit=100; render(); return; }
@@ -2394,8 +2455,11 @@ document.addEventListener('submit',async e=>{
   if(id==='fjform'){ const f=gui.jf; if(!f) return; const el=e.target.elements, lines=f.lines.map(l=>({a:l.a,d:r2(l.d),c:r2(l.c)})).filter(l=>l.d||l.c);
     if(lines.some(l=>l.d&&l.c)){ toast('Each line takes a debit or a credit, not both.'); return; } if(lines.length<2){ toast('A journal needs at least two lines.'); return; }
     const d=r2(lines.reduce((s2,l)=>s2+l.d,0)), c=r2(lines.reduce((s2,l)=>s2+l.c,0)); if(Math.abs(d-c)>0.004){ toast('Debits and credits must be equal (difference '+money(d-c)+').'); return; }
-    const no='JV-'+String(Object.keys(journals).length+1).padStart(3,'0'); await saveDoc('journals',newId('j'),{no,date:el.date.value,memo:(el.memo.value||'').trim(),lines,preset:f.preset||'',at:new Date().toISOString()},journals);
+    const no='JV-'+String(Object.keys(journals).length+1).padStart(3,'0'); if(await saveDoc('journals',newId('j'),{no,date:el.date.value,memo:(el.memo.value||'').trim(),lines,preset:f.preset||'',at:new Date().toISOString()},journals)===false) return;
     logAction('Posted journal',{detail:no+' · '+money(d)+' · '+(el.memo.value||'').trim()}); gui.jf=null; toast('Journal '+no+' posted'); return; }
+  if(id==='fbillform'){ const el=e.target.elements, f=bui.form||{}; const d={supplier:el.supplier.value.trim(),billNo:el.billNo.value.trim(),date:el.date.value,dueDate:el.dueDate.value||addDays(el.date.value,30),category:el.category.value,net:r2(el.net.value),vat:el.vat.value===''?r2(+el.net.value*VAT_RATE):r2(el.vat.value),supTrn:el.supTrn.value.trim(),notes:el.notes.value.trim(),paidOther:+f.paidOther||0,paidDate:f.paidDate||'',at:new Date().toISOString()};
+    if(Object.values(bills).some(b=>b.id!==f.id&&invKey(b.billNo)===invKey(d.billNo)&&(b.supplier||'').toLowerCase()===d.supplier.toLowerCase())){ toast('This supplier bill is already recorded.'); return; }
+    const id=f.id||newId('b'); if(await saveDoc('bills',id,d,bills)===false) return; logAction(f.id?'Updated supplier bill':'Recorded supplier bill',{detail:d.supplier+' '+d.billNo+' · '+money(d.net+d.vat)}); bui.form=null; toast('Bill saved'); return; }
   if(id==='fsetform'){ const el=e.target.elements; const d={autoInvoice:el.autoInvoice.checked,rate:Math.max(0,r2(el.rate.value)),terms:Math.min(180,Math.max(0,parseInt(el.terms.value,10)||0)),customerAliases:(()=>{ const old=FS().customer, nw=(el.customer.value||'').trim(), al=new Set(FS().customerAliases||[]); if(old&&nw&&old!==nw) al.add(old); al.delete(nw); return [...al]; })(),autoNumber:el.autoNumber.value,reviewIssue:!!(el.reviewIssue&&el.reviewIssue.checked),halfFrom:el.autoNumber.value==='half'?(FS().halfFrom||todayDxb().slice(0,7)):(FS().halfFrom||''),invPrefix:((el.nextNoTxt.value.match(/^\s*([A-Za-z]+[\s\-]?)/)||[,'ZRA '])[1].replace('-',' ').replace(/([A-Za-z])$/,'$1 ').toUpperCase()),nextNo:parseInt((el.nextNoTxt.value.match(/(\d+)\s*$/)||[,0])[1],10)||0,customer:(el.customer.value||'').trim()||'Easy Renovations LLC',endClient:(el.endClient.value||'').trim(),autoStatement:el.autoStatement.checked,stmtDay:Math.min(28,Math.max(1,parseInt(el.stmtDay.value,10)||1)),at:new Date().toISOString()};
     if(FS().rateCard) d.rateCard=FS().rateCard; if(FS().rateHistory) d.rateHistory=FS().rateHistory; await saveDoc('finSettings','main',d,finSettings); logAction('Updated finance automation',{detail:(d.autoInvoice?'auto invoices on':'auto invoices off')+' · '+money(d.rate)+' per ticket · statements day '+d.stmtDay}); toast('Automation saved'); scheduleFinAuto(); return; }
   if(id==='fptxform'){ const d={partner:g('partner'),type:g('type'),date:g('date'),amount:r2(g('amount')),note:g('note'),at:new Date().toISOString()};
@@ -2436,6 +2500,14 @@ document.addEventListener('click',async e=>{
   if(ds.cui){ cui.tab=ds.cui; render(); return; }
   if(ds.coui){ coui.tab=ds.coui; render(); return; }
   if(ds.dui){ dui.kind=ds.dui; render(); return; }
+  if(ds.bst){ bui.st=ds.bst; render(); return; }
+  if(ds.act==='billnew'){ bui.form={}; render(); return; }
+  if(ds.act==='billclose'){ bui.form=null; render(); return; }
+  if(ds.billedit){ bui.form=clone(bills[ds.billedit]); render(); window.scrollTo(0,0); return; }
+  if(ds.billdel){ if(bui.del!==ds.billdel){ bui.del=ds.billdel; render(); return; } const b=bills[ds.billdel]; bui.del=null; if(await delDoc('bills',ds.billdel,bills)!==false){ logAction('Deleted supplier bill',{detail:(b&&b.supplier)+' '+(b&&b.billNo)}); toast('Bill deleted'); } return; }
+  if(ds.billpp){ const b=bills[ds.billpp]; if(!b) return; const due=r2(billTotal(b)-billPaid(b)); const d=Object.assign({},b,{paidOther:r2((+b.paidOther||0)+due),paidDate:todayDxb()}); delete d.id; if(await saveDoc('bills',b.id,d,bills)!==false){ logAction('Bill paid by partner',{detail:b.supplier+' '+b.billNo+' · '+money(due)}); toast('Marked paid by partner ('+money(due)+')'); } return; }
+  if(ds.act==='lockset'){ const v=(document.getElementById('lock-date')||{}).value; if(!v) return; if(!gui.lockConfirm){ gui.lockConfirm=true; render(); return; } gui.lockConfirm=false; const d=Object.assign({},finSettings.main||{},{lockedThrough:v}); delete d.id; await saveDoc('finSettings','main',d,finSettings); logAction('Closed the books',{detail:'through '+v}); toast('Books closed through '+fdx(v)); return; }
+  if(ds.act==='lockopen'){ const d=Object.assign({},finSettings.main||{}); delete d.id; const was=d.lockedThrough; delete d.lockedThrough; await saveDoc('finSettings','main',d,finSettings); logAction('Reopened the books',{detail:'were closed through '+was}); toast('Books reopened'); return; }
   if(ds.gtab){ gui.tab=ds.gtab; render(); return; }
   if(ds.gacct){ gui.acct=ds.gacct; gui.tab='ledger'; render(); window.scrollTo(0,0); return; }
   if(ds.gsinv){ fui.tab='invoices'; fui.invStatus='all'; fui.invQ=ds.gsinv; render(); return; }
@@ -2490,7 +2562,7 @@ document.addEventListener('click',async e=>{
   if(ds.act==='finxls'){ await finExport(); return; }
   if(ds.act==='finmoretabs'){ fui.more=!(fui.more||['recon','vat','partners','controls'].includes(fui.tab)); if(!fui.more&&['recon','vat','partners','controls'].includes(fui.tab)) fui.tab='overview'; render(); return; }
   if(ds.act==='autosort'){ await autoSort(); render(); return; }
-  if(ds.gofin){ const [tab,x]=ds.gofin.split(':'); fui.tab=tab; fui.form=null; fui.del=null; if(tab==='invoices'&&x) fui.invStatus=x; render(); if(tab==='bank'&&x==='newacct'){ const b=document.querySelector('[data-act=newacct]'); if(b) b.click(); } return; }
+  if(ds.gofin){ const [tab,x]=ds.gofin.split(':'); fui.tab=tab; fui.form=null; fui.del=null; if(tab==='invoices'&&x) fui.invStatus=x; if(tab==='bills') bui.st='unpaid'; render(); if(tab==='bank'&&x==='newacct'){ const b=document.querySelector('[data-act=newacct]'); if(b) b.click(); } return; }
   if(ds.act==='billnow'){ const xs=unbilled().filter(v=>(fui.ub||new Set()).has(v.id)); if(!xs.length) return; const no=await billTickets(xs,'created by hand'); fui.ub=null; toast('Invoice '+no+' created for '+xs.length+' ticket'+(xs.length>1?'s':'')); scheduleFinAuto(); return; }
   if(ds.invpdf){ await invoicePdf(ds.invpdf); return; }
   if(ds.invissue){ const i=invoices[ds.invissue]; if(!i) return; if(!invGross(i)){ toast('Enter the amount before issuing.'); return; } const d=Object.assign({},i,{status:'issued',locked:true,issuedAt:new Date().toISOString()}); delete d.id; await saveDoc('invoices',i.id,d,invoices); logAction('Issued invoice',{detail:i.invoiceNo+' · '+money(invGross(i))}); toast(i.invoiceNo+' issued and locked'); return; }
@@ -2624,7 +2696,7 @@ function goDemo(){ if(loaded) return; demo=true; loaded=true; visits=demoData();
   const sub=(col,store)=>db.collection(col).onSnapshot(snap=>{ for(const k in store) delete store[k]; snap.docs.forEach(d=>{ const x=d.data(); if(x) store[d.id]=Object.assign({id:d.id},x); }); if(['parts','assets','tickets','finance'].includes(route)) safeRender(); resolveNames(); },()=>{});
   sub('parts',parts); sub('stock',stock); sub('assets',assetReg); sub('inventory',inventory);
   const fsub=(col,store)=>db.collection(col).onSnapshot(snap=>{ for(const k in store) delete store[k]; snap.docs.forEach(d=>{ const x=d.data(); if(x) store[d.id]=Object.assign({id:d.id},x); }); finSeen.add(col); scheduleFinAuto(); if(route==='finance'||route==='dashboard') safeRender(); },()=>{});
-  fsub('bankAccounts',bankAccounts); fsub('bankTx',bankTx); fsub('invoices',invoices); fsub('partnerTx',partnerTx); fsub('finSettings',finSettings); fsub('statements',statements); fsub('journals',journals);
+  fsub('bankAccounts',bankAccounts); fsub('bankTx',bankTx); fsub('invoices',invoices); fsub('partnerTx',partnerTx); fsub('finSettings',finSettings); fsub('statements',statements); fsub('journals',journals); fsub('bills',bills);
   db.collection('roles').onSnapshot(snap=>{ roles={}; snap.docs.forEach(d=>{ const x=d.data(); if(x) roles[d.id]=x; }); rolesLoaded=true; render(); resolveNames(); },()=>{ rolesLoaded=true; render(); });
   db.collection('requests').onSnapshot(snap=>{ requests={}; snap.docs.forEach(d=>{ const x=d.data(); if(x) requests[d.id]=x; }); if(route==='admin'||access()==='none') safeRender(); resolveNames(); },()=>{});
   db.collection('audit').onSnapshot(snap=>{ audit=snap.docs.flatMap(d=>(((d.data()||{}).entries)||[]).map(x=>Object.assign({by:d.id},x))).sort((a,b)=>(b.at||'').localeCompare(a.at||'')).slice(0,300); if(route==='admin') safeRender(); resolveNames(); },()=>{});
