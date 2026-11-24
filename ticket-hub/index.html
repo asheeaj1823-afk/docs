@@ -95,6 +95,7 @@ h1,h2,h3{margin:0;font-family:var(--display);letter-spacing:-.01em;text-wrap:bal
 .mode::before{content:"";width:7px;height:7px;border-radius:50%;background:#4fd1a1}
 .mode.demo::before{background:var(--gold)}
 .mode.wait::before{background:var(--navyInk)}
+.mode.off::before{background:#f2716b}
 .main{min-width:0;display:flex;flex-direction:column}
 .topbar{display:none}
 .tabbar{display:none}
@@ -532,7 +533,7 @@ const initials=n=>(n||'?').split(/\s+/).filter(Boolean).map(w=>w[0]).slice(0,2).
 const isDM=v=>(v&&v.site||'').trim().toLowerCase()==='dubai mall';
 const siteOf=v=>v.site||'Site not recorded';
 const chip=v=>`<span class="chip ${v.status}">${STATUS[v.status]}</span>`;
-function toast(msg){ if(window.__lockAt&&Date.now()-window.__lockAt<1500&&!/books are closed/i.test(msg)) return; const t=document.getElementById('toast'); t.textContent=msg; t.hidden=false; clearTimeout(toast.t); toast.t=setTimeout(()=>t.hidden=true,2800); }
+function toast(msg){ if(typeof navigator!=='undefined'&&!navigator.onLine&&db&&!demo&&/^(saved|.* saved)$|^saved/i.test(String(msg))&&!/device/.test(msg)) msg='Saved on this device — it will sync when the connection is back'; if(window.__lockAt&&Date.now()-window.__lockAt<1500&&!/books are closed/i.test(msg)) return; const t=document.getElementById('toast'); t.textContent=msg; t.hidden=false; clearTimeout(toast.t); toast.t=setTimeout(()=>t.hidden=true,2800); }
 
 /* ---------- authenticator codes (TOTP, RFC 6238: SHA-1, 6 digits, 30 s) ---------- */
 const B32='ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
@@ -655,14 +656,14 @@ async function save(v,action){
   visits[v.id]=clone(v);
   render();
   if(db){
-    try{ await db.doc('visits/'+v.id).set(clone(v)); }
+    try{ await dbWrite('visits',v.id,clone(v)); }
     catch(e){ const c=e&&e.code; toast(c==='not_granted'||c==='permission_denied'||c==='forbidden'?'You can view this hub but not change it. Ask the owner for edit access.':'Could not save. Check your connection and try again.'); }
   }
 }
 function hist(status,note){ const h={status,at:new Date().toISOString()}; if(note) h.note=note; if(me.id) h.by=me.id; return h; }
 const newId=p=>p+Date.now().toString(36)+Math.random().toString(36).slice(2,6);
-async function saveDoc(col,id,data,store){ if(typeof lockBlocks==='function'&&lockBlocks(col,id,data,store)){ lockToast(); window.__lockAt=Date.now(); setTimeout(render,0); return false; } store[id]=Object.assign({id},data); setTimeout(render,0); if(db){ try{ await db.doc(col+'/'+id).set(data); }catch(e){ toast('Could not save. Check your access and connection.'); } } }
-async function delDoc(col,id,store){ if(typeof lockBlocks==='function'&&lockBlocks(col,id,null,store)){ lockToast(); window.__lockAt=Date.now(); return false; } delete store[id]; setTimeout(render,0); if(db){ try{ await db.doc(col+'/'+id).delete(); }catch(e){ toast('Could not delete. Check your access and connection.'); } } }
+async function saveDoc(col,id,data,store){ if(typeof lockBlocks==='function'&&lockBlocks(col,id,data,store)){ lockToast(); window.__lockAt=Date.now(); setTimeout(render,0); return false; } store[id]=Object.assign({id},data); setTimeout(render,0); if(db){ try{ await dbWrite(col,id,data); }catch(e){ toast('Could not save. Check your access and connection.'); } } }
+async function delDoc(col,id,store){ if(typeof lockBlocks==='function'&&lockBlocks(col,id,null,store)){ lockToast(); window.__lockAt=Date.now(); return false; } delete store[id]; setTimeout(render,0); if(db){ try{ await dbWrite(col,id,null); }catch(e){ toast('Could not delete. Check your access and connection.'); } } }
 async function resolveNames(){
   if(!userApi||!userApi.profiles) return;
   const ids=new Set(); Object.values(visits).forEach(v=>(v.history||[]).forEach(h=>h.by&&ids.add(h.by))); Object.values(parts).forEach(p=>p.by&&ids.add(p.by)); Object.keys(roles).forEach(i=>ids.add(i)); Object.keys(requests).forEach(i=>ids.add(i)); audit.forEach(e=>e.by&&ids.add(e.by)); Object.values(roles).forEach(r=>r.by&&ids.add(r.by));
@@ -870,7 +871,7 @@ function integrationsView(){
    :row('Xero','Not checked yet','plain',mcpApi?'Checks your Xero connection live. claude.ai asks your permission the first time.':'Open the hub in claude.ai to check Xero live.',mcpApi?`<button class="btn primary" data-act="xcheck">Check Xero connection</button>`:'');
   return `<div class="page"><div class="phead"><div><h1>Integrations</h1><div class="sub">What the hub is connected to, and what each connection does</div></div></div>
    <div class="card"><div class="card-h"><h3>Connections</h3></div><div>
-    ${row('Shared live database',live?'Connected':'Not connected',live?'ok':'bad',live?'Every phone and computer sees the same tickets and finance instantly.':'Showing demo data in this view — changes are not shared.')}
+    ${row('Shared live database',!navigator.onLine?'Offline':live?'Live':'Not connected',!navigator.onLine?'warn':live?'ok':'bad',live?'Every phone and computer sees changes within seconds. '+esc(syncLabel()[0])+'.'+(syncQ.length?' '+syncQ.length+' change(s) saved on this device are waiting to sync.':' Changes made without signal are kept on the device and sent when the connection returns.'):'Showing demo data in this view — changes are not shared.')}
     ${xs}
     ${row('Bank (Wio, Mashreq)','Upload statements','plain','There is no live bank feed. Upload the Excel or CSV statement each month; lines are checked, sorted and matched automatically.',`<button class="btn" data-gofin="bank">Open Bank</button>`)}
     ${row('Phone reminders','1st and 16th, 8:32','ok','Billing reminder with the invoice and statement, sent to your phone by Claude. Manage it in claude.ai → Scheduled tasks.')}
@@ -1038,6 +1039,33 @@ function gsOpen(k){ const x=(gs.list||[])[k]; if(!x) return; gsShow(false); gs.q
   else if(x.go.inv){ fui.tab='invoices'; fui.invStatus='all'; fui.invQ=x.go.inv; fui.form=null; go('finance'); }
   else if(x.go.cust){ cui.tab='dir'; cui.q=x.go.cust; go('customers'); } }
 
+
+/* ---------- real-time sync: status, offline queue, team change notices ---------- */
+let lastSync=null, syncQ=[], syncBusy=false; const mineRecent={};
+try{ syncQ=JSON.parse(localStorage.getItem('zi-queue')||'[]')||[]; }catch(e){ syncQ=[]; }
+const saveQ=()=>{ try{ localStorage.setItem('zi-queue',JSON.stringify(syncQ)); }catch(e){} };
+const netErr=e=>{ const c=e&&e.code; return !navigator.onLine||!c||['unavailable','server_unavailable','network','timeout','upstream_error','deadline-exceeded','rate_limited'].includes(c); };
+function queueW(col,id,data){ syncQ=syncQ.filter(q=>!(q.col===col&&q.id===id)); syncQ.push({col,id,data,at:Date.now(),tries:0}); saveQ(); toast('Saved on this device — it will sync when the connection is back'); navHtml(); }
+async function dbWrite(col,id,data){
+  mineRecent[col+'/'+id]=Date.now(); if(!db) return;
+  if(!navigator.onLine){ queueW(col,id,data); return; }
+  try{ if(data===null) await db.doc(col+'/'+id).delete(); else await db.doc(col+'/'+id).set(data); }
+  catch(e){ if(netErr(e)){ queueW(col,id,data); return; } throw e; }
+}
+async function flushQ(){
+  if(syncBusy||!db||!syncQ.length||!navigator.onLine) return; syncBusy=true; let done=0;
+  try{ for(const q of [...syncQ]){ try{ mineRecent[q.col+'/'+q.id]=Date.now(); if(q.data===null) await db.doc(q.col+'/'+q.id).delete(); else await db.doc(q.col+'/'+q.id).set(q.data); syncQ=syncQ.filter(x=>x!==q); done++; }
+      catch(e){ if(netErr(e)&&++q.tries<20) break; syncQ=syncQ.filter(x=>x!==q); toast('One offline change could not be saved. You may not have access to change it.'); } saveQ(); }
+    if(done&&!syncQ.length) toast('Back online — '+done+' change'+(done>1?'s':'')+' synced'); }
+  finally{ syncBusy=false; navHtml(); }
+}
+function overlayQ(col,store){ syncQ.filter(q=>q.col===col).forEach(q=>{ if(q.data===null) delete store[q.id]; else store[q.id]=Object.assign({id:q.id},q.data); }); }
+window.addEventListener('online',()=>{ navHtml(); flushQ(); }); window.addEventListener('offline',()=>navHtml()); setInterval(()=>{ flushQ(); navHtml(); },30000);
+function syncLabel(){ if(!loaded) return ['Connecting…','wait']; if(demo) return ['Demo mode · changes stay in this tab','demo'];
+  if(!navigator.onLine) return ['Offline'+(syncQ.length?' · '+syncQ.length+' change'+(syncQ.length>1?'s':'')+' waiting':' · showing the last data'),'off'];
+  if(syncQ.length) return ['Syncing '+syncQ.length+' change'+(syncQ.length>1?'s':'')+'…','wait'];
+  return ['Live · updated '+(lastSync?hm(new Date(lastSync).toISOString()):'just now'),'']; }
+
 /* ---------- nav ---------- */
 function navHtml(){
   const n=reviewQueue().length;
@@ -1048,7 +1076,7 @@ function navHtml(){
   document.getElementById('tabbar').style.gridTemplateColumns=`repeat(${Math.max(1,T2.length+(more?1:0))},1fr)`;
   document.getElementById('tabbar').hidden=T2.length+(more?1:0)<2; document.body.classList.toggle('onetab',T2.length+(more?1:0)<2);
   document.getElementById('tabbar').innerHTML=T2.map(([k,l])=>`<button data-route="${k}" ${route===k?'aria-current="page"':''}>${svg(k,20)}<span>${k==='parts'?'Parts':k==='review'?'Review':k==='admin'?'Admin':k==='dashboard'?'Home':k==='reports'?'Reports':k==='finance'?'Finance':l}</span>${k==='review'&&n?`<span class="badge">${n}</span>`:''}</button>`).join('')+(more?`<button data-act="mnav" ${!['dashboard','tickets','review','finance'].includes(route)?'aria-current="page"':''}>${svg('menu',20)}<span>More</span></button>`:'');
-  const m=document.getElementById('mode'); m.textContent=!loaded?'Connecting…':demo?'Demo mode · changes stay in this tab':'Live · shared with your team'; m.className='mode'+(!loaded?' wait':demo?' demo':'');
+  const m=document.getElementById('mode'); { const [lt,lc]=syncLabel(); m.textContent=lt; m.className='mode'+(lc?' '+lc:''); m.title='Everyone using the hub sees changes within seconds'; }
   const a=access(); document.getElementById('me').innerHTML=me.name||ROLE_NAME[a]?`<span class="avatar">${esc(initials(me.name||'?'))}</span><span style="display:flex;flex-direction:column;min-width:0"><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(me.name||'Signed in')}</span>${ROLE_NAME[a]?`<span class="rolebadge" style="align-self:flex-start;margin-top:3px">${ROLE_NAME[a]}</span>`:''}</span>`:'';
   document.querySelectorAll('[data-act=newvisit]').forEach(b=>b.hidden=!isOffice());
   document.getElementById('signout').hidden=document.getElementById('signout2').hidden=!signedIn();
@@ -2609,7 +2637,7 @@ document.addEventListener('click',async e=>{
   if(ds.act==='finxls'){ await finExport(); return; }
   if(ds.act==='finmoretabs'){ fui.more=!(fui.more||['recon','vat','partners','controls'].includes(fui.tab)); if(!fui.more&&['recon','vat','partners','controls'].includes(fui.tab)) fui.tab='overview'; render(); return; }
   if(ds.act==='autosort'){ await autoSort(); render(); return; }
-  if(ds.gofin){ const [tab,x]=ds.gofin.split(':'); fui.tab=tab; fui.form=null; fui.del=null; if(tab==='invoices'&&x) fui.invStatus=x; if(tab==='bills') bui.st='unpaid'; render(); if(tab==='bank'&&x==='newacct'){ const b=document.querySelector('[data-act=newacct]'); if(b) b.click(); } return; }
+  if(ds.gofin){ const [tab,x]=ds.gofin.split(':'); fui.tab=tab; fui.form=null; fui.del=null; if(tab==='invoices'&&x) fui.invStatus=x; if(tab==='bills') bui.st='unpaid'; if(['recon','vat','partners','controls'].includes(tab)) fui.more=true; if(route!=='finance') go('finance'); else render(); if(tab==='bank'&&x==='newacct'){ const b=document.querySelector('[data-act=newacct]'); if(b) b.click(); } return; }
   if(ds.act==='billnow'){ const xs=unbilled().filter(v=>(fui.ub||new Set()).has(v.id)); if(!xs.length) return; const no=await billTickets(xs,'created by hand'); fui.ub=null; toast('Invoice '+no+' created for '+xs.length+' ticket'+(xs.length>1?'s':'')); scheduleFinAuto(); return; }
   if(ds.invpdf){ await invoicePdf(ds.invpdf); return; }
   if(ds.invissue){ const i=invoices[ds.invissue]; if(!i) return; if(!invGross(i)){ toast('Enter the amount before issuing.'); return; } const d=Object.assign({},i,{status:'issued',locked:true,issuedAt:new Date().toISOString()}); delete d.id; await saveDoc('invoices',i.id,d,invoices); logAction('Issued invoice',{detail:i.invoiceNo+' · '+money(invGross(i))}); toast(i.invoiceNo+' issued and locked'); return; }
@@ -2739,10 +2767,11 @@ function goDemo(){ if(loaded) return; demo=true; loaded=true; visits=demoData();
   use('sample').then(s=>{ sampleApi=s; safeRender(); });
   use('downloads').then(d=>{ downloadsApi=d; safeRender(); });
   use('mcp').then(m=>{ mcpApi=m; if(route==='integrations') safeRender(); });
+  setTimeout(flushQ,3000);
   if(!db) return;
-  const sub=(col,store)=>db.collection(col).onSnapshot(snap=>{ for(const k in store) delete store[k]; snap.docs.forEach(d=>{ const x=d.data(); if(x) store[d.id]=Object.assign({id:d.id},x); }); if(['parts','assets','tickets','finance'].includes(route)) safeRender(); resolveNames(); },()=>{});
+  const sub=(col,store)=>db.collection(col).onSnapshot(snap=>{ for(const k in store) delete store[k]; snap.docs.forEach(d=>{ const x=d.data(); if(x) store[d.id]=Object.assign({id:d.id},x); }); overlayQ(col,store); lastSync=Date.now(); if(['parts','assets','tickets','finance'].includes(route)) safeRender(); resolveNames(); },()=>{});
   sub('parts',parts); sub('stock',stock); sub('assets',assetReg); sub('inventory',inventory);
-  const fsub=(col,store)=>db.collection(col).onSnapshot(snap=>{ for(const k in store) delete store[k]; snap.docs.forEach(d=>{ const x=d.data(); if(x) store[d.id]=Object.assign({id:d.id},x); }); finSeen.add(col); scheduleFinAuto(); if(route==='finance'||route==='dashboard') safeRender(); },()=>{});
+  const fsub=(col,store)=>db.collection(col).onSnapshot(snap=>{ for(const k in store) delete store[k]; snap.docs.forEach(d=>{ const x=d.data(); if(x) store[d.id]=Object.assign({id:d.id},x); }); overlayQ(col,store); lastSync=Date.now(); finSeen.add(col); scheduleFinAuto(); if(route==='finance'||route==='dashboard') safeRender(); },()=>{});
   fsub('bankAccounts',bankAccounts); fsub('bankTx',bankTx); fsub('invoices',invoices); fsub('partnerTx',partnerTx); fsub('finSettings',finSettings); fsub('statements',statements); fsub('journals',journals); fsub('bills',bills);
   db.collection('roles').onSnapshot(snap=>{ roles={}; snap.docs.forEach(d=>{ const x=d.data(); if(x) roles[d.id]=x; }); rolesLoaded=true; render(); resolveNames(); },()=>{ rolesLoaded=true; render(); });
   db.collection('requests').onSnapshot(snap=>{ requests={}; snap.docs.forEach(d=>{ const x=d.data(); if(x) requests[d.id]=x; }); if(route==='admin'||access()==='none') safeRender(); resolveNames(); },()=>{});
@@ -2750,7 +2779,10 @@ function goDemo(){ if(loaded) return; demo=true; loaded=true; visits=demoData();
   db.collection('visits').onSnapshot(snap=>{
     clearTimeout(fallback); if(demo) return;
     const next={}; snap.docs.forEach(d=>{ const x=d.data(); if(x){ const v=Object.assign({id:d.id,history:[],parts:[],evidence:[]},x); if(!STATUS[v.status]) v.status=(v.history[v.history.length-1]||{}).status||'new'; next[d.id]=v; } });
-    visits=next; loaded=true; safeRender(); resolveNames(); scheduleFinAuto();
+    syncQ.filter(q=>q.col==='visits'&&q.data).forEach(q=>{ next[q.id]=Object.assign({id:q.id,history:[],parts:[],evidence:[]},q.data); });
+    if(loaded){ const now=Date.now(), ch=Object.keys(next).filter(id=>(!visits[id]||(visits[id].updatedAt||'')!==(next[id].updatedAt||''))&&!(mineRecent['visits/'+id]&&now-mineRecent['visits/'+id]<6000));
+      if(ch.length){ if(sel&&ch.includes(sel)&&mode!=='view') toast('Ticket #'+sel+' was just changed by someone else — check before you save, or your save will replace their change.'); else toast(ch.length===1?(visits[ch[0]]?'Ticket #'+ch[0]+' was just updated by your team':'New ticket #'+ch[0]+' added by your team'):ch.length+' tickets were just updated by your team'); } }
+    lastSync=Date.now(); visits=next; loaded=true; safeRender(); resolveNames(); scheduleFinAuto();
   },()=>{ clearTimeout(fallback); db=null; goDemo(); toast('Could not reach the shared store, showing demo data.'); });
 })();
 })();
