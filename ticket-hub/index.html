@@ -663,7 +663,6 @@ function checks(v){
     {f:'Technicians',ok:!!(v.technician||'').trim(),val:v.technician||'—',req:true},
     {f:'Z Invoice No.',ok:!!(v.billingRef||'').trim(),val:v.billingRef||(autoNumOn()?'Assigned at billing':'—'),req:!autoNumOn()},
     {f:'Photos / documents',ok:evItems(v).length>0,val:evidenceLabel(v),req:false},
-    {f:'Customer sign-off',ok:!!v.signature,val:v.signature?(v.signerName||'Signed'):'—',req:false},
   ];
 }
 const missingChecks=v=>checks(v).filter(c=>c.req&&!c.ok);
@@ -1502,7 +1501,7 @@ function stepsCard(v){
   const miss=[!v.arrived&&'the arrival time',!(v.work||'').trim()&&'the action taken'].filter(Boolean);
   const steps=[
     ['prepare','Prepare job',v.prepared?'Contacted '+(hm(v.contactedAt)||''):'Confirm access with the site'],
-    ['visit','Complete visit',v.arrived?('In '+hm(v.arrived)+(v.finished?' · out '+hm(v.finished):'')):'Times, findings, photos, sign-off'],
+    ['visit','Complete visit',v.arrived?('In '+hm(v.arrived)+(v.finished?' · out '+hm(v.finished):'')):'Times, findings, photos'],
     ['parts','Parts used',partsCount(v)+' part'+(partsCount(v)===1?'':'s')],
     ['invoice','Z Invoice No.',v.billingRef||'Optional'],
   ];
@@ -1538,7 +1537,7 @@ function bodyHtml(v){
         const missing=items.filter(i=>!i.url).length;
         return `<div class="card"><div class="card-h"><h3>Site photos &amp; documents</h3><span class="sub">${fs.length} from Airtable</span></div><div class="card-b">${`<div class="thumbs">${items.map(e=>{ const u=safeUrl(e.url), fu=safeUrl(e.full)||u, img=/^image\//.test(e.type); const inner=u&&img?`<img src="${esc(u)}" alt="${esc(e.name)}" loading="lazy">`:`<span>${esc(/^video\//.test(e.type)?'▶ ':'')}${esc(e.name)}</span>`; return fu?`<a class="thumb" href="${esc(fu)}" target="_blank" rel="noopener" title="${esc(e.name)}">${inner}${isPdf(e)?'<span class="tag">PDF</span>':''}</a>`:`<div class="thumb" title="${esc(e.name)}">${inner}</div>`; }).join('')}</div>`}${missing?`<div class="sub" style="margin-top:8px">${missing} file${missing>1?'s':''} will show after the next Airtable sync (an admin opening the hub).</div>`:''}</div></div>`; })():''}
       <div class="card"><div class="card-h"><h3>Evidence</h3><span class="sub">${esc(evidenceLabel(v))}</span></div><div class="card-b">${ev.length?thumbsHtml(ev,false):'<div class="sub">No photos or documents attached.</div>'}
-        ${v.signature?`<div style="margin-top:14px"><div class="lbl" style="margin-bottom:6px">Customer sign-off · ${esc(v.signerName||'Unnamed')}</div>${sigHtml(v)}</div>`:''}</div></div>
+</div></div>
       ${(v.parts||[]).length?`<div class="card"><div class="card-h"><h3>Parts used</h3><span class="sub">${partsCount(v)} total</span></div><div class="card-b">${v.parts.map(p=>`<div class="kv"><span>${esc(p.name)}</span><span class="num">× ${p.qty}</span></div>`).join('')}</div></div>`:''}
     </div>
     <div style="display:flex;flex-direction:column;gap:16px;min-width:0">
@@ -1596,9 +1595,6 @@ function editHtml(){
       <label class="drop" for="f-evidence">${uploading?`<span class="spin"></span> Uploading ${uploading} file${uploading>1?'s':''}…`:'+ Add photo or PDF'}<input id="f-evidence" type="file" accept="image/*,application/pdf" multiple ${uploading?'disabled':''}></label>
       ${!assets&&loaded?'<div class="sub" style="margin-top:6px">File storage is not available in this view, so only file names are saved.</div>':''}
       ${ev.length?`<div style="margin-top:10px">${thumbsHtml(ev,true)}</div>`:''}</div>
-    <div><label class="lbl" for="f-signer">Customer sign-off</label>
-      <input id="f-signer" class="field" placeholder="Name of person signing" value="${esc(d.signerName)}" autocomplete="off">
-      <div class="sig"><canvas id="sigpad" aria-label="Signature pad"></canvas><div class="base"></div>${d.signature?'':'<span class="ph">Sign above the line</span>'}<button class="btn clr" style="height:28px;font-size:12px" data-act="clearsig" type="button">Clear</button></div></div>
   </div><div class="formfoot"><button class="btn" data-act="cancel">Cancel</button><button class="btn primary" data-act="savevisit" ${uploading?'disabled':''}>Save visit</button></div></div>`;
 }
 
@@ -2640,9 +2636,6 @@ async function downloadReport(v){
     lines.forEach(l=>{ need(14); doc.text(l,M,y); y+=13.5; }); y+=10; };
   para('Service instructions',v.instructions); para('Washroom areas',areasOf(v).map(areaShort).join(', ')); para('Findings',v.findings); para('Action taken',v.work); para('Required next action',v.nextAction); para('Customer feedback',v.customerFeedback);
   para('Parts',(v.parts||[]).map(p=>p.name+' × '+p.qty).join('\n')); para('Photos / documents',evItems(v).map(e=>e.name).join(', '));
-  if(typeof v.signature==='string'&&v.signature.startsWith('data:image/png')){ need(120);
-    doc.setFont('helvetica','bold'); doc.setFontSize(8); doc.setTextColor(125,92,18); doc.text('CUSTOMER SIGN-OFF',M,y); y+=8;
-    try{ doc.addImage(v.signature,'PNG',M,y,220,80); }catch(e){} y+=92; doc.setFont('helvetica','normal'); doc.setFontSize(10); doc.setTextColor(...ink); doc.text(v.signerName||'Customer',M,y); y+=16; }
   const pages=doc.getNumberOfPages();
   for(let i=1;i<=pages;i++){ doc.setPage(i); doc.setFont('helvetica','normal'); doc.setFontSize(8); doc.setTextColor(...muted);
     doc.text('Generated '+dmhm(new Date().toISOString())+' · Ziar Imaar Technical Services L.L.C.',M,H-28); doc.text('Page '+i+' of '+pages,W-M,H-28,{align:'right'}); }
@@ -3020,7 +3013,7 @@ document.addEventListener('click',async e=>{
   if(act==='clearsig'){ draft.signature=null; render(); return; }
   if(act==='savevisit'||act==='saveparts'||act==='savebilling'){
     const d=draft, n=clone(visits[d.id]);
-    if(act==='savevisit') Object.assign(n,{arrived:d.arrived||null,finished:d.finished||null,findings:(d.findings||'').trim(),work:(d.work||'').trim(),nextAction:(d.nextAction||'').trim(),outcome:d.outcome||'',returnVisit:d.returnVisit||'No',technician:(d.technician||'').trim(),serial:(d.serial||'').trim(),washroom:d.washroom||'',customerFeedback:(d.customerFeedback||'').trim(),evidence:d.evidence,signature:d.signature||null,signerName:(d.signerName||'').trim()});
+    if(act==='savevisit') Object.assign(n,{arrived:d.arrived||null,finished:d.finished||null,findings:(d.findings||'').trim(),work:(d.work||'').trim(),nextAction:(d.nextAction||'').trim(),outcome:d.outcome||'',returnVisit:d.returnVisit||'No',technician:(d.technician||'').trim(),serial:(d.serial||'').trim(),washroom:d.washroom||'',customerFeedback:(d.customerFeedback||'').trim(),evidence:d.evidence,});
     if(act==='saveparts'){ const before={}, after={}; (n.parts||[]).forEach(p=>{ if(p.invId) before[p.invId]=(before[p.invId]||0)+(+p.qty||0); }); d.parts.forEach(p=>{ if(p.invId) after[p.invId]=(after[p.invId]||0)+(+p.qty||0); });
       for(const iid of new Set([...Object.keys(before),...Object.keys(after)])){ const it=inventory[iid]; const delta=(after[iid]||0)-(before[iid]||0); if(!it||!delta) continue; const {id,...rest}=it; const ns=Math.max(0,(+it.stock||0)-delta); logAction(delta>0?'Took stock for ticket':'Returned stock from ticket',{ticket:n.id,detail:it.partNo+': '+(+it.stock||0)+' → '+ns}); saveDoc('inventory',iid,Object.assign(rest,{stock:ns,at:new Date().toISOString()}),inventory); if(ns<=(+it.min||0)) setTimeout(()=>toast(it.partNo+' is now '+(ns<=0?'out of stock':'below minimum')),1200); }
       n.parts=d.parts; }
@@ -3042,7 +3035,7 @@ Write 1 to 3 plain sentences addressed to the technician, saying exactly what to
 Ticket ${tref(ov)} at ${siteOf(ov)} (${ov.product||'product not recorded'}, ${ov.model||'model not recorded'}). Issue: ${ov.issue||'not recorded'}.
 Time in ${hm(ov.arrived)||'not stamped'}, time out ${hm(ov.finished)||'not stamped'}. Outcome: ${ov.outcome||'not set'}. Technicians: ${ov.technician||'not named'}.
 Findings: ${ov.findings||'none'}. Action taken: ${ov.work||'none'}. Next action: ${ov.nextAction||'none'}. Return visit: ${ov.returnVisit||'No'}.
-Parts: ${(ov.parts||[]).map(p=>p.name+' x'+p.qty).join(', ')||'none'}. Evidence files: ${evItems(ov).length}. Customer signature: ${ov.signature?'yes':'no'}.
+Parts: ${(ov.parts||[]).map(p=>p.name+' x'+p.qty).join(', ')||'none'}. Evidence files: ${evItems(ov).length}.
 Required items still missing: ${missingChecks(ov).map(c=>c.f).join(', ')||'none'}.`;
     try{ const r=await sampleApi(prompt,{modelTier:'quick'}); rev.note=((r&&r.text)||'').trim(); }
     catch(err){ const c=err&&err.code; if(c==='not_granted') sampleApi=null; else toast(c==='rate_limited'?'Too many drafts just now. Try again in a minute.':'Could not draft a note. Write it yourself or try again.'); }
