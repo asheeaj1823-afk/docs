@@ -1833,11 +1833,12 @@ function buildStatement(m){
 }
 const canon=x=>JSON.stringify(x,(k,v)=>v&&typeof v==='object'&&!Array.isArray(v)?Object.keys(v).sort().reduce((o,kk)=>(o[kk]=v[kk],o),{}):v);
 let finAutoBusy=false, finAutoT=null; const finSeen=new Set();
-const finReady=()=>db&&!demo&&loaded&&access()==='admin'&&signedIn()&&['bankAccounts','bankTx','invoices','partnerTx','finSettings','statements'].every(c=>finSeen.has(c));
+const finReady=()=>db&&!demo&&loaded&&access()==='admin'&&signedIn()&&['bankAccounts','bankTx','invoices','partnerTx','finSettings','statements','bills'].every(c=>finSeen.has(c));
 function scheduleFinAuto(){ clearTimeout(finAutoT); finAutoT=setTimeout(finAuto,1500); }
 async function finAuto(force){
   if(finAutoBusy||!finReady()) return; finAutoBusy=true; const s=FS(); let made=0, upd=0, upd2=0, stm=[];
   try{
+    const rb=await repeatBills(); if(rb) toast(rb+' repeating bill'+(rb>1?'s':'')+' added');
     const numbered=await autoNumberRun(); if(numbered.length) toast('Invoice '+numbered.join(', ')+' created for completed work');
     if(s.autoInvoice){
       const g={}; Object.values(visits).forEach(v=>{ if(!v.billingRef||v.status==='cancelled') return; const k=invKey(v.billingRef); const x=g[k]||(g[k]={invoiceNo:v.billingRef.trim(),date:'',n:0,net:0,miss:0,lines:[]}); x.n++; const c=ticketCharge(v); x.net=r2(x.net+c.net); if(c.missing) x.miss++; x.lines.push({ticket:v.id,emirate:c.emirate,kind:c.kind,service:c.service,collection:c.collection,waiting:c.waiting,net:c.net}); const d=(v.finished||v.scheduled||'').slice(0,10); if(d>x.date) x.date=d; });
@@ -1954,19 +1955,20 @@ function glBalances(E,from,to){ const m={}; E.forEach(e=>{ if((from&&e.date<from
 const natural=(c,x)=>{ const t=acctType(c); return r2(['asset','expense'].includes(t)?x.d-x.c:x.c-x.d); };
 function glPeriod(){ const y=todayDxb().slice(0,4); return {from:gui.from||y+'-01-01',to:gui.to||todayDxb()}; }
 function finGL(){
-  const E=glEntries(), {from,to}=glPeriod(), tabs=[['pl','Profit & Loss'],['bs','Balance Sheet'],['tb','Trial Balance'],['ledger','General Ledger'],['ar','Receivables & cash'],['vat201','VAT return'],['journals','Journals']];
+  const E=glEntries(), {from,to}=glPeriod(), tabs=[['pl','Profit & Loss'],['bs','Balance Sheet'],['tb','Trial Balance'],['ledger','General Ledger'],['ar','Receivables & cash'],['vat201','VAT return'],['ct','Corporate tax'],['journals','Journals']];
   const sel=`<div class="row" style="flex-wrap:wrap;gap:10px;align-items:end"><div class="tabs">${tabs.map(([k,l])=>`<button data-gtab="${k}" aria-pressed="${gui.tab===k}">${l}</button>`).join('')}</div>
-    <div class="actions" style="align-items:end">${gui.tab==='bs'?'':`<label class="sub" style="display:grid;gap:2px">From<input type="date" id="g-from" class="field" style="height:36px;width:auto" value="${from}"></label>`}<label class="sub" style="display:grid;gap:2px">${gui.tab==='bs'?'As at':'To'}<input type="date" id="g-to" class="field" style="height:36px;width:auto" value="${to}"></label>
+    <div class="actions" style="align-items:end">${['ct','ar'].includes(gui.tab)?'':gui.tab==='bs'?'':`<label class="sub" style="display:grid;gap:2px">From<input type="date" id="g-from" class="field" style="height:36px;width:auto" value="${from}"></label>`}${['ct','ar'].includes(gui.tab)?'':`<label class="sub" style="display:grid;gap:2px">${gui.tab==='bs'?'As at':'To'}<input type="date" id="g-to" class="field" style="height:36px;width:auto" value="${to}"></label>`}
     <select id="g-quick" class="field" style="height:36px;width:auto;margin:0;padding:0 30px 0 10px"><option value="">Quick period…</option><option value="tm">This month</option><option value="lm">Last month</option><option value="tq">This quarter</option><option value="lq">Last quarter</option><option value="ty">This year</option></select>
     ${downloadsApi?'<button class="btn" data-act="glxls">'+svg('doc',16)+'Excel</button>':''}</div></div>`;
   const susp=natural('9999',glBalances(E,'',to)['9999']||{d:0,c:0});
   const warn=Math.abs(susp)>0.004?`<div class="notice">${esc(money(Math.abs(susp)))} of bank lines are not sorted yet, so they sit in Suspense. <button class="linkbtn" data-act="autosort">Sort automatically</button> or pick a category under Bank.</div>`:'';
-  const body={pl:glPL,bs:glBS,tb:glTB,ledger:glLedger,ar:glAR,vat201:glVAT,journals:glJournals}[gui.tab](E,from,to);
+  const body={pl:glPL,bs:glBS,tb:glTB,ledger:glLedger,ar:glAR,vat201:glVAT,ct:glCT,journals:glJournals}[gui.tab](E,from,to);
   return sel+warn+body+lockBar()+`<div class="sub" style="font-size:12px">Every invoice, credit note, payment and bank line posts its own double entry automatically. These are management accounts — have your accountant review them before filing.</div>`;
 }
 const amtCell=n=>`<td class="amt">${Math.abs(n)<0.005?'—':esc((n<0?'(':'')+Math.abs(r2(n)).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})+(n<0?')':''))}</td>`;
 const acctLink=(c,label)=>`<button class="linkbtn" data-gacct="${esc(c)}">${esc(label||(c+' · '+acctName(c)))}</button>`;
-function glPL(E,from,to){
+function glPL(E,from,to){ return glPL0(E,from,to)+glTrend(E,from,to); }
+function glPL0(E,from,to){
   const B=glBalances(E,from,to), rows=t=>chart().filter(a=>a[2]===t&&B[a[0]]).map(a=>[a[0],natural(a[0],B[a[0]])]).filter(r=>Math.abs(r[1])>0.004);
   const inc=rows('income'), exp=rows('expense'), ti=r2(inc.reduce((s,r)=>s+r[1],0)), te=r2(exp.reduce((s,r)=>s+r[1],0));
   const sec=(t,rs,tot)=>`<tr><td colspan="2" style="font-weight:700;padding-top:14px">${t}</td></tr>${rs.map(([c,v])=>`<tr><td style="padding-left:18px">${acctLink(c)}</td>${amtCell(v)}</tr>`).join('')||'<tr><td class="sub" style="padding-left:18px">None in this period</td><td></td></tr>'}<tr><td style="font-weight:600">Total ${t.toLowerCase()}</td>${amtCell(tot)}</tr>`;
@@ -2063,12 +2065,13 @@ function finBills(){
     <label>Amount before VAT (AED)<input class="field" id="bill-net" name="net" type="number" step="0.01" min="0" required value="${f.net??''}"></label>
     <label>VAT (AED) <span class="sub">— 0 if the supplier is not VAT registered</span><input class="field" id="bill-vat" name="vat" type="number" step="0.01" min="0" value="${f.vat??''}"></label>
     <label>Supplier TRN<input class="field" name="supTrn" value="${esc(f.supTrn||'')}" placeholder="needed to reclaim VAT"></label>
-    <label class="span2">Notes<input class="field" name="notes" value="${esc(f.notes||'')}"></label></div>
+    <label class="span2">Notes<input class="field" name="notes" value="${esc(f.notes||'')}"></label>
+    <label class="chk span2"><input type="checkbox" name="repeat" ${f.repeat&&f.repeat.day&&!f.repeat.stopped?'checked':''}> Repeats every month (rent, salaries, subscriptions) — a new bill is created on the same day each month</label></div>
     <div class="formfoot" style="padding:12px 0 0"><button class="btn primary" type="submit">Save bill</button></div></div></form>`:'';
   return `<div class="row" style="flex-wrap:wrap"><div class="tabs">${[['unpaid','Unpaid'],['overdue','Overdue'],['paid','Paid'],['all','All']].map(([k,l])=>`<button data-bst="${k}" aria-pressed="${bui.st===k}">${l}</button>`).join('')}</div>
     <div class="actions"><label class="search">${svg('search',16)}<input id="b-q" class="field" type="search" placeholder="Search supplier or bill no." value="${esc(bui.q)}"></label><button class="btn primary" data-act="billnew">+ New bill</button></div></div>
     ${form}<div class="card"><div class="card-h"><h3>Supplier bills</h3><span class="sub">You owe ${esc(money(owe))}${over?' · '+esc(money(over))+' overdue':''}</span></div>
-    ${list.length?`<div class="tblwrap"><table class="tbl"><thead><tr><th>Date</th><th>Supplier</th><th>Bill no.</th><th>Type</th><th class="amt">Net</th><th class="amt">VAT</th><th class="amt">Total</th><th class="amt">Paid</th><th>Status</th><th></th></tr></thead><tbody>${list.map(b=>{ const st=billState(b); return `<tr><td class="num">${esc(fdx(b.date))}</td><td><b>${esc(b.supplier)}</b></td><td>${esc(b.billNo)}</td><td class="sub">${esc(b.category)}</td><td class="amt">${esc(money(b.net))}</td><td class="amt">${+b.vat?esc(money(b.vat)):'—'}</td><td class="amt"><b>${esc(money(billTotal(b)))}</b></td><td class="amt">${billPaid(b)?esc(money(billPaid(b))):'—'}</td><td><span class="chip ${st.cls}">${st.label}</span>${b.dueDate&&st.k!=='paid'?`<div class="sub" style="font-size:11px">due ${esc(fdx(b.dueDate))}</div>`:''}</td>
+    ${list.length?`<div class="tblwrap"><table class="tbl"><thead><tr><th>Date</th><th>Supplier</th><th>Bill no.</th><th>Type</th><th class="amt">Net</th><th class="amt">VAT</th><th class="amt">Total</th><th class="amt">Paid</th><th>Status</th><th></th></tr></thead><tbody>${list.map(b=>{ const st=billState(b); return `<tr><td class="num">${esc(fdx(b.date))}</td><td><b>${esc(b.supplier)}</b>${b.repeat&&b.repeat.day&&!b.repeat.stopped?' <span class="pill plain" style="font-size:11px">monthly</span>':''}</td><td>${esc(b.billNo)}</td><td class="sub">${esc(b.category)}</td><td class="amt">${esc(money(b.net))}</td><td class="amt">${+b.vat?esc(money(b.vat)):'—'}</td><td class="amt"><b>${esc(money(billTotal(b)))}</b></td><td class="amt">${billPaid(b)?esc(money(billPaid(b))):'—'}</td><td><span class="chip ${st.cls}">${st.label}</span>${b.dueDate&&st.k!=='paid'?`<div class="sub" style="font-size:11px">due ${esc(fdx(b.dueDate))}</div>`:''}</td>
       <td style="white-space:nowrap;text-align:right">${st.k!=='paid'?`<button class="linkbtn" data-billpp="${esc(b.id)}" title="Paid in cash or by a partner, not from a bank account in the hub">Paid by partner</button> `:''}<button class="linkbtn" data-billedit="${esc(b.id)}">Edit</button> <button class="linkbtn danger" data-billdel="${esc(b.id)}">${bui.del===b.id?'Confirm':'Delete'}</button></td></tr>`; }).join('')}</tbody></table></div>`:`<div class="empty">${all.length?'No bills in this view.':'No supplier bills yet. Add each supplier invoice here: the expense and its VAT go into the accounts and the VAT return, and bank payments are matched to it.'}</div>`}
     <div class="card-b sub" style="font-size:12px">Bank payments are matched to a bill automatically when the amount equals what is left on it, or pick the bill on the bank line.</div></div>`;
 }
@@ -2096,6 +2099,48 @@ function glAR(){
 }
 function lockBar(){ const L=lockedThrough(); return `<div class="card"><div class="card-b" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap"><span>${L?`🔒 Books closed through <b>${esc(fdx(L))}</b> — invoices, bills, bank lines and journals up to that date can no longer change.`:'Books are open. When a month is checked and its VAT filed, close it so nothing in it changes by mistake.'}</span>
    <span style="margin-left:auto;display:flex;gap:8px;align-items:center;flex-wrap:wrap"><input type="date" id="lock-date" class="field" style="height:36px;width:auto;margin:0" value="${esc(L||(()=>{ const m=todayDxb().slice(0,7), y=+m.slice(0,4), mo=+m.slice(5,7); return monthEnd(mo===1?(y-1)+'-12':y+'-'+String(mo-1).padStart(2,'0')); })())}"><button class="btn" data-act="lockset">${gui.lockConfirm?'Confirm close':'Close books to this date'}</button>${L?'<button class="linkbtn" data-act="lockopen">Reopen</button>':''}</span></div></div>`; }
+
+/* ---------- monthly trend, repeating bills, corporate tax ---------- */
+function glTrend(E,from,to){
+  const months=[]; let m=from.slice(0,7); while(m<=to.slice(0,7)&&months.length<24){ months.push(m); m=nextMonth(m); } if(months.length<2) return '';
+  const data=months.map(mm=>{ const B=glBalances(E,mm+'-01',monthEnd(mm)); let inc=0, exp=0; chart().forEach(a=>{ if(!B[a[0]]) return; if(a[2]==='income') inc+=natural(a[0],B[a[0]]); if(a[2]==='expense') exp+=natural(a[0],B[a[0]]); }); return {m:mm,inc:r2(inc),exp:r2(exp),net:r2(inc-exp)}; });
+  const mx=Math.max(1,...data.flatMap(d=>[d.inc,d.exp])), W=Math.max(320,data.length*58), H=190, pb=28, pt=14, ch=H-pb-pt, bw=Math.min(18,(W/data.length-14)/2);
+  const y=v=>pt+ch-(Math.max(0,v)/mx)*ch;
+  const bars=data.map((d,i)=>{ const cx=(i+.5)*(W/data.length); return `<g><title>${esc(mlab(d.m))}: income ${esc(money(d.inc))}, expenses ${esc(money(d.exp))}, profit ${esc(money(d.net))}</title><rect x="${cx-bw-1}" y="${y(d.inc)}" width="${bw}" height="${pt+ch-y(d.inc)}" rx="3" fill="var(--s-completed)"/><rect x="${cx+1}" y="${y(d.exp)}" width="${bw}" height="${pt+ch-y(d.exp)}" rx="3" fill="var(--bar)"/><text x="${cx}" y="${H-10}" text-anchor="middle" font-size="11" fill="var(--muted)">${esc(MON[+d.m.slice(5)-1])}</text></g>`; }).join('');
+  const line=data.map((d,i)=>`${(i+.5)*(W/data.length)},${y(Math.max(0,d.net))}`).join(' ');
+  return `<div class="card"><div class="card-h"><div><h3>Month by month</h3><div class="sub">Income and expenses before VAT · the line is profit</div></div><div class="legend"><span><i style="background:var(--s-completed)"></i>Income</span><span><i style="background:var(--bar)"></i>Expenses</span><span><i style="background:var(--gold)"></i>Profit</span></div></div>
+   <div class="card-b" style="overflow-x:auto"><svg viewBox="0 0 ${W} ${H}" width="100%" height="${H+40}" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Monthly income, expenses and profit" style="display:block;min-width:${Math.min(W,560)}px"><line x1="0" x2="${W}" y1="${pt+ch}" y2="${pt+ch}" stroke="var(--line)"/>${bars}<polyline points="${line}" fill="none" stroke="var(--gold)" stroke-width="2.5"/>${data.map((d,i)=>`<circle cx="${(i+.5)*(W/data.length)}" cy="${y(Math.max(0,d.net))}" r="3.5" fill="var(--gold)"/>`).join('')}</svg>
+   <details style="margin-top:8px"><summary class="sub" style="cursor:pointer">Show as table</summary><div class="tblwrap"><table class="tbl"><thead><tr><th>Month</th><th class="amt">Income</th><th class="amt">Expenses</th><th class="amt">Profit</th></tr></thead><tbody>${data.map(d=>`<tr><td>${esc(mlab(d.m))}</td>${amtCell(d.inc)}${amtCell(d.exp)}${amtCell(d.net)}</tr>`).join('')}</tbody></table></div></details></div></div>`;
+}
+/* repeating bills: the newest bill of a series is copied each month on its day */
+async function repeatBills(){
+  const t=todayDxb(), series={}; let made=0;
+  Object.values(bills).filter(b=>b.repeat&&b.repeat.day).forEach(b=>{ const k=b.series||b.id; if(!series[k]||(b.date||'')>(series[k].date||'')) series[k]=b; });
+  for(const last of Object.values(series)){ if(last.repeat.stopped) continue; let cur=last;
+    for(let n=0;n<12;n++){ const nm=nextMonth(cur.date.slice(0,7)), day=Math.min(+cur.repeat.day,+monthEnd(nm).slice(8)), date=nm+'-'+String(day).padStart(2,'0'); if(date>t) break;
+      const no=(last.billNo||'').replace(/-\d{6}$/,'')+'-'+nm.replace('-',''); if(Object.values(bills).some(b=>(b.series||b.id)===(last.series||last.id)&&b.date===date)) { cur={...cur,date}; continue; }
+      const d={...last,date,dueDate:addDays(date,Math.max(0,Math.round((new Date((last.dueDate||last.date)+'T00:00:00Z')-new Date(last.date+'T00:00:00Z'))/864e5))),billNo:no,paidOther:0,paidDate:'',series:last.series||last.id,auto:true,notes:'Repeats monthly'+(last.notes?' · '+last.notes:''),at:new Date().toISOString()}; delete d.id;
+      if(await saveDoc('bills',newId('b'),d,bills)===false) break; made++; cur={...d}; } }
+  if(made) logAction('Repeating bills created',{detail:made+' bill(s)'});
+  return made;
+}
+/* UAE corporate tax estimate */
+function glCT(E){
+  const s=FS(), fy=+(s.fyStart||1), t=todayDxb(); let y=+t.slice(0,4); if(+t.slice(5,7)<fy) y--;
+  const yr=gui.ctYear||y, start=yr+'-'+String(fy).padStart(2,'0')+'-01', end=addDays((fy===1?yr+1:yr+1)+'-'+String(fy).padStart(2,'0')+'-01',-1);
+  const B=glBalances(E,start,end); let inc=0, exp=0; chart().forEach(a=>{ if(!B[a[0]]) return; if(a[2]==='income') inc+=natural(a[0],B[a[0]]); if(a[2]==='expense') exp+=natural(a[0],B[a[0]]); });
+  inc=r2(inc); exp=r2(exp); const prof=r2(inc-exp), adj=r2(+s.ctAdjust||0), taxable=r2(prof+adj), base=r2(Math.max(0,taxable-375000)), tax=r2(base*0.09), sbr=inc<=3000000&&end<='2026-12-31';
+  const due=addDays(addDays(end,1).slice(0,7)+'-01',0), dueDate=(()=>{ let m=end.slice(0,7); for(let k=0;k<9;k++) m=nextMonth(m); return monthEnd(m); })();
+  const r=(k,v,b)=>`<tr${b?' style="font-weight:700"':''}><td>${k}</td>${amtCell(v)}</tr>`;
+  return `<div class="card"><div class="card-h" style="flex-wrap:wrap"><h3>UAE Corporate Tax — estimate</h3><span class="sub">Financial year ${esc(fdx(start))} – ${esc(fdx(end))} · <select id="ct-year" class="field" style="height:32px;width:auto;margin:0;padding:0 28px 0 8px">${[y-1,y,y+1].map(v=>`<option${v===yr?' selected':''}>${v}</option>`).join('')}</select></span></div>
+   <div class="tblwrap"><table class="tbl"><tbody>${r('Revenue (from the accounts)',inc)}${r('Expenses',-exp)}${r('Accounting profit',prof,true)}
+    <tr><td>Adjustments your accountant gives you (non-deductible costs, exempt income…)</td><td class="amt"><input id="ct-adj" class="field" type="number" step="0.01" value="${adj||''}" placeholder="0" style="height:32px;width:130px;text-align:right;margin-left:auto;display:block"></td></tr>
+    ${r('Taxable income',taxable,true)}${r('Less: 0% band (first AED 375,000)',-Math.min(375000,Math.max(0,taxable)))}${r('Taxed at 9%',base)}
+    <tr style="font-weight:700;font-size:15px"><td style="border-top:2px solid var(--line)">Estimated Corporate Tax</td><td class="amt" style="border-top:2px solid var(--line)">${esc(money(tax))}</td></tr></tbody></table></div>
+   <div class="card-b" style="display:grid;gap:8px">
+    ${sbr?`<div class="notice">Revenue is at or below AED 3,000,000, so the company may be able to elect <b>Small Business Relief</b> for this period, which would make the tax AED 0. The relief applies to tax periods ending on or before 31 December 2026.</div>`:''}
+    <div class="sub" style="font-size:12.5px">Return and payment due by <b>${esc(fdx(dueDate))}</b> (9 months after the year end). This uses the hub's management accounts and the standard 0% / 9% rates; your accountant must confirm the taxable income, registration and any reliefs before you file on EmaraTax.</div></div></div>`;
+}
 
 /* ---------- inventory ---------- */
 const invState=i=>(+i.stock||0)<=0?{cls:'cancelled',label:'Out of stock'}:(+i.stock||0)<=(+i.min||0)?{cls:'review',label:'Low stock'}:{cls:'completed',label:'In stock'};
@@ -2365,6 +2410,8 @@ document.addEventListener('change',async e=>{
   if(t.dataset&&t.dataset.txinv!==undefined&&t.dataset.txinv){ const x=bankTx[t.dataset.txinv]; if(!x) return; const {id,...rest}=x; await saveDoc('bankTx',id,Object.assign(rest,{invoiceNo:t.value,category:t.value&&(!rest.category||rest.category==='Uncategorised')?'Customer receipt':rest.category}),bankTx); if(t.value) logAction('Matched receipt to invoice',{detail:t.value+' · '+money(x.amount)}); return; }
   if(t.id==='fb-acct'){ fui.acct=t.value; fui.limit=100; render(); return; }
   if(t.id==='fb-month'){ fui.month=t.value; fui.limit=100; render(); return; }
+  if(t.id==='ct-year'){ gui.ctYear=+t.value; render(); return; }
+  if(t.id==='ct-adj'){ const d=Object.assign({},finSettings.main||{},{ctAdjust:r2(t.value)}); delete d.id; await saveDoc('finSettings','main',d,finSettings); return; }
   if(t.id==='g-from'){ gui.from=t.value; render(); return; }
   if(t.id==='g-to'){ gui.to=t.value; render(); return; }
   if(t.id==='g-quick'&&t.value){ const [a,b]=quickPeriod(t.value); gui.from=a; gui.to=b; render(); return; }
@@ -2457,7 +2504,7 @@ document.addEventListener('submit',async e=>{
     const d=r2(lines.reduce((s2,l)=>s2+l.d,0)), c=r2(lines.reduce((s2,l)=>s2+l.c,0)); if(Math.abs(d-c)>0.004){ toast('Debits and credits must be equal (difference '+money(d-c)+').'); return; }
     const no='JV-'+String(Object.keys(journals).length+1).padStart(3,'0'); if(await saveDoc('journals',newId('j'),{no,date:el.date.value,memo:(el.memo.value||'').trim(),lines,preset:f.preset||'',at:new Date().toISOString()},journals)===false) return;
     logAction('Posted journal',{detail:no+' · '+money(d)+' · '+(el.memo.value||'').trim()}); gui.jf=null; toast('Journal '+no+' posted'); return; }
-  if(id==='fbillform'){ const el=e.target.elements, f=bui.form||{}; const d={supplier:el.supplier.value.trim(),billNo:el.billNo.value.trim(),date:el.date.value,dueDate:el.dueDate.value||addDays(el.date.value,30),category:el.category.value,net:r2(el.net.value),vat:el.vat.value===''?r2(+el.net.value*VAT_RATE):r2(el.vat.value),supTrn:el.supTrn.value.trim(),notes:el.notes.value.trim(),paidOther:+f.paidOther||0,paidDate:f.paidDate||'',at:new Date().toISOString()};
+  if(id==='fbillform'){ const el=e.target.elements, f=bui.form||{}; const d={supplier:el.supplier.value.trim(),billNo:el.billNo.value.trim(),date:el.date.value,dueDate:el.dueDate.value||addDays(el.date.value,30),category:el.category.value,net:r2(el.net.value),vat:el.vat.value===''?r2(+el.net.value*VAT_RATE):r2(el.vat.value),supTrn:el.supTrn.value.trim(),notes:el.notes.value.trim(),repeat:el.repeat.checked?{day:+el.date.value.slice(8,10)}:(f.repeat?{...f.repeat,stopped:true}:null),series:f.series||'',paidOther:+f.paidOther||0,paidDate:f.paidDate||'',at:new Date().toISOString()};
     if(Object.values(bills).some(b=>b.id!==f.id&&invKey(b.billNo)===invKey(d.billNo)&&(b.supplier||'').toLowerCase()===d.supplier.toLowerCase())){ toast('This supplier bill is already recorded.'); return; }
     const id=f.id||newId('b'); if(await saveDoc('bills',id,d,bills)===false) return; logAction(f.id?'Updated supplier bill':'Recorded supplier bill',{detail:d.supplier+' '+d.billNo+' · '+money(d.net+d.vat)}); bui.form=null; toast('Bill saved'); return; }
   if(id==='fsetform'){ const el=e.target.elements; const d={autoInvoice:el.autoInvoice.checked,rate:Math.max(0,r2(el.rate.value)),terms:Math.min(180,Math.max(0,parseInt(el.terms.value,10)||0)),customerAliases:(()=>{ const old=FS().customer, nw=(el.customer.value||'').trim(), al=new Set(FS().customerAliases||[]); if(old&&nw&&old!==nw) al.add(old); al.delete(nw); return [...al]; })(),autoNumber:el.autoNumber.value,reviewIssue:!!(el.reviewIssue&&el.reviewIssue.checked),halfFrom:el.autoNumber.value==='half'?(FS().halfFrom||todayDxb().slice(0,7)):(FS().halfFrom||''),invPrefix:((el.nextNoTxt.value.match(/^\s*([A-Za-z]+[\s\-]?)/)||[,'ZRA '])[1].replace('-',' ').replace(/([A-Za-z])$/,'$1 ').toUpperCase()),nextNo:parseInt((el.nextNoTxt.value.match(/(\d+)\s*$/)||[,0])[1],10)||0,customer:(el.customer.value||'').trim()||'Easy Renovations LLC',endClient:(el.endClient.value||'').trim(),autoStatement:el.autoStatement.checked,stmtDay:Math.min(28,Math.max(1,parseInt(el.stmtDay.value,10)||1)),at:new Date().toISOString()};
