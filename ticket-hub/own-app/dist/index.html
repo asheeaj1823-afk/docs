@@ -1309,7 +1309,7 @@ async function atQuickCheck(){
 }
 document.addEventListener('visibilitychange',()=>{ if(document.visibilityState==='visible'&&atQuickT&&Date.now()-atQuickAt>60000) atQuickCheck(); });
 /* service report PDF attached to each closed ticket (made again if Airtable changes the report later) */
-const repSig=v=>{ const t=[v.status,v.scheduled,v.arrived,v.finished,v.technician,v.findings,v.work,v.nextAction,v.outcome,v.issue,v.site,v.product,v.model,v.region,v.customerFeedback,(v.parts||[]).map(p=>p.name+p.qty).join(','),(v.airtableFiles||[]).length,'design2'].join('|'); let h=0; for(let i=0;i<t.length;i++){ h=(h*31+t.charCodeAt(i))|0; } return String(h>>>0); };
+const repSig=v=>{ const t=[v.status,v.scheduled,v.arrived,v.finished,v.technician,v.findings,v.work,v.nextAction,v.outcome,v.issue,v.site,v.product,v.model,v.region,v.customerFeedback,(v.parts||[]).map(p=>p.name+p.qty).join(','),(v.airtableFiles||[]).length,'design3'].join('|'); let h=0; for(let i=0;i<t.length;i++){ h=(h*31+t.charCodeAt(i))|0; } return String(h>>>0); };
 let repBusy=false;
 const atReports=v=>(v.airtableFiles||[]).filter(f=>/pdf/i.test(f.type||'')||/\.pdf$/i.test(f.name||'')).filter(f=>{ const n=String(f.name||'').toUpperCase().replace(/[\s_]/g,'-'); return n.includes(String(tref(v)).toUpperCase())||n.includes('SRV-26-'+v.id)||/REPORT/.test(n); });
 const REPORT_FROM=()=>FS().reportFrom||'2026-06-01';   /* service report PDFs only for tickets from this date */
@@ -2731,63 +2731,67 @@ async function downloadReport(v,asBlob){
   if(!window.jspdf){ if(!asBlob) toast('Report download is not available in this view.'); return; }
   if(!asBlob&&!downloadsApi){ toast('Report download is not available in this view.'); return; }
   const c=CO(), fs=FS(), inv=invFor(v); const {jsPDF}=window.jspdf; const doc=new jsPDF({unit:'pt',format:'a4'});
-  const W=595.28,H=841.89,M=36,X2=W-M,CW=X2-M; const NAVY=[10,31,77], GOLD=[201,151,47], INK=[28,34,48], MUT=[105,114,134], RULE=[214,219,228], SOFT=[244,246,250];
-  const repNo='SR-'+v.id, issued=dmy(new Date().toISOString());
-  const fd=d=>d?String(d).slice(0,10).split('-').reverse().join('/'):'—', tm=d=>d?hm(d):'—';
+  const W=595.28,H=841.89,M=34,X2=W-M,CW=X2-M; const NAVY=[10,31,77], NAVY2=[19,48,107], GOLD=[201,151,47], GOLDL=[251,243,223], INK=[24,30,44], MUT=[102,112,132], RULE=[222,226,234], CARD=[246,248,252], WHITE=[255,255,255];
+  const repNo='SR-'+v.id, issued=dmy(new Date().toISOString()), fd=d=>d?String(d).slice(0,10).split('-').reverse().join('/'):'—', tm=d=>d?hm(d):'—';
   const T=(t,x,y,o={})=>{ doc.setFont('helvetica',o.b?'bold':'normal'); doc.setFontSize(o.s||9); doc.setTextColor(...(o.c||INK)); doc.text(String(t??''),x,y,Object.assign({},o.a?{align:o.a}:{},o.cs?{charSpace:o.cs}:{})); };
-  const wrap=(t,w,s,b)=>{ doc.setFont('helvetica',b?'bold':'normal'); doc.setFontSize(s); return doc.splitTextToSize(String(t||''),w); };
+  const wrap=(t,w,sz,b)=>{ doc.setFont('helvetica',b?'bold':'normal'); doc.setFontSize(sz); return doc.splitTextToSize(String(t||''),w); };
+  const poly=(pts,col)=>{ doc.setFillColor(...col); doc.lines(pts.slice(1).map((p,k)=>[p[0]-pts[k][0],p[1]-pts[k][1]]),pts[0][0],pts[0][1],[1,1],'F',true); };
+  const st=STATUS[v.status]||v.status, stCol=v.status==='completed'?[17,115,77]:v.status==='cancelled'?[120,128,140]:v.status==='review'?[180,120,20]:[29,91,184];
   let y=0;
-  const band=(first)=>{ doc.setFillColor(...NAVY); doc.rect(0,0,W,first?84:34,'F'); doc.setFillColor(...GOLD); doc.rect(0,first?84:34,W,2.5,'F');
-    if(first){ T(c.legalName||'',M,32,{b:true,s:12.5,c:[255,255,255]}); T([c.address,c.trn&&'TRN '+c.trn].filter(Boolean).join('  ·  '),M,47,{s:7.6,c:[201,211,234]}); T([c.phone,c.email].filter(Boolean).join('  ·  '),M,59,{s:7.6,c:[201,211,234]});
-      T('SERVICE REPORT',X2,36,{b:true,s:19,c:[255,255,255],a:'right',cs:1.2}); T('Report No. '+repNo,X2,52,{b:true,s:8.6,c:GOLD,a:'right'}); T('Issued '+issued,X2,64,{s:7.8,c:[201,211,234],a:'right'}); y=106; }
-    else { T('SERVICE REPORT  ·  '+repNo+'  ·  '+tref(v),M,22,{b:true,s:9,c:[255,255,255]}); T(c.legalName||'',X2,22,{s:7.6,c:[201,211,234],a:'right'}); y=56; } };
-  const need=h=>{ if(y+h>H-60){ doc.addPage(); band(false); } };
-  band(true);
-  // key facts strip
-  const st=STATUS[v.status]||v.status, stCol=v.status==='completed'?[17,115,77]:v.status==='cancelled'?[120,128,140]:[29,91,184];
-  const facts=[['TICKET NO.',tref(v)],['VISIT DATE',fd(v.scheduled)],['TECHNICIAN',v.technician||'—'],['INVOICE',inv&&inv.no?inv.no+(inv.planned?' (planned)':''):'—']], fwr=[0.34,0.19,0.25,0.22], fx=fwr.reduce((a,w,k)=>(a.push(k?a[k-1]+fwr[k-1]*CW:M),a),[]);
-  doc.setFillColor(...SOFT); doc.setDrawColor(...RULE); doc.setLineWidth(.6); doc.roundedRect(M,y,CW,44,5,5,'FD');
-  facts.forEach(([l,val],k)=>{ const x=fx[k]+12, w=fwr[k]*CW; if(k){ doc.setDrawColor(...RULE); doc.line(fx[k],y+8,fx[k],y+36); } T(l,x,y+16,{b:true,s:6.8,c:MUT,cs:.6}); const sz=doc.setFont('helvetica','bold')&&doc.setFontSize(9.4)&&doc.getTextWidth(String(val))>w-20?8.4:9.4; T(wrap(val,w-16,sz,true)[0],x,y+31,{b:true,s:sz}); });
-  y+=56;
-  // status line
-  doc.setFillColor(...stCol); doc.roundedRect(M,y,74,17,8.5,8.5,'F'); T(String(st).toUpperCase(),M+37,y+11.6,{b:true,s:7.4,c:[255,255,255],a:'center',cs:.6});
-  if(v.outcome) T('Outcome: ',M+84,y+11.8,{s:8.6,c:MUT}), T(v.outcome,M+84+doc.getTextWidth('Outcome: ')+2,y+11.8,{b:true,s:8.6});
-  if(v.type) T('Visit type: '+v.type,X2,y+11.8,{s:8.6,c:MUT,a:'right'});
-  y+=30;
-  // two cards: customer / equipment
-  const card=(x,w,title,rows)=>{ rows=rows.filter(r=>r[1]&&String(r[1]).trim()); const lines=rows.map(([l,val])=>wrap(val,w-96,8.6,true)); const h=26+lines.reduce((a,ls)=>a+Math.max(1,ls.length)*11.5+5,0);
-    return {h,draw:(yy,hh)=>{ doc.setDrawColor(...RULE); doc.setLineWidth(.7); doc.roundedRect(x,yy,w,hh,5,5); doc.setFillColor(...GOLD); doc.rect(x,yy+9,3,12,'F'); T(title,x+12,yy+18,{b:true,s:8.2,c:NAVY,cs:.8});
-      let ry=yy+34; rows.forEach(([l],k)=>{ T(l,x+12,ry,{s:7.8,c:MUT}); lines[k].forEach((t,n)=>T(t,x+90,ry+n*11.5,{b:true,s:8.6})); ry+=Math.max(1,lines[k].length)*11.5+5; }); }}; };
-  const cw2=(CW-12)/2;
-  const c1=card(M,cw2,'CUSTOMER & SITE',[['Customer',String(fs.customer||'Easy Renovation LLC')],['End client',fs.endClient||'Kohler'],['Site',v.site],['Emirate',v.region],['Address',v.address],['Contact',v.contact],['Email',v.email]]);
-  const c2=card(M+cw2+12,cw2,'EQUIPMENT',[['Product',v.product],['Category',v.category],['SKU / Model',v.model],['Serial no.',v.serial],['Washroom',v.washroom]]);
-  const ch=Math.max(c1.h,c2.h); need(ch); c1.draw(y,ch); c2.draw(y,ch); y+=ch+16;
-  // visit timeline
-  need(64); T('VISIT TIMELINE',M,y+8,{b:true,s:8.2,c:NAVY,cs:.8}); y+=18;
+  const header=(first)=>{ const hh=first?150:40; doc.setFillColor(...NAVY); doc.rect(0,0,W,hh,'F');
+    // gold diagonal stripes (brand)
+    poly([[0,first?52:16],[first?70:26,0],[first?84:34,0],[0,first?64:22]],GOLD); poly([[0,first?74:26],[first?94:36,0],[first?100:40,0],[0,first?80:30]],[226,190,110]);
+    if(first){ poly([[W,hh-58],[W-96,hh],[W-82,hh],[W,hh-46]],GOLD); poly([[W,hh-38],[W-62,hh],[W-56,hh],[W,hh-32]],[226,190,110]); }
+    if(first){ T(c.legalName||'',M+60,30,{b:true,s:10.5,c:WHITE}); T([c.address,c.trn&&'TRN '+c.trn,c.phone].filter(Boolean).join('   ·   '),M+60,43,{s:7.2,c:[190,202,228]});
+      T('SERVICE REPORT',M+60,84,{b:true,s:26,c:WHITE,cs:2}); doc.setFillColor(...GOLD); doc.rect(M+60,94,64,3,'F'); T(tref(v),M+60,114,{b:true,s:12,c:GOLD,cs:.5}); T((v.site||'').split('|')[0].trim()+(v.region?'  ·  '+v.region:''),M+60,130,{s:9,c:[214,222,240]});
+      // white info box at the right
+      const bx=X2-150, by=58; doc.setFillColor(...WHITE); doc.roundedRect(bx,by,150,72,6,6,'F');
+      T('REPORT NO.',bx+12,by+16,{b:true,s:6.6,c:MUT,cs:.6}); T(repNo,bx+12,by+29,{b:true,s:11,c:NAVY}); T('ISSUED',bx+84,by+16,{b:true,s:6.6,c:MUT,cs:.6}); T(issued,bx+84,by+29,{b:true,s:8.4,c:NAVY});
+      doc.setFillColor(...stCol); doc.roundedRect(bx+12,by+40,126,20,10,10,'F'); T(String(st).toUpperCase(),bx+75,by+53.6,{b:true,s:8.4,c:WHITE,a:'center',cs:1}); y=hh+20; }
+    else { T('SERVICE REPORT',M+56,25,{b:true,s:10,c:WHITE,cs:1.2}); T(repNo+'  ·  '+tref(v),M+170,25,{s:8.4,c:GOLD}); T(c.legalName||'',X2,25,{s:7.4,c:[190,202,228],a:'right'}); y=hh+22; } };
+  const need=h=>{ if(y+h>H-58){ doc.addPage(); header(false); } };
+  header(true);
+  // info tiles
   const mins=(v.arrived&&v.finished)?Math.max(0,Math.round((new Date(v.finished)-new Date(v.arrived))/60000)):null;
-  const tl=[['Scheduled',v.scheduled?fd(v.scheduled)+' '+tm(v.scheduled):'—'],['Time In',v.arrived?tm(v.arrived):'—'],['Time Out',v.finished?tm(v.finished):'—'],['Time on site',mins!=null?dur(mins):'—']], tw=CW/4;
-  doc.setDrawColor(...RULE); doc.setLineWidth(1.2); doc.line(M+tw/2,y+8,X2-tw/2,y+8);
-  tl.forEach(([l,val],k)=>{ const cx=M+k*tw+tw/2; doc.setFillColor(...(k===3?GOLD:NAVY)); doc.circle(cx,y+8,4.2,'F'); T(l,cx,y+26,{s:7.6,c:MUT,a:'center'}); T(val,cx,y+39,{b:true,s:9,a:'center'}); });
-  y+=56;
-  // numbered sections
-  let n=0; const sec=(title,text)=>{ text=String(text||'').trim(); if(!text) return; n++; need(48);
-    doc.setFillColor(...NAVY); doc.roundedRect(M,y,16,16,3,3,'F'); T(String(n),M+8,y+11.4,{b:true,s:8.4,c:[255,255,255],a:'center'}); T(title.toUpperCase(),M+24,y+11.4,{b:true,s:8.6,c:NAVY,cs:.7});
-    doc.setDrawColor(...RULE); doc.setLineWidth(.6); doc.setFont('helvetica','bold'); doc.setFontSize(8.6); doc.line(M+24+doc.getTextWidth(title.toUpperCase())+title.length*0.7+12,y+8,X2,y+8); y+=24;
-    const ls=wrap(text,CW-12,9.1,false); ls.forEach(t=>{ need(14); T(t,M+12,y+9,{s:9.1}); y+=12.6; }); y+=10; };
-  sec('Reported issue',v.issue); sec('Findings',v.findings); sec('Work performed',v.work); sec('Recommendation / next action',v.nextAction); sec('Customer feedback',v.customerFeedback);
-  if((v.parts||[]).length){ n++; need(60); doc.setFillColor(...NAVY); doc.roundedRect(M,y,16,16,3,3,'F'); T(String(n),M+8,y+11.4,{b:true,s:8.4,c:[255,255,255],a:'center'}); T('PARTS USED',M+24,y+11.4,{b:true,s:8.6,c:NAVY,cs:.7}); y+=24;
-    doc.setFillColor(...SOFT); doc.rect(M,y,CW,18,'F'); T('#',M+8,y+12,{b:true,s:7.8,c:MUT}); T('Part',M+30,y+12,{b:true,s:7.8,c:MUT}); T('Qty',X2-8,y+12,{b:true,s:7.8,c:MUT,a:'right'}); y+=18;
-    v.parts.forEach((pt,k)=>{ need(18); T(String(k+1),M+8,y+12,{s:8.6}); T(wrap(pt.name,CW-90,8.6)[0],M+30,y+12,{s:8.6}); T(String(pt.qty||''),X2-8,y+12,{b:true,s:8.6,a:'right'}); doc.setDrawColor(...RULE); doc.line(M,y+18,X2,y+18); y+=18; }); y+=12; }
-  const files=v.airtableFiles||[]; if(files.length){ const im=files.filter(f=>/^image\//.test(f.type)).length, vd=files.filter(f=>/^video\//.test(f.type)).length, dc=files.length-im-vd;
-    sec('Photo record',[im&&im+' photo'+(im>1?'s':''),vd&&vd+' video'+(vd>1?'s':''),dc&&dc+' document'+(dc>1?'s':'')].filter(Boolean).join(' · ')+' were taken on site and are kept with the ticket record.'); }
+  const tiles=[['TECHNICIAN',v.technician||'—'],['VISIT DATE',fd(v.scheduled)],['TIME ON SITE',mins!=null?dur(mins):'—'],['INVOICE',inv&&inv.no?inv.no:'—']], gap=10, tw=(CW-gap*3)/4;
+  tiles.forEach(([l,val],k)=>{ const x=M+k*(tw+gap); doc.setFillColor(...CARD); doc.roundedRect(x,y,tw,50,6,6,'F'); doc.setFillColor(...(k===3?GOLD:NAVY)); doc.rect(x,y,tw,3.5,'F'); T(l,x+11,y+19,{b:true,s:6.8,c:MUT,cs:.7}); T(wrap(val,tw-20,10.5,true)[0],x+11,y+37,{b:true,s:10.5,c:NAVY}); if(k===3&&inv&&inv.planned) T('planned',x+tw-10,y+19,{s:6.8,c:GOLD,a:'right'}); });
+  y+=66;
+  // section header bar
+  let n=0; const bar=(title)=>{ n++; need(44); doc.setFillColor(...NAVY); doc.roundedRect(M,y,CW,22,4,4,'F'); doc.setFillColor(...GOLD); doc.roundedRect(M,y,30,22,4,4,'F'); doc.rect(M+20,y,10,22,'F');
+    T(String(n).padStart(2,'0'),M+15,y+15,{b:true,s:9.5,c:NAVY,a:'center'}); T(title.toUpperCase(),M+42,y+15,{b:true,s:9,c:WHITE,cs:1}); y+=30; };
+  // two info cards
+  const kv=(x,w,rows)=>{ rows=rows.filter(r=>r[1]&&String(r[1]).trim()); const ls=rows.map(([,val])=>wrap(val,w-104,8.7,true)); const h=12+ls.reduce((a,l)=>a+Math.max(1,l.length)*11.6+6,0);
+    return {h,draw:(yy,hh)=>{ doc.setFillColor(...CARD); doc.roundedRect(x,yy,w,hh,6,6,'F'); let ry=yy+19; rows.forEach(([l],k)=>{ T(l,x+12,ry,{s:7.8,c:MUT}); ls[k].forEach((t,q)=>T(t,x+96,ry+q*11.6,{b:true,s:8.7})); ry+=Math.max(1,ls[k].length)*11.6+6; }); }}; };
+  bar('Customer & equipment');
+  const w2=(CW-10)/2;
+  const k1=kv(M,w2,[['Customer',String(fs.customer||'Easy Renovation LLC')],['End client',fs.endClient||'Kohler'],['Site',v.site],['Address',v.address],['Contact',v.contact],['Email',v.email]]);
+  const k2=kv(M+w2+10,w2,[['Product',v.product],['Category',v.category],['SKU / Model',v.model],['Serial no.',v.serial],['Washroom',v.washroom],['Visit type',v.type]]);
+  const kh=Math.max(k1.h,k2.h); need(kh); k1.draw(y,kh); k2.draw(y,kh); y+=kh+16;
+  // timeline
+  bar('Visit timeline'); need(58);
+  const tl=[['Scheduled',v.scheduled?fd(v.scheduled):'—',v.scheduled?tm(v.scheduled):''],['Time In',v.arrived?tm(v.arrived):'—',v.arrived?fd(v.arrived):''],['Time Out',v.finished?tm(v.finished):'—',v.finished?fd(v.finished):''],['On site',mins!=null?dur(mins):'—','']], sw=CW/4;
+  doc.setDrawColor(...GOLD); doc.setLineWidth(2); doc.line(M+sw/2,y+10,X2-sw/2,y+10);
+  tl.forEach(([l,a,b],k)=>{ const cx=M+k*sw+sw/2; doc.setFillColor(...WHITE); doc.setDrawColor(...(k===3?GOLD:NAVY)); doc.setLineWidth(2.4); doc.circle(cx,y+10,6,'FD'); doc.setFillColor(...(k===3?GOLD:NAVY)); doc.circle(cx,y+10,2.6,'F');
+    T(l.toUpperCase(),cx,y+30,{b:true,s:6.8,c:MUT,a:'center',cs:.6}); T(a,cx,y+43,{b:true,s:10,c:NAVY,a:'center'}); if(b) T(b,cx,y+54,{s:7.4,c:MUT,a:'center'}); });
+  y+=68;
+  // outcome ribbon
+  if(v.outcome){ need(34); doc.setFillColor(...GOLDL); doc.roundedRect(M,y,CW,26,5,5,'F'); doc.setFillColor(...GOLD); doc.rect(M,y,4,26,'F'); T('OUTCOME',M+14,y+16.5,{b:true,s:7.4,c:[125,92,18],cs:.8}); T(v.outcome,M+76,y+17,{b:true,s:10,c:NAVY}); if(v.returnVisit) T('Return visit: '+v.returnVisit,X2-12,y+17,{s:8.2,c:[125,92,18],a:'right'}); y+=38; }
+  // text sections
+  const para=(title,text)=>{ text=String(text||'').trim(); if(!text) return; bar(title); const ls=wrap(text,CW-28,9.2,false); let k=0;
+    while(k<ls.length){ need(26); const fit=Math.max(1,Math.min(ls.length-k,Math.floor((H-58-y-14)/12.8))), part=ls.slice(k,k+fit), h=part.length*12.8+14; doc.setFillColor(...CARD); doc.roundedRect(M,y,CW,h,5,5,'F'); part.forEach((t,q)=>T(t,M+14,y+16+q*12.8,{s:9.2})); y+=h; k+=fit; if(k<ls.length){ doc.addPage(); header(false); } } y+=14; };
+  para('Reported issue',v.issue); para('Findings',v.findings); para('Work performed',v.work); para('Recommendation / next action',v.nextAction); para('Customer feedback',v.customerFeedback);
+  if((v.parts||[]).length){ bar('Parts used'); v.parts.forEach((pt,k)=>{ need(22); doc.setFillColor(...(k%2?WHITE:CARD)); doc.rect(M,y,CW,20,'F'); T(String(k+1).padStart(2,'0'),M+12,y+13.5,{b:true,s:8.4,c:GOLD}); T(wrap(pt.name,CW-110,8.8)[0],M+36,y+13.5,{s:8.8}); T('× '+(pt.qty||''),X2-12,y+13.5,{b:true,s:8.8,c:NAVY,a:'right'}); y+=20; }); y+=14; }
+  const files=v.airtableFiles||[]; if(files.length){ const im=files.filter(f=>/^image\//.test(f.type)).length, vd=files.filter(f=>/^video\//.test(f.type)).length;
+    need(40); bar('Photo record'); need(30); const items=[[String(im),'Photos'],[String(vd),'Videos'],[String(files.length-im-vd),'Documents']].filter(x=>x[0]!=='0'), bw=110;
+    items.forEach(([a,b],k)=>{ const x=M+k*(bw+10); doc.setFillColor(...CARD); doc.roundedRect(x,y,bw,34,5,5,'F'); T(a,x+14,y+23,{b:true,s:16,c:NAVY}); T(b.toUpperCase(),x+14+doc.getTextWidth(a)*1.9+6,y+21,{b:true,s:7.4,c:MUT,cs:.6}); }); T('Kept with the ticket record',M+items.length*(bw+10)+6,y+21,{s:8,c:MUT}); y+=48; }
   // sign-off
-  need(112); y+=4; const bw=(CW-20)/3;
-  [['PREPARED BY',v.technician||'Technician'],['REVIEWED BY','Office · '+(c.legalName||'').split(' ').slice(0,2).join(' ')],['COMPANY STAMP','']].forEach(([l,val],k)=>{ const x=M+k*(bw+10); doc.setDrawColor(...RULE); doc.setLineWidth(.7); doc.roundedRect(x,y,bw,84,5,5);
-    T(l,x+10,y+16,{b:true,s:7,c:MUT,cs:.6}); if(val) T(wrap(val,bw-20,8.6,true)[0],x+10,y+30,{b:true,s:8.6}); doc.setDrawColor(...RULE); doc.line(x+10,y+66,x+bw-10,y+66); T(k<2?'Signature & date':'',x+10,y+77,{s:7,c:MUT}); });
-  y+=96; T('This report is prepared from the service record of ticket '+tref(v)+'.',M,y,{s:7.6,c:MUT});
+  need(118); bar('Sign-off'); const sw3=(CW-20)/3;
+  [['Prepared by',v.technician||'Technician'],['Reviewed by','Office'],['Company stamp','']].forEach(([l,val],k)=>{ const x=M+k*(sw3+10); doc.setDrawColor(...NAVY); doc.setLineWidth(.8); doc.roundedRect(x,y,sw3,78,6,6);
+    T(l.toUpperCase(),x+12,y+16,{b:true,s:7,c:MUT,cs:.7}); if(val) T(wrap(val,sw3-24,9.2,true)[0],x+12,y+31,{b:true,s:9.2,c:NAVY}); if(k<2){ doc.setDrawColor(...RULE); doc.line(x+12,y+60,x+sw3-12,y+60); T('Signature & date',x+12,y+71,{s:7,c:MUT}); } });
+  y+=90;
   // footer
-  const pages=doc.getNumberOfPages(); for(let i=1;i<=pages;i++){ doc.setPage(i); doc.setDrawColor(...RULE); doc.setLineWidth(.6); doc.line(M,H-34,X2,H-34);
-    T([c.legalName,c.trn&&'TRN '+c.trn,c.phone].filter(Boolean).join('   ·   '),M,H-21,{s:6.9,c:MUT}); T(repNo+'  ·  Page '+i+' of '+pages,X2,H-21,{s:6.9,c:MUT,a:'right'}); }
+  const pages=doc.getNumberOfPages(); for(let i=1;i<=pages;i++){ doc.setPage(i); doc.setFillColor(...NAVY); doc.rect(0,H-26,W,26,'F'); doc.setFillColor(...GOLD); doc.rect(0,H-28,W,2,'F');
+    T([c.legalName,c.trn&&'TRN '+c.trn,c.email].filter(Boolean).join('   ·   '),M,H-10,{s:6.8,c:[200,210,232]}); T(repNo+'   ·   Page '+i+' of '+pages,X2,H-10,{b:true,s:6.8,c:GOLD,a:'right'}); }
   if(asBlob) return doc.output('blob');
   try{ await downloadsApi.save({filename:tref(v)+'-service-report.pdf',data:doc.output('blob')}); toast('Report saved'); }
   catch(err){ if(!(err&&err.code==='declined')) toast('Could not save the report. Try again in a moment.'); }
