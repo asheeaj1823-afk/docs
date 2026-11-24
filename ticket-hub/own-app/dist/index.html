@@ -113,6 +113,16 @@ h1,h2,h3{margin:0;font-family:var(--display);letter-spacing:-.01em;text-wrap:bal
 .invchip.paid{background:#11734d;color:#fff}
 .invchip.overdue{background:#b22a3d;color:#fff}
 .invchip.draft{background:#e9edf3;color:#36425f;border-color:#cdd5e3}
+.invpill{display:inline-flex;align-items:stretch;height:22px;border-radius:6px;overflow:hidden;font-size:12px;white-space:nowrap;border:1px solid var(--line2);background:#fff;font-variant-numeric:tabular-nums}
+.invpill .no{display:flex;align-items:center;padding:0 8px;font-weight:700;color:var(--ink)}
+.invpill .st{display:flex;align-items:center;padding:0 7px;font-size:10px;font-weight:800;letter-spacing:.7px;text-transform:uppercase}
+.invpill.paid{border-color:#11734d}.invpill.paid .st{background:#11734d;color:#fff}
+.invpill.issued{border-color:#0a1f4d}.invpill.issued .st{background:#0a1f4d;color:#fff}
+.invpill.overdue{border-color:#b22a3d}.invpill.overdue .st{background:#b22a3d;color:#fff}
+.invpill.draft .st{background:#e9edf3;color:#36425f}
+.invpill.planned{border-style:dashed;border-color:#c9972f;background:#fffaf0}.invpill.planned .no{color:#7d5c12}.invpill.planned .st{color:#7d5c12}
+.paidtag{display:inline-flex;align-items:center;height:20px;padding:0 8px;border-radius:5px;background:#11734d;color:#fff;font-size:10.5px;font-weight:800;letter-spacing:.8px}
+.billrow{display:grid;grid-template-columns:110px 1fr;gap:4px 10px;align-items:center;font-size:13px}
 .invlegend{display:flex;gap:8px;flex-wrap:wrap;align-items:center;font-size:12px;color:var(--muted);padding:6px 2px 0}
 .backbtn{display:inline-flex;align-items:center;gap:6px;height:32px;padding:0 12px 0 8px;margin:0 0 10px;border:1px solid var(--line2);border-radius:999px;background:var(--surface);color:var(--ink2);font:inherit;font-size:13px;font-weight:600;cursor:pointer}
 .backbtn:hover{border-color:var(--navy3);color:var(--navy)}
@@ -1066,7 +1076,7 @@ async function invoicePdf(id){
 
 /* receipt number for a paid invoice, e.g. ZRA-1866 -> RCPT-1866 */
 const rcptNo=inv=>'RCPT-'+String(inv&&inv.invoiceNo||'').replace(/\D/g,'');
-const paidHtml=inv=>`<span class="chip" style="background:#11734d;color:#fff;font-weight:800;letter-spacing:.8px">PAID</span> <span class="sub num" title="Receipt number">${esc(rcptNo(inv))}</span>`;
+const paidHtml=inv=>`<span class="paidtag">PAID</span><div class="sub num" style="margin-top:3px;font-size:11.5px">Receipt ${esc(rcptNo(inv))}</div>`;
 /* green PAID stamp on a PDF page */
 function paidStamp(doc,x,y,sub){ doc.saveGraphicsState&&doc.saveGraphicsState(); doc.setDrawColor(17,115,77); doc.setTextColor(17,115,77); doc.setLineWidth(2.2);
   doc.roundedRect(x,y,150,sub?58:44,6,6); doc.setFont('helvetica','bold'); doc.setFontSize(30); doc.text('PAID',x+75,y+32,{align:'center',charSpace:4});
@@ -1636,8 +1646,14 @@ function bodyHtml(v){
         <div class="kv"><span>Technicians</span><span>${esc(v.technician)||'—'}</span></div>
         <div class="kv"><span>Return visit</span><span>${esc(v.returnVisit||'No')}</span></div>
         ${v.customerFeedback?`<div class="kv"><span>Customer feedback</span><span>${esc(v.customerFeedback)}</span></div>`:''}
-        ${(()=>{ const i=invFor(v), inv=i&&!i.planned?invOf(i.no):null; return inv&&invoiceState(inv).k==='paid'?`<div class="kv"><span>Receipt No.</span><span><b style="color:#11734d">${esc(rcptNo(inv))}</b> <span class="chip" style="background:#11734d;color:#fff;font-weight:800;letter-spacing:.8px;height:20px">PAID</span></span></div>`:''; })()}
-        <div class="kv"><span>Z Invoice No.</span><span>${(()=>{ const i=invFor(v); return !i||!i.no?'—':invChip(v)+(i.planned?' <span class="sub">fixed on '+esc(String(i.on).split('-').reverse().join('/'))+'</span>':''); })()}</span></div>
+        ${(()=>{ const i=invFor(v); if(!i||!i.no) return '<div class="kv"><span>Z Invoice No.</span><span>—</span></div>'; const inv=i.planned?null:invOf(i.no), st=inv?invoiceState(inv):null, paid=st&&st.k==='paid';
+          const pd=inv?(()=>{ const ds=[...Object.values(bankTx).filter(t=>t.invoiceNo&&invKey(t.invoiceNo)===invKey(inv.invoiceNo)&&+t.amount>0).map(t=>t.date),inv.paidDate].filter(Boolean).sort(); return ds.length?ds[ds.length-1]:''; })():'';
+          return `<div style="margin:6px 0 4px;padding:10px 12px;border:1px solid var(--line);border-radius:10px;background:var(--surface2)"><div style="font-size:11px;font-weight:700;letter-spacing:.6px;text-transform:uppercase;color:var(--muted);margin-bottom:6px">Billing</div><div class="billrow">
+            <span class="sub">Invoice No.</span><span><b>${esc(i.no)}</b>${i.planned?` <span class="sub">· planned, fixed on ${esc(String(i.on).split('-').reverse().join('/'))}</span>`:''}</span>
+            ${inv?`<span class="sub">Amount</span><span class="num">${esc(money(invGross(inv)))} <span class="sub">incl. VAT</span></span>`:''}
+            ${inv?`<span class="sub">Payment</span><span>${paid?'<span class="paidtag">PAID</span>'+(pd?` <span class="sub">on ${esc(pd.split('-').reverse().join('/'))}</span>`:''):`<span class="chip ${st.cls}" style="height:20px">${esc(st.label)}</span>${inv.dueDate?` <span class="sub">due ${esc(inv.dueDate.split('-').reverse().join('/'))}</span>`:''}`}</span>`:''}
+            ${paid?`<span class="sub">Receipt No.</span><span><b class="num">${esc(rcptNo(inv))}</b>${canPdf()?` <button class="linkbtn" data-rcptpdf="${esc(inv.id)}">Download receipt</button>`:''}</span>`:''}
+          </div></div>`; })()}
         ${(()=>{ const a=assetFor(v); if(!a) return ''; const w=warranty(a); return `<div class="kv"><span>Registered asset</span><span>${esc(a.serial?'S/N '+a.serial:a.model)}${w?` · <span class="chip ${w.cls}" style="height:20px">${esc(w.label)}</span>`:''}</span></div>`; })()}
         ${v.internalNotes?`<div class="kv"><span>Internal notes</span><span>${esc(v.internalNotes)}</span></div>`:''}
       </div></div>
@@ -2163,10 +2179,10 @@ function invFor(v){
 }
 const invOf=no=>{ const k=invKey(no); return Object.values(invoices).find(x=>!isCredit(x)&&invKey(x.invoiceNo)===k)||null; };
 const invChip=v=>{ const i=invFor(v); if(!i||!i.no) return '';
-  if(i.planned) return `<span class="invchip planned" title="Planned invoice — the number is fixed when the billing cycle closes (${esc(String(i.on).split('-').reverse().join('/'))})">⏳ ${esc(i.no)} · planned</span>`;
+  if(i.planned) return `<span class="invpill planned" title="Planned invoice — the number is fixed when the billing cycle closes (${esc(String(i.on).split('-').reverse().join('/'))})"><span class="no">${esc(i.no)}</span><span class="st">Planned</span></span>`;
   const inv=invOf(i.no), st=inv?invoiceState(inv).k:'issued';
-  const cls=st==='paid'?'paid':st==='overdue'?'overdue':st==='draft'||st==='void'?'draft':'issued', lab={paid:'✓ '+i.no+' · PAID · '+rcptNo(inv||{invoiceNo:i.no}),overdue:'! '+i.no+' · Overdue',draft:i.no+' · '+(st==='void'?'Void':'Draft'),issued:'🧾 '+i.no}[cls];
-  return `<span class="invchip ${cls}" title="Z Invoice No. ${esc(i.no)}${inv&&cls==='paid'?' · Receipt '+esc(rcptNo(inv)):''}${inv?' · '+esc(invoiceState(inv).label)+(inv.dueDate?' · due '+esc(inv.dueDate.split('-').reverse().join('/')):''):''}">${esc(lab)}</span>`; };
+  const cls=st==='paid'?'paid':st==='overdue'?'overdue':st==='draft'||st==='void'?'draft':'issued', lab={paid:'Paid',overdue:'Overdue',draft:st==='void'?'Void':'Draft',issued:'Unpaid'}[cls];
+  return `<span class="invpill ${cls}" title="Invoice ${esc(i.no)}${inv&&cls==='paid'?' · Receipt '+esc(rcptNo(inv)):''}${inv&&inv.dueDate&&cls!=='paid'?' · due '+esc(inv.dueDate.split('-').reverse().join('/')):''}"><span class="no">${esc(i.no)}</span><span class="st">${lab}</span></span>`; };
 const INV_LEGEND=`<div class="invlegend" aria-label="Invoice colours"><span class="invchip planned" style="height:18px;font-size:11px">⏳ planned</span><span class="invchip issued" style="height:18px;font-size:11px">🧾 raised</span><span class="invchip paid" style="height:18px;font-size:11px">✓ paid</span><span class="invchip overdue" style="height:18px;font-size:11px">! overdue</span><span class="invchip draft" style="height:18px;font-size:11px">draft</span></div>`;
 const unbilled=()=>Object.values(visits).filter(v=>v.status==='completed'&&!(v.billingRef||'').trim()&&billKindOf(v)!=='none').sort((a,b)=>ticketDate(a).localeCompare(ticketDate(b))||a.id.localeCompare(b.id));
 function periodOf(d,mode){
