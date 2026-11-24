@@ -1,3 +1,7 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Ziar Imaar Ticket Hub</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -243,6 +247,330 @@ details.tv td,details.tv th{padding:4px 8px}
 <div id="toast" class="toast" role="status" hidden></div>
 <div id="tip" hidden></div>
 <script defer src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<!-- ZI-BACKEND:START -->
+<!-- Supabase backend for the ticket hub (Phase 1). Inlined into index.html between the
+     ZI-BACKEND markers by build.sh. Active only outside the Claude artifact runtime. -->
+<style>
+.zi-gate{position:fixed;inset:0;z-index:30;background:var(--bg);display:grid;place-items:center;padding:16px;overflow:auto}
+.zi-gate .card{width:100%;max-width:380px}
+.zi-gate h1{font-family:var(--brand);font-size:20px;margin:0}
+.zi-gate .err{color:var(--bad);font-size:13px;min-height:1em}
+.zi-gate .ok{color:var(--ok);font-size:13px}
+.zi-modal{position:fixed;inset:0;z-index:25;background:rgba(5,12,28,.72);display:grid;place-items:start center;padding:24px 16px;overflow:auto}
+.zi-modal .card{width:100%;max-width:760px}
+.zi-team{width:100%;border-collapse:collapse;font-size:13px}
+.zi-team th,.zi-team td{text-align:left;padding:8px 6px;border-bottom:1px solid var(--line);vertical-align:middle}
+.zi-team th{color:var(--muted);font-weight:600;font-size:11px;letter-spacing:.06em;text-transform:uppercase}
+.zi-team select{background:var(--panel);border:1px solid var(--line2);border-radius:8px;padding:4px 6px}
+.zi-wrap{overflow-x:auto}
+.zi-hbtn{height:28px;padding:0 10px;border-radius:8px;border:1px solid var(--line2);color:var(--fg2);font-size:12px;font-weight:600}
+</style>
+<script>
+window.ZI_SUPABASE = {
+  url: 'https://fvjgsambbanisyvvxghx.supabase.co',
+  key: 'sb_publishable_s5FrpiWzmY0M5_1yudLFUg_JWqOQyDO'   // publishable key: safe in the page; access is enforced by row-level security
+};
+</script>
+<script defer src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
+<script>
+(() => {
+const cfg = window.ZI_SUPABASE;
+if (!cfg || (window.claude && window.claude.use)) return;   // inside a Claude artifact: keep its built-in store
+
+const TABLE = { visits: 'tickets', parts: 'parts', stock: 'stock' };
+const ROLES = ['admin', 'office', 'finance', 'technician', 'viewer'];
+const UUID_PATH = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\//;
+const isUuid = s => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(s || '');
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+let sb = null, user = null, profile = null;
+
+const waitLib = () => new Promise((res, rej) => {
+  let n = 0;
+  (function poll() {
+    if (window.supabase && window.supabase.createClient) return res(window.supabase);
+    if (++n > 300) return rej(new Error('Could not load the sign-in library. Check your connection and reload.'));
+    setTimeout(poll, 50);
+  })();
+});
+
+function appError(e) {
+  const x = new Error((e && e.message) || String(e));
+  const msg = (e && e.message) || '';
+  x.code = (e && e.code === '42501') || /row-level security|permission denied|can only|no longer be edited|cannot change/i.test(msg)
+    ? 'permission_denied' : (e && e.code) || 'error';
+  return x;
+}
+
+/* ---------- row mapping ---------- */
+const stripUrls = d => {
+  if (!Array.isArray(d.evidence)) return d;
+  return Object.assign({}, d, { evidence: d.evidence.map(e => (e && UUID_PATH.test(e.id || '')) ? Object.assign({}, e, { url: undefined }) : e) });
+};
+function toRow(col, id, d) {
+  const data = stripUrls(d || {});
+  delete data.id;
+  if (col !== 'visits') return { id, data };
+  return {
+    id, data,
+    ref: d.ref || null,
+    status: ['new', 'review', 'completed', 'recheck', 'cancelled'].includes(d.status) ? d.status : 'new',
+    priority: ['Urgent', 'High', 'Normal'].includes(d.priority) ? d.priority : 'Normal',
+    type: d.type || null, site: d.site || null, region: d.region || null,
+    product: d.product || null, model: d.model || null,
+    scheduled_at: d.scheduled || null, billing_ref: d.billingRef || null
+  };
+}
+// Evidence in the private bucket is shown through short-lived signed links, refreshed on every load.
+async function sign(docs) {
+  const items = [];
+  docs.forEach(d => (d && Array.isArray(d.evidence) ? d.evidence : []).forEach(e => { if (e && UUID_PATH.test(e.id || '')) items.push(e); }));
+  if (!items.length) return;
+  const { data, error } = await sb.storage.from('evidence').createSignedUrls([...new Set(items.map(e => e.id))], 6 * 3600);
+  if (error || !data) return;
+  const m = {}; data.forEach(r => { if (r.signedUrl) m[r.path] = r.signedUrl; });
+  items.forEach(e => { if (m[e.id]) e.url = m[e.id]; });
+}
+
+/* ---------- the interface the app already uses ---------- */
+const db = {
+  doc(path) {
+    const [col, id] = path.split('/'); const table = TABLE[col];
+    return {
+      async set(d) {
+        const row = toRow(col, id, d);
+        // update first, insert only if the row is new: an upsert would demand insert rights a technician lacks
+        const up = await sb.from(table).update(row).eq('id', id).select('id');
+        if (up.error) throw appError(up.error);
+        if (up.data && up.data.length) return;
+        const ins = await sb.from(table).insert(row);
+        if (ins.error) throw appError(ins.error);
+      },
+      async delete() {
+        const { error } = await sb.from(table).delete().eq('id', id);
+        if (error) throw appError(error);
+      }
+    };
+  },
+  collection(col) {
+    const table = TABLE[col];
+    return {
+      onSnapshot(cb, errCb) {
+        const store = new Map();
+        const emit = () => cb({ docs: [...store].map(([id, d]) => ({ id, data: () => d })) });
+        // live events can be dropped (bursts, sleep, network changes), so the full list is
+        // re-read after a reconnect, after an import, and when a tab returns after a while
+        const reload = async () => {
+          const all = [];
+          for (let from = 0; ; from += 1000) {
+            const { data, error } = await sb.from(table).select('id,data').order('id').range(from, from + 999);
+            if (error) throw error;
+            all.push(...data);
+            if (data.length < 1000) break;
+          }
+          await sign(all.map(r => r.data));
+          store.clear(); all.forEach(r => store.set(r.id, r.data));
+          emit();
+        };
+        reloaders.push(() => reload().catch(() => {}));
+        (async () => {
+          await reload();
+          let first = true;
+          sb.channel('rt-' + table)
+            .on('postgres_changes', { event: '*', schema: 'public', table }, async p => {
+              if (p.eventType === 'DELETE') store.delete(p.old.id);
+              else { await sign([p.new.data]); store.set(p.new.id, p.new.data); }
+              emit();
+            })
+            .subscribe(status => { if (status === 'SUBSCRIBED') { if (!first) reload().catch(() => {}); first = false; } });
+        })().catch(e => errCb && errCb(appError(e)));
+        return () => {};
+      }
+    };
+  }
+};
+const reloaders = [];
+const reloadAll = () => reloaders.forEach(f => f());
+let hiddenAt = 0;
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) hiddenAt = Date.now();
+  else if (hiddenAt && Date.now() - hiddenAt > 60000) reloadAll();
+});
+const assets = {
+  async upload(f) {
+    if (f.size > 20 * 1024 * 1024) { const e = new Error('too large'); e.code = 'too_large'; throw e; }
+    if (!/^(image\/|application\/pdf$)/.test(f.type || '')) { const e = new Error('type'); e.code = 'unsupported_type'; throw e; }
+    const path = user.id + '/' + Date.now() + '-' + (f.name || 'file').replace(/[^A-Za-z0-9._-]+/g, '_').slice(-80);
+    const { error } = await sb.storage.from('evidence').upload(path, f, { contentType: f.type, upsert: false });
+    if (error) throw appError(error);
+    const s = await sb.storage.from('evidence').createSignedUrl(path, 6 * 3600);
+    return { id: path, url: s.data && s.data.signedUrl, contentType: f.type };
+  }
+};
+
+const userApi = {
+  async me() { return { id: user.id, name: profile.full_name || user.email }; },
+  async id() { return user.id; },
+  async profiles(ids) {
+    const want = ids.filter(isUuid); const out = {};
+    if (!want.length) return out;
+    const { data } = await sb.from('profiles').select('id,full_name').in('id', want);
+    (data || []).forEach(p => { out[p.id] = { name: p.full_name }; });
+    return out;
+  }
+};
+
+const downloads = {
+  async save({ filename, data }) {
+    const blob = data instanceof Blob ? data : new Blob([data], { type: /\.csv$/i.test(filename) ? 'text/csv' : 'application/octet-stream' });
+    const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = filename;
+    document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+  }
+};
+
+/* ---------- sign-in gate ---------- */
+function gate(html) {
+  let el = document.getElementById('zi-gate');
+  if (!el) { el = document.createElement('div'); el.id = 'zi-gate'; el.className = 'zi-gate'; document.body.appendChild(el); }
+  el.innerHTML = '<div class="card">' + html + '</div>';
+  return el;
+}
+const closeGate = () => { const el = document.getElementById('zi-gate'); if (el) el.remove(); };
+const brand = '<div><div class="lbl">Ziar Imaar · Kohler UAE</div><h1>Ticket hub</h1></div>';
+
+function signInForm(mode, msg) {
+  const up = mode === 'up';
+  const el = gate(`${brand}
+    <form id="zi-auth" style="display:flex;flex-direction:column;gap:10px">
+      ${up ? '<label class="lbl">Full name<input class="field" name="name" autocomplete="name" required></label>' : ''}
+      <label class="lbl">Email<input class="field" name="email" type="email" autocomplete="email" required></label>
+      <label class="lbl">Password<input class="field" name="password" type="password" minlength="8" autocomplete="${up ? 'new-password' : 'current-password'}" required></label>
+      <div class="err" id="zi-err" role="alert">${msg ? esc(msg) : ''}</div>
+      <button class="primary" type="submit">${up ? 'Create account' : 'Sign in'}</button>
+      <button class="secondary" type="button" id="zi-switch">${up ? 'I already have an account' : 'New to the team? Create an account'}</button>
+    </form>`);
+  el.querySelector('#zi-switch').onclick = () => signInForm(up ? 'in' : 'up');
+  el.querySelector('#zi-auth').onsubmit = async e => {
+    e.preventDefault();
+    const f = new FormData(e.target), btn = e.target.querySelector('.primary'), errEl = el.querySelector('#zi-err');
+    btn.disabled = true; errEl.textContent = '';
+    const email = String(f.get('email')).trim(), password = String(f.get('password'));
+    const r = up
+      ? await sb.auth.signUp({ email, password, options: { data: { full_name: String(f.get('name')).trim() }, emailRedirectTo: location.href.split('#')[0] } })
+      : await sb.auth.signInWithPassword({ email, password });
+    btn.disabled = false;
+    if (r.error) { errEl.textContent = r.error.message; return; }
+    if (up && !r.data.session) gate(`${brand}<div class="ok">Check ${esc(email)} for a confirmation link, then come back and sign in.</div><button class="secondary" id="zi-back">Back to sign in</button>`).querySelector('#zi-back').onclick = () => signInForm('in');
+  };
+}
+
+async function loadProfile() {
+  const { data, error } = await sb.from('profiles').select('*').eq('id', user.id).maybeSingle();
+  if (error) throw error;
+  return data;
+}
+
+function pending() {
+  const el = gate(`${brand}
+    <div class="note">You're signed in as <b>${esc(user.email)}</b>, but an admin still needs to approve your access and give you a role.</div>
+    <button class="primary" id="zi-retry">Check again</button>
+    <button class="secondary" id="zi-out">Sign out</button>`);
+  el.querySelector('#zi-out').onclick = () => sb.auth.signOut().then(() => location.reload());
+  return new Promise(res => {
+    el.querySelector('#zi-retry').onclick = async () => { profile = await loadProfile(); if (profile && profile.active) res(); else toastMsg('Not approved yet.'); };
+  });
+}
+const toastMsg = m => { const t = document.getElementById('toast'); if (!t) return; t.textContent = m; t.hidden = false; clearTimeout(toastMsg.t); toastMsg.t = setTimeout(() => t.hidden = true, 2800); };
+
+/* ---------- header controls, team and import (admin) ---------- */
+function headerControls() {
+  const who = document.querySelector('.top .who'); if (!who || document.getElementById('zi-ctl')) return;
+  const span = document.createElement('span'); span.id = 'zi-ctl'; span.style.cssText = 'display:inline-flex;gap:6px;align-items:center';
+  span.innerHTML = `<span class="sub">${esc(profile.role)}</span>${profile.role === 'admin' ? '<button class="zi-hbtn" id="zi-team-btn" type="button">Team &amp; import</button>' : ''}<button class="zi-hbtn" id="zi-out-btn" type="button">Sign out</button>`;
+  who.appendChild(span);
+  span.querySelector('#zi-out-btn').onclick = () => sb.auth.signOut().then(() => location.reload());
+  const tb = span.querySelector('#zi-team-btn'); if (tb) tb.onclick = teamPanel;
+}
+
+async function teamPanel() {
+  const m = document.createElement('div'); m.className = 'zi-modal'; m.setAttribute('role', 'dialog'); m.setAttribute('aria-label', 'Team and import');
+  document.body.appendChild(m);
+  const close = () => m.remove();
+  m.addEventListener('click', e => { if (e.target === m) close(); });
+  async function draw(note) {
+    const { data: people } = await sb.from('profiles').select('id,full_name,email,role,active,created_at').order('created_at');
+    const { count } = await sb.from('tickets').select('id', { count: 'exact', head: true });
+    m.innerHTML = `<div class="card">
+      <div class="row"><b style="font-size:17px">Team</b><button class="linkbtn" id="zi-close" type="button">Close</button></div>
+      <div class="sub">New sign-ups wait here until you approve them. Changes are recorded in the audit log.</div>
+      <div class="zi-wrap"><table class="zi-team"><thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Access</th></tr></thead><tbody>
+      ${(people || []).map(p => `<tr><td>${esc(p.full_name)}</td><td class="mono">${esc(p.email)}</td>
+        <td><select data-role="${p.id}" aria-label="Role for ${esc(p.full_name)}">${ROLES.map(r => `<option${r === p.role ? ' selected' : ''}>${r}</option>`).join('')}</select></td>
+        <td><label style="display:inline-flex;gap:6px;align-items:center"><input type="checkbox" data-active="${p.id}"${p.active ? ' checked' : ''}> ${p.active ? 'Approved' : 'Pending'}</label></td></tr>`).join('')}
+      </tbody></table></div>
+      ${note ? `<div class="sub" role="status">${esc(note)}</div>` : ''}
+      <div style="border-top:1px solid var(--line);padding-top:12px;display:flex;flex-direction:column;gap:8px">
+        <b>Import from the old ticket hub</b>
+        <div class="sub">Choose the export file (ticket-hub-export.json). Existing visits with the same number are updated, nothing is deleted. The database has ${count ?? 0} visits now.</div>
+        <input type="file" id="zi-import" accept="application/json,.json" class="field">
+      </div></div>`;
+    m.querySelector('#zi-close').onclick = close;
+    m.querySelectorAll('[data-role]').forEach(s => s.onchange = () => change(s.dataset.role, { role: s.value }));
+    m.querySelectorAll('[data-active]').forEach(c => c.onchange = () => change(c.dataset.active, { active: c.checked }));
+    m.querySelector('#zi-import').onchange = e => importFile(e.target.files[0]);
+  }
+  async function change(id, patch) {
+    const { error } = await sb.from('profiles').update(patch).eq('id', id);
+    draw(error ? 'Not saved: ' + error.message : 'Saved.');
+  }
+  async function importFile(file) {
+    if (!file) return;
+    let src;
+    try { src = JSON.parse(await file.text()); } catch (e) { return draw('That file is not valid JSON.'); }
+    const report = [];
+    for (const col of ['visits', 'parts', 'stock']) {
+      const docs = src[col] || {}; const rows = Object.entries(docs).map(([id, d]) => toRow(col, id, d));
+      let done = 0;
+      for (let i = 0; i < rows.length; i += 100) {
+        const { error } = await sb.from(TABLE[col]).upsert(rows.slice(i, i + 100));
+        if (error) { report.push(`${col}: stopped after ${done} of ${rows.length} (${error.message})`); break; }
+        done += Math.min(100, rows.length - i);
+      }
+      if (done === rows.length) report.push(`${col}: ${done} imported`);
+    }
+    reloadAll();
+    draw('Import finished. ' + report.join(' · '));
+  }
+  draw();
+}
+
+/* ---------- entry point used by the app's boot ---------- */
+let readyP = null;
+function ready() {
+  if (readyP) return readyP;
+  readyP = (async () => {
+    const lib = await waitLib();
+    sb = lib.createClient(cfg.url, cfg.key, { auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true } });
+    let { data: { session } } = await sb.auth.getSession();
+    if (!session) {
+      signInForm('in');
+      session = await new Promise(res => {
+        const { data: { subscription } } = sb.auth.onAuthStateChange((ev, s) => { if (s) { subscription.unsubscribe(); res(s); } });
+      });
+    }
+    user = session.user;
+    profile = await loadProfile();
+    if (!profile || !profile.active) await pending();
+    closeGate();
+    sb.auth.onAuthStateChange(ev => { if (ev === 'SIGNED_OUT') location.reload(); });
+    headerControls();
+  })().catch(e => { gate(`${brand}<div class="err">${esc(e.message || e)}</div><button class="primary" onclick="location.reload()">Reload</button>`); throw e; });
+  return readyP;
+}
+const apis = { db, assets, user: userApi, downloads, sample: null };
+window.ziBackend = { ready, use: async n => { await ready(); return apis[n] || null; } };
+})();
+</script>
+<!-- ZI-BACKEND:END -->
 
 <script>
 (() => {
@@ -989,8 +1317,11 @@ function demoData(){ // only used when the shared store is unavailable; the head
 function goDemo(){ if(loaded) return; demo=true; loaded=true; visits=demoData(); render(); }
 
 (async()=>{
-  const fallback=setTimeout(goDemo,10000);
-  const use=n=>window.claude&&window.claude.use?Promise.resolve(window.claude.use(n)).catch(()=>null):Promise.resolve(null);
+  let fallback=setTimeout(goDemo,10000);
+  const inArtifact=!!(window.claude&&window.claude.use);
+  if(!inArtifact&&window.ziBackend){ clearTimeout(fallback); try{ await window.ziBackend.ready(); }catch(e){ return; } }   // hosted: sign in first, then the live database
+  const use=n=>inArtifact?Promise.resolve(window.claude.use(n)).catch(()=>null):window.ziBackend?window.ziBackend.use(n).catch(()=>null):Promise.resolve(null);
+  if(!inArtifact) fallback=setTimeout(goDemo,15000);
   db=await use('db');
   if(!db){ clearTimeout(fallback); goDemo(); }
   // optional capabilities light up as they resolve
