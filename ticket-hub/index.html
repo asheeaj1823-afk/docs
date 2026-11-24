@@ -1202,7 +1202,7 @@ async function airtableSync(manual){
     if(manual||made||upd) toast('Airtable: '+recs.length+' ticket'+(recs.length===1?'':'s')+' read · '+made+' new · '+upd+' updated');
     if(!atTimer) atTimer=setInterval(()=>airtableSync(false),1800000);
     if(!atQuickT&&atCfg().mode==='page') atQuickT=setInterval(()=>atQuickCheck(),120000);
-    setTimeout(()=>atCopyFiles(),500);
+    setTimeout(()=>atCopyFiles().then(()=>autoReports()),500);
   }catch(e){ const c=(e&&e.code)||'upstream_error'; atui={...atui,st:'err',err:AT_FIX[c]||('Airtable sync failed ('+c+'). Try again.')}; if(['needs_reauth','server_not_connected','not_in_manifest','blocked_by_policy','not_granted'].includes(c)&&atTimer){ clearInterval(atTimer); atTimer=null; } }
   if(manual||route==='integrations') render();
 }
@@ -1218,6 +1218,19 @@ async function atQuickCheck(){
   }catch(e){}
 }
 document.addEventListener('visibilitychange',()=>{ if(document.visibilityState==='visible'&&atQuickT&&Date.now()-atQuickAt>60000) atQuickCheck(); });
+/* service report PDF attached to each closed ticket (made again if Airtable changes the report later) */
+const repSig=v=>{ const t=[v.status,v.scheduled,v.arrived,v.finished,v.technician,v.findings,v.work,v.nextAction,v.outcome,v.issue,v.site,v.product,v.model,v.region,v.customerFeedback,(v.parts||[]).map(p=>p.name+p.qty).join(','),(v.airtableFiles||[]).length].join('|'); let h=0; for(let i=0;i<t.length;i++){ h=(h*31+t.charCodeAt(i))|0; } return String(h>>>0); };
+let repBusy=false;
+async function autoReports(force){
+  if(repBusy||!assets||!db||demo||!loaded||!window.jspdf||!['admin','office'].includes(access())) return; repBusy=true; let n=0;
+  try{ const list=Object.values(visits).filter(v=>v.status==='completed'&&(force===v.id||!v.reportPdf||v.reportPdf.sig!==repSig(v))).sort((a,b)=>(b.finished||b.scheduled||'').localeCompare(a.finished||a.scheduled||''));
+    for(const v of list){ if(n>=(force?1:40)) break; if(force&&v.id!==force) continue;
+      try{ const blob=await downloadReport(v,true); if(!blob) continue; const name=tref(v)+'-service-report.pdf'; const up=await assets.upload(new File([blob],name,{type:'application/pdf'}));
+        const cur=visits[v.id]; if(!cur) continue; const nv=clone(cur); nv.reportPdf={id:up.id,url:up.url,name,at:new Date().toISOString(),sig:repSig(cur)}; await save(nv,null); n++; }
+      catch(e){ if(e&&/quota|limit|not_granted/i.test(String(e.code||e.message))) break; } }
+  }finally{ repBusy=false; }
+  if(n&&route==='tickets') render(); return n;
+}
 /* keep a day-by-day log of what changed in Airtable */
 async function atLogSave(list){
   if(!db) return; const day=todayDxb(), at=new Date().toISOString();
@@ -1537,6 +1550,7 @@ function bodyHtml(v){
         const missing=items.filter(i=>!i.url).length;
         return `<div class="card"><div class="card-h"><h3>Site photos &amp; documents</h3><span class="sub">${fs.length} from Airtable</span></div><div class="card-b">${`<div class="thumbs">${items.map(e=>{ const u=safeUrl(e.url), fu=safeUrl(e.full)||u, img=/^image\//.test(e.type); const inner=u&&img?`<img src="${esc(u)}" alt="${esc(e.name)}" loading="lazy">`:`<span>${esc(/^video\//.test(e.type)?'▶ ':'')}${esc(e.name)}</span>`; return fu?`<a class="thumb" href="${esc(fu)}" target="_blank" rel="noopener" title="${esc(e.name)}">${inner}${isPdf(e)?'<span class="tag">PDF</span>':''}</a>`:`<div class="thumb" title="${esc(e.name)}">${inner}</div>`; }).join('')}</div>`}${missing?`<div class="sub" style="margin-top:8px">${missing} file${missing>1?'s':''} will show after the next Airtable sync (an admin opening the hub).</div>`:''}</div></div>`; })():''}
       <div class="card"><div class="card-h"><h3>Evidence</h3><span class="sub">${esc(evidenceLabel(v))}</span></div><div class="card-b">${ev.length?thumbsHtml(ev,false):'<div class="sub">No photos or documents attached.</div>'}
+        <div style="margin-top:14px;border-top:1px solid var(--line);padding-top:12px"><div class="lbl" style="margin-bottom:6px">Service report (PDF)</div>${v.reportPdf&&safeUrl(v.reportPdf.url)?`<a class="btn" href="${esc(safeUrl(v.reportPdf.url))}" target="_blank" rel="noopener">${svg('doc',16)}${esc(v.reportPdf.name||'Service report.pdf')}</a> <span class="sub">attached ${esc(dmhm(v.reportPdf.at))}${v.reportPdf.sig!==repSig(v)?' · will be updated (the report changed in Airtable)':''}</span>`:v.status==='completed'?`<span class="sub">Attached automatically after closing — being prepared.</span>${['admin','office'].includes(access())&&assets?` <button class="btn" data-act="mkreport" data-id="${esc(v.id)}" style="height:30px">Attach now</button>`:''}`:'<span class="sub">Attached automatically when the ticket is closed (Completed in Airtable).</span>'}</div>
 </div></div>
       ${(v.parts||[]).length?`<div class="card"><div class="card-h"><h3>Parts used</h3><span class="sub">${partsCount(v)} total</span></div><div class="card-b">${v.parts.map(p=>`<div class="kv"><span>${esc(p.name)}</span><span class="num">× ${p.qty}</span></div>`).join('')}</div></div>`:''}
     </div>
@@ -2609,8 +2623,8 @@ function modalHtml(){
 
 /* ---------- service report PDF ---------- */
 const canPdf=()=>!!(downloadsApi&&window.jspdf);
-async function downloadReport(v){
-  if(!canPdf()){ toast('Report download is not available in this view.'); return; }
+async function downloadReport(v,asBlob){
+  if(!asBlob&&!canPdf()){ toast('Report download is not available in this view.'); return; }
   const {jsPDF}=window.jspdf; const doc=new jsPDF({unit:'pt',format:'a4'});
   const W=595.28, H=841.89, M=42; let y;
   const ink=[13,27,62], muted=[103,114,140];
@@ -2639,6 +2653,7 @@ async function downloadReport(v){
   const pages=doc.getNumberOfPages();
   for(let i=1;i<=pages;i++){ doc.setPage(i); doc.setFont('helvetica','normal'); doc.setFontSize(8); doc.setTextColor(...muted);
     doc.text('Generated '+dmhm(new Date().toISOString())+' · Ziar Imaar Technical Services L.L.C.',M,H-28); doc.text('Page '+i+' of '+pages,W-M,H-28,{align:'right'}); }
+  if(asBlob) return doc.output('blob');
   try{ await downloadsApi.save({filename:(v.ref||('ticket-'+v.id))+'-service-report.pdf',data:doc.output('blob')}); toast('Report saved'); }
   catch(err){ if(!(err&&err.code==='declined')) toast('Could not save the report. Try again in a moment.'); }
 }
@@ -3005,6 +3020,7 @@ document.addEventListener('click',async e=>{
   }
   const act=ds.act;
   if(act==='goback'){ goBack(); return; }
+  if(act==='mkreport'){ const id=b.dataset.id; toast('Preparing the service report…'); const n=await autoReports(id); toast(n?'Service report attached':'Could not attach the report. Try again.'); return; }
   if(act==='back'){ sel=null; mode='view'; draft=null; try{ history.replaceState(null,'','#tickets'); }catch(_){} render(); return; }
   if(act==='more'){ list.limit+=60; document.getElementById('l-body').innerHTML=listBody(); return; }
   if(act==='call'){ showCall=!showCall; render(); return; }
@@ -3087,6 +3103,7 @@ function goDemo(){ if(loaded) return; demo=true; loaded=true; visits=demoData();
   use('mcp').then(m=>{ mcpApi=m; if(route==='integrations') safeRender(); });
   use('permissions').then(pm=>{ permApi=pm; });
   setTimeout(()=>airtableAutoStart(),9000);
+  setTimeout(()=>autoReports(),20000);
   setTimeout(flushQ,3000);
   if(!db) return;
   const sub=(col,store)=>db.collection(col).onSnapshot(snap=>{ for(const k in store) delete store[k]; snap.docs.forEach(d=>{ const x=d.data(); if(x) store[d.id]=Object.assign({id:d.id},x); }); overlayQ(col,store); lastSync=Date.now(); if(['parts','assets','tickets','finance'].includes(route)) safeRender(); resolveNames(); },()=>{});
