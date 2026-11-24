@@ -887,18 +887,21 @@ function aedWords(n){
   return 'UAE Dirhams '+w(d)+(f?' and '+w(f)+' Fils':'')+' only (AED '+(f?a.toFixed(2):d)+')';
 }
 function invRows(inv){
-  if(isCredit(inv)) return [{d:'Credit against invoice '+(inv.refInvoice||'')+(inv.notes?' — '+inv.notes:''),q:1,u:-inv.net,neg:true}];
+  if(isCredit(inv)) return [{d:'Credit against invoice '+(inv.refInvoice||'')+(inv.notes?' — '+inv.notes:''),q:1,u:-inv.net}];
   const L=(inv.lines||[]).slice().sort((a,b)=>a.ticket.localeCompare(b.ticket)); if(!L.length) return [{d:'Technical services'+(ticketsForInv(inv).length?' — '+ticketsForInv(inv).map(v=>v.ref||'#'+v.id).join(', '):''),q:1,u:inv.net}];
-  const ref=id=>(visits[id]&&visits[id].ref)||('#'+id), items=[];
-  L.forEach(l=>{ if(l.service) items.push({k:'svc',u:l.service,id:l.ticket}); if(l.collection) items.push({k:'col:'+l.emirate,u:l.collection,id:l.ticket,em:l.emirate}); if(l.waiting) items.push({k:'wait',u:l.waiting,id:l.ticket}); });
-  const rows=[]; const groups={};
-  items.forEach(x=>{ const g=x.k+'|'+x.u; (groups[g]=groups[g]||[]).push(x); });
-  Object.values(groups).forEach(xs=>{ const k=xs[0].k;
-    if(k.startsWith('col:')){ rows.push({d:'Spare Collection - Transportation Charges - '+xs[0].em+'  ('+xs.map(x=>ref(x.id)).join(', ')+')',q:xs.length,u:xs[0].u,first:xs[0].id}); return; }
-    if(k==='wait'){ rows.push({d:'Waiting time - '+xs.map(x=>ref(x.id)).join(', '),q:xs.length,u:xs[0].u,first:xs[0].id}); return; }
-    let run=[xs[0]]; const flush=()=>{ const a=run[0], b=run[run.length-1]; rows.push({d:'Ticket No-'+(run.length===1?ref(a.id):run.length===2?ref(a.id)+' & '+ref(b.id):ref(a.id)+' to '+ref(b.id)),q:run.length,u:a.u,first:a.id}); };
-    xs.slice(1).forEach(x=>{ const prev=run[run.length-1]; if(+x.id===+prev.id+1) run.push(x); else { flush(); run=[x]; } }); flush(); });
-  return rows.sort((a,b)=>(a.d.startsWith('Spare')?0:1)-(b.d.startsWith('Spare')?0:1)||(b.first||'').localeCompare(a.first||''));
+  const ref=id=>(visits[id]&&visits[id].ref)||('EZR-KOHLER-SRV-26-'+id), site=id=>String((visits[id]||{}).site||'').split('|')[0].trim().toLowerCase();
+  const col={}, wait=[], svc={}, rows=[];
+  L.forEach(l=>{ if(l.collection){ const k=l.emirate+'|'+l.collection; (col[k]=col[k]||{em:l.emirate,u:l.collection,n:0}).n++; } if(l.waiting) wait.push(l); if(l.service){ const k=site(l.ticket)+'|'+l.service; (svc[k]=svc[k]||{u:l.service,ids:[]}).ids.push(l.ticket); } });
+  Object.values(col).forEach(c=>rows.push({o:0,d:'Spare Collection - Transportation Charges - '+c.em,q:c.n,u:c.u}));
+  const singles=[];
+  Object.values(svc).forEach(g=>{ const ids=g.ids.sort(), runs=[]; let r=[ids[0]]; ids.slice(1).forEach(id=>{ if(+id===+r[r.length-1]+1) r.push(id); else { runs.push(r); r=[id]; } }); runs.push(r);
+    const lone=runs.filter(x=>x.length===1), multi=runs.filter(x=>x.length>1);
+    multi.forEach(x=>rows.push({o:1,u:g.u,first:x[0],q:x.length,d:'Ticket No-'+ref(x[0])+(x.length===2?' & ':' to ')+ref(x[x.length-1])}));
+    if(lone.length===1&&!multi.length) rows.push({o:1,u:g.u,first:lone[0][0],q:1,d:'Ticket No-'+ref(lone[0][0])});
+    else if(lone.length===1) rows.push({o:1,u:g.u,first:lone[0][0],q:1,d:'Ticket No-'+ref(lone[0][0])});
+    else if(lone.length>1) singles.push({o:2,u:g.u,first:lone[lone.length-1][0],q:lone.length,d:lone.map(x=>x[0]).sort().reverse().map(ref).join(' & ')}); });
+  wait.forEach(l=>rows.push({o:3,u:l.waiting,q:1,first:l.ticket,d:'Waiting time - '+ref(l.ticket)}));
+  return [...rows,...singles].sort((a,b)=>a.o===0||b.o===0?a.o-b.o:(a.o===2)!==(b.o===2)?(a.o===2?1:-1):(b.u-a.u)||String(b.first).localeCompare(String(a.first)));
 }
 async function invoicePdf(id){
   const inv=invoices[id]; if(!inv||!canPdf()) return; const cr=isCredit(inv), c=CO();
@@ -908,28 +911,31 @@ async function invoicePdf(id){
   const T=(t,x,yy,o={})=>{ doc.setFont('helvetica',o.b?'bold':'normal'); doc.setFontSize(o.s||8.5); doc.setTextColor(...(o.c||ink)); doc.text(t,x,yy,o.a?{align:o.a}:undefined); };
   const box=(x,yy,w,h,fill)=>{ doc.setDrawColor(...line); doc.setLineWidth(.6); if(fill){ doc.setFillColor(...shade); doc.rect(x,yy,w,h,'FD'); } else doc.rect(x,yy,w,h); };
   const title=cr?'Tax Credit Note':'Tax Invoice';
+  const LV=(l,v,x,yy,o={})=>{ T(l,x,yy,{s:o.s||8,c:o.c}); if(v) T(String(v),x+doc.getTextWidth(l)+2,yy,{s:o.s||8,b:true}); };
   const header=()=>{ y=M+12; T(title,W/2,y,{b:true,s:15,a:'center'}); y+=12;
-    box(M,y,X2-M,74); T(c.legalName||'',M+12,y+24,{b:true,s:16});
-    T(c.address||'',M+12,y+38,{s:8,c:muted}); T((c.phone?'Phone:  '+c.phone:''),M+12,y+51,{s:8}); if(c.email) T('Email:  '+c.email,X2-12,y+51,{s:8,a:'right'}); if(c.trn) T('TRN: '+c.trn,M+12,y+63,{s:8,b:true}); y+=74; };
+    const lx=M+150; box(M,y,X2-M,100);
+    doc.setFont('helvetica','normal'); doc.setFontSize(22); doc.setTextColor(...ink); doc.setLineWidth(.8); doc.setDrawColor(...ink); [[0,0],[5,0]].forEach(([dx])=>{ doc.line(M+14+dx,y+58,M+26+dx,y+44); doc.line(M+17+dx,y+58,M+29+dx,y+44); }); doc.text((c.tradeName||c.legalName||'').split(' ')[0].toUpperCase(),M+38,y+57,{charSpace:2.5});
+    const nl=doc.splitTextToSize(c.legalName||'',X2-lx-12); const nl2=(()=>{ doc.setFont('helvetica','bold'); doc.setFontSize(19); return doc.splitTextToSize(c.legalName||'',X2-lx-10); })(); doc.setTextColor(...ink); doc.text(nl2.slice(0,2),lx,y+26); const ny=y+26+(Math.min(2,nl2.length)-1)*21;
+    T(c.address||'',lx,ny+13,{s:7.6,c:muted}); if(c.phone) LV('Phone:  ',c.phone,lx,ny+26); if(c.email) LV('Email:  ',c.email,lx+190,ny+26); if(c.trn) LV('TRN: ',c.trn,lx,ny+38); y+=100; };
   header();
   // bill to / invoice details
   const mid=M+(X2-M)*0.5, mid2=M+(X2-M)*0.75;
   box(M,y,mid-M,15,true); box(mid,y,X2-mid,15,true); T('Bill To:',M+5,y+10,{b:true,s:8}); T(cr?'Credit Note Details:':'Invoice Details:',mid+5,y+10,{b:true,s:8}); y+=15;
   const hb=48; box(M,y,mid-M,hb); box(mid,y,mid2-mid,hb); box(mid2,y,X2-mid2,hb);
   T(String(inv.customer||FS().customer).toUpperCase(),M+5,y+12,{b:true}); doc.splitTextToSize(c.custAddress||'DUBAI',mid-M-10).slice(0,2).forEach((l,i)=>T(l,M+5,y+24+i*10,{s:8})); if(c.custTrn) T('TRN: '+c.custTrn,M+5,y+44,{s:8});
-  T((cr?'Credit Note No.: ':'Invoice No.: ')+inv.invoiceNo,mid+5,y+12); T('Date: '+fd(inv.date),mid+5,y+24); T(cr?'Against Invoice: '+(inv.refInvoice||''):'Place Of Supply: '+(c.placeOfSupply||'Dubai'),mid+5,y+36);
-  T('Date of Supply: '+fd(inv.supplyDate||inv.date),mid2+5,y+12); y+=hb+10;
+  LV(cr?'Credit Note No.: ':'Invoice No.: ',inv.invoiceNo,mid+5,y+12,{s:8.5}); LV('Date: ',fd(inv.date),mid+5,y+24,{s:8.5}); if(cr) LV('Against Invoice: ',inv.refInvoice||'',mid+5,y+36,{s:8.5}); else LV('Place Of Supply: ',c.placeOfSupply||'Dubai',mid+5,y+36,{s:8.5});
+  LV('Date of Supply: ',fd(inv.supplyDate||inv.date),mid2+5,y+12,{s:8.5}); y+=hb+10;
   // table
-  const cols=[[M,18,'#','left'],[M+18,170,'Item name','left'],[M+188,52,'Quantity','right'],[M+240,44,'Unit','right'],[M+284,60,'Price/\nUnit(AED)','right'],[M+344,38,'VAT %','right'],[M+382,74,'VAT Amount(AED)','right'],[M+456,X2-M-456,'Amount(AED)','right']];
+  const cw=[20,134,60,52,66,41,79], cols=[]; { let x=M; ['#','Item name','Quantity','Unit','Price/\nUnit(AED)','VAT %','VAT Amount(AED)','Amount(AED)'].forEach((t,k)=>{ const w=k<7?cw[k]:X2-x; cols.push([x,w,t,k<2?'left':'right']); x+=w; }); }
   const th=()=>{ cols.forEach(([x,w,t,al])=>{ box(x,y,w,26,true); const ls=t.split('\n'); ls.forEach((l,i)=>T(l,al==='right'?x+w-4:x+4,y+11+i*9-(ls.length-1)*4,{b:true,s:7.6,a:al==='right'?'right':undefined})); }); y+=26; };
   th();
   const rows=invRows(inv); let qty=0, vatT=0, totT=0;
-  rows.forEach((r,i)=>{ const net=r.u*r.q, vat=r2(net*VAT_RATE), tot=r2(net+vat); qty+=r.q; vatT+=vat; totT+=tot; const ls=doc.splitTextToSize(r.d,170-8); const rh=Math.max(22,ls.length*9.5+8);
+  rows.forEach((r,i)=>{ const net=r.u*r.q, vat=r2(net*VAT_RATE), tot=r2(net+vat); qty+=r.q; vatT+=vat; totT+=tot; doc.setFont('helvetica','bold'); doc.setFontSize(8.6); const ls=(()=>{ const maxW=cols[1][1]-8, parts=r.d.split(/(?<=[-\s])/), out=[]; let cur=''; parts.forEach(pt=>{ if(cur&&doc.getTextWidth(cur+pt)>maxW){ out.push(cur.trimEnd()); cur=pt.trimStart(); } else cur+=pt; }); if(cur) out.push(cur.trimEnd()); return out; })(); const rh=Math.max(26,ls.length*10.5+10);
     if(y+rh>H-120){ doc.addPage(); header(); y+=8; th(); }
     cols.forEach(([x,w])=>box(x,y,w,rh)); T(String(i+1),M+4,y+rh/2+3);
-    ls.forEach((l,k)=>T(l,M+22,y+11+k*9.5,{b:true,s:7.8})); const v=[String(r.q),'Ser',amt(r.u),'5%',amt(vat),amt(tot)];
-    v.forEach((t,k)=>{ const [x,w]=cols[k+2]; T((cr&&k>=2&&k!==3?'-':'')+t,x+w-4,y+rh/2+3,{s:8,a:'right'}); }); y+=rh; });
-  cols.forEach(([x,w])=>box(x,y,w,18)); T('Total',M+22,y+12,{b:true}); T(String(qty),cols[2][0]+cols[2][2-1]-4,y+12,{b:true,a:'right'}); T((cr?'-':'')+amt(vatT),cols[6][0]+cols[6][1]-4,y+12,{b:true,a:'right'}); T((cr?'-':'')+amt(totT),X2-4,y+12,{b:true,a:'right'}); y+=18;
+    ls.forEach((l,k)=>T(l,cols[1][0]+4,y+12+k*10.5,{b:true,s:8.6})); const v=[String(r.q),'Ser',amt(r.u),'5%',amt(vat),amt(tot)];
+    v.forEach((t,k)=>{ const [x,w]=cols[k+2]; T((cr&&k>=2&&k!==3?'-':'')+t,x+w-4,y+rh/2+3,{s:8.4,a:'right'}); }); y+=rh; });
+  cols.forEach(([x,w])=>box(x,y,w,18)); T('Total',cols[1][0]+4,y+12,{b:true,s:9}); T(String(qty),cols[2][0]+cols[2][2-1]-4,y+12,{b:true,a:'right'}); T((cr?'-':'')+amt(vatT),cols[6][0]+cols[6][1]-4,y+12,{b:true,a:'right'}); T((cr?'-':'')+amt(totT),X2-4,y+12,{b:true,a:'right'}); y+=18;
   // totals block
   const tx=M+(X2-M)*0.655, tw=X2-tx; if(y>H-200){ doc.addPage(); header(); y+=8; }
   const gross=r2(invGross(inv)), paid=cr?0:invPaid(inv), bal=r2(gross-paid);
@@ -941,16 +947,18 @@ async function invoicePdf(id){
   box(M,top,tx-M,y-top); box(M,y-30,tx-M,15,true); T('Payment Mode:',M+4,y-19.5,{b:true,s:8}); box(M,y-15,tx-M,15); T(cr?'Credit note':'Credit',M+4,y-4.5,{s:8});
   // page 2: bank, signatures, acknowledgement
   doc.addPage(); header();
-  box(M,y,X2-M,15,true); T('Bank Details:',M+5,y+10,{b:true,s:8}); y+=15;
+  box(M,y,X2-M,15,true); T('Bank Details:',M+86,y+10,{b:true,s:8}); y+=15;
   const bank=[['Name',c.bankName],['Account No.',c.accountNo],['SWIFT code',c.swift],["Account holder's name",c.accountName],['IBAN',c.iban]].filter(x=>x[1]);
-  box(M,y,X2-M,Math.max(20,bank.length*14+8)); bank.forEach(([k,v],i)=>{ T(k+' : ',M+6,y+13+i*14,{s:8.5}); T(String(v),M+6+doc.getTextWidth(k+' : ')+4,y+13+i*14,{s:8.5,b:true}); }); y+=Math.max(20,bank.length*14+8);
+  const bh=Math.max(76,bank.length*14+8), qx=M+80; box(M,y,X2-M,bh); doc.line(qx,y,qx,y+bh);
+  try{ if(window.QRCode&&(c.iban||c.accountNo)){ const dv=document.createElement('div'); new QRCode(dv,{text:[c.accountName||c.legalName,c.bankName,c.accountNo&&'A/C '+c.accountNo,c.iban&&'IBAN '+c.iban,c.swift&&'SWIFT '+c.swift,'Ref '+inv.invoiceNo].filter(Boolean).join('\n'),width:256,height:256,correctLevel:QRCode.CorrectLevel.M}); const cv=dv.querySelector('canvas'); if(cv) doc.addImage(cv.toDataURL('image/png'),'PNG',M+8,y+(bh-64)/2,64,64); } }catch(e){}
+  bank.forEach(([k,v],i)=>LV(k+' : ',v,qx+6,y+13+i*14,{s:8.5})); y+=bh;
   box(M,y,mid-M,15,true); box(mid,y,X2-mid,15,true); T("Customer's Seal & Signature:",M+5,y+10,{b:true,s:8}); T('For '+(c.legalName||'')+':',mid+5,y+10,{b:true,s:7.6}); y+=15;
   box(M,y,mid-M,70); box(mid,y,X2-mid,70); T('Customer Signatory',(M+mid)/2,y+64,{s:8.5,a:'center'}); T('Authorized Signatory',(mid+X2)/2,y+64,{s:8.5,a:'center'}); y+=88;
   doc.setLineDashPattern([3,3],0); doc.setDrawColor(...muted); doc.line(M,y,X2,y); doc.setLineDashPattern([],0); y+=24;
   T('Acknowledgement',W/2,y,{b:true,s:14,a:'center'}); y+=12;
   box(M,y,X2-M,15,true); T('Company Details:',M+5,y+10,{b:true,s:8}); y+=15; box(M,y,X2-M,38); T(c.legalName||'',W/2,y+17,{b:true,s:13,a:'center'}); T([c.phone&&'Phone: '+c.phone,c.email&&'Email: '+c.email,c.trn&&'TRN: '+c.trn].filter(Boolean).join('     '),W/2,y+31,{s:7.6,a:'center'}); y+=38;
   const w3=(X2-M)/3; [['Invoice Details:',0],['Party Details:',1],["Receiver's Seal & Sign:",2]].forEach(([t,k])=>{ box(M+k*w3,y,w3,15,true); T(t,M+k*w3+5,y+10,{b:true,s:8}); }); y+=15;
-  [0,1,2].forEach(k=>box(M+k*w3,y,w3,44)); T((cr?'Credit Note No. : ':'Invoice No. : ')+inv.invoiceNo,M+5,y+12,{s:8}); T('Date : '+(inv.date||'').split('-').reverse().join('-'),M+5,y+23,{s:8}); T('Amount : '+(cr?'-':'')+amt(gross),M+5,y+34,{s:8});
+  [0,1,2].forEach(k=>box(M+k*w3,y,w3,44)); LV(cr?'Credit Note No. : ':'Invoice No. : ',inv.invoiceNo,M+5,y+12); LV(cr?'Credit note date : ':'Invoice date : ',(inv.date||'').split('-').reverse().join('-'),M+5,y+23); LV(cr?'Credit Amount : ':'Invoice Amount : ',(cr?'-':'')+amt(gross),M+5,y+34);
   T(String(inv.customer||FS().customer).toUpperCase(),M+w3+5,y+12,{b:true,s:8}); T((c.custAddress||'DUBAI').split(',')[0],M+w3+5,y+23,{s:8});
   if(!c.trn){ T('Supplier TRN missing — add it under Company management → Company profile.',M,H-30,{s:8,c:[180,60,40]}); }
   const pages=doc.getNumberOfPages(); for(let i=1;i<=pages;i++){ doc.setPage(i); T('Page '+i+' of '+pages,X2,H-16,{s:7,c:muted,a:'right'}); }
