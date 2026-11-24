@@ -103,6 +103,9 @@ h1,h2,h3{margin:0;font-family:var(--display);letter-spacing:-.01em;text-wrap:bal
 /* ---------- page scaffolding ---------- */
 .page{padding-block:26px 48px;padding-left:max(28px,env(safe-area-inset-left,0px));padding-right:max(28px,env(safe-area-inset-right,0px));max-width:1440px;width:100%;margin:0 auto;display:flex;flex-direction:column;gap:20px}
 .phead{display:flex;align-items:flex-end;justify-content:space-between;gap:16px;flex-wrap:wrap}
+.backbtn{display:inline-flex;align-items:center;gap:6px;height:32px;padding:0 12px 0 8px;margin:0 0 10px;border:1px solid var(--line2);border-radius:999px;background:var(--surface);color:var(--ink2);font:inherit;font-size:13px;font-weight:600;cursor:pointer}
+.backbtn:hover{border-color:var(--navy3);color:var(--navy)}
+@media print{.backbtn{display:none}}
 .phead h1{font-size:26px;font-weight:700}
 .phead .sub{margin-top:4px;font-size:13.5px}
 .actions{display:flex;gap:8px;flex-wrap:wrap}
@@ -2652,6 +2655,20 @@ function render(){
   $app.innerHTML=route==='tickets'?ticketsView():route==='review'?reviewView():route==='parts'?partsView():route==='admin'?adminView():route==='assets'?assetsView():route==='reports'?reportsView():route==='finance'?financeView():route==='tasks'?tasksView():route==='customers'?customersView():route==='documents'?documentsView():route==='quality'?qualityView():route==='company'?companyView():route==='integrations'?integrationsView():route==='backup'?backupView():route==='planned'?plannedView():dashView();
   document.getElementById('modal').innerHTML=modalHtml();
   if(route==='tickets'&&mode==='visit') initSig();
+  backTrack();
+}
+/* Back button on every page: remembers the pages visited in this session */
+let navStack=[], navLast=null, navBacking=false;
+const navKey=()=>route+'|'+(route==='tickets'&&sel?sel:'');
+function backTrack(){
+  const k=navKey(); if(navLast&&k!==navLast&&!navBacking){ navStack.push(navLast); if(navStack.length>40) navStack.shift(); } navBacking=false; navLast=k;
+  if(!navStack.length) return; const pg=$app.querySelector('.page'); if(!pg||pg.querySelector(':scope > .backbtn')) return;
+  const prev=navStack[navStack.length-1].split('|'), lbl=prev[1]?tref(prev[1]):((ROUTES.find(r=>r[0]===prev[0])||[])[1]||prev[0].charAt(0).toUpperCase()+prev[0].slice(1));
+  const b=document.createElement('button'); b.type='button'; b.className='backbtn'; b.dataset.act='goback'; b.setAttribute('aria-label','Back to '+lbl); b.innerHTML=svg('back',16)+'<span></span>'; b.querySelector('span').textContent='Back · '+lbl; pg.insertBefore(b,pg.firstChild);
+}
+function goBack(){
+  while(navStack.length){ const k=navStack.pop(); if(k===navKey()) continue; const [r,id]=k.split('|'); navBacking=true; route=r; sel=id||null; mode='view'; draft=null;
+    try{ history.replaceState(null,'','#'+(r==='tickets'&&sel?'t'+sel:r)); }catch(e){} render(); window.scrollTo(0,0); return; }
 }
 const typing=()=>{ const a=document.activeElement; return !!(a&&a.closest&&a.closest('#app,#modal')&&/^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName)); };
 // live updates never rebuild a screen while someone types in it or edits a visit; their next action renders the update
@@ -2980,6 +2997,7 @@ document.addEventListener('click',async e=>{
     toast({completed:tref(n)+' marked completed',recheck:tref(n)+' returned to the technician',cancelled:tref(n)+' cancelled'}[ds.decide]); return;
   }
   const act=ds.act;
+  if(act==='goback'){ goBack(); return; }
   if(act==='back'){ sel=null; mode='view'; draft=null; try{ history.replaceState(null,'','#tickets'); }catch(_){} render(); return; }
   if(act==='more'){ list.limit+=60; document.getElementById('l-body').innerHTML=listBody(); return; }
   if(act==='call'){ showCall=!showCall; render(); return; }
