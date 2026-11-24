@@ -901,7 +901,7 @@ function integrationsView(){
     ${row('WhatsApp','Links','plain','Ticket pages open WhatsApp with the customer’s number. Nothing is sent automatically.')}
     ${row('QuickBooks','Not used','plain','Your QuickBooks company is set up in US dollars, so the hub does not use it. Xero (AED) is used instead.')}
     ${(()=>{ const a=atui; const cfg=atCfg(), where='Reads <b>'+esc(cfg.baseName||cfg.base)+' → '+esc(cfg.tableName||cfg.table)+'</b> and never writes to Airtable. Tickets match by the number at the end of the Ticket ID (EZR-KOHLER-SRV-26-0224 → #0224); filled-in Airtable fields update the hub, empty ones never erase hub data, and nothing is deleted. Syncs every 5 minutes while an administrator has the hub open.';
-      return a.st==='ok'?row('Airtable','Syncing · read only','ok',`Last sync ${esc(dmhm(a.at))}: ${a.read} ticket${a.read===1?'':'s'} read · ${a.made} new · ${a.upd} updated${a.skip?' · '+a.skip+' without a ticket number skipped':''}. ${where}`,`<button class="btn" data-act="atsync">Sync now</button><button class="btn" data-act="atpick">Choose base &amp; table</button>`)
+      return a.st==='ok'?row('Airtable','Syncing · read only','ok',`Last sync ${esc(dmhm(a.at))}: ${a.read} ticket${a.read===1?'':'s'} read · ${a.made} new · ${a.upd} updated${a.skip?' · '+a.skip+' without a ticket number skipped':''}. Every 30 minutes while the hub is open. ${a.conflicts?'<b>'+a.conflicts+' ticket'+(a.conflicts>1?'s have':' has')+' a different invoice number in Airtable ('+esc(atConflicts.slice(0,5).map(c=>'#'+c.id+': hub '+c.hub+' / Airtable '+c.at).join('; '))+') — the hub kept its own.</b> ':''}${where}`,`<button class="btn" data-act="atsync">Sync now</button><button class="btn" data-act="atpick">Choose base &amp; table</button>`)
        :a.st==='busy'?row('Airtable','Syncing…','plain','Reading your Airtable tickets…','')
        :a.st==='err'?row('Airtable','Not syncing','bad',esc(a.err)+' '+where,`<button class="btn" data-act="atsync">Try again</button><button class="btn" data-act="atpick">Choose base &amp; table</button>`)
        :row('Airtable','Ready to connect','plain',(mcpApi?'':'Open the hub in claude.ai to connect. ')+where,mcpApi?`<button class="btn primary" data-act="atpick">Choose base &amp; table</button><button class="btn" data-act="atsync">Sync now</button>`:''); })()}
@@ -1099,15 +1099,16 @@ function syncLabel(){ if(!loaded) return ['Connecting…','wait']; if(demo) retu
 
 
 /* ---------- Airtable: read-only ticket sync (Ziara Financial Command Center → Service Tickets) ---------- */
-const AT_DEFAULT={server:'Airtable',base:'appnqZO5v0DyFIpwY',baseName:'Ziara Financial Command Center',table:'tblRP3mQyqCkOzd84',tableName:'Service Tickets',f:{id:'fldnleSfR9hAVNJlY',date:'fldlVF5uY7RmxBpsq',desc:'fldX7psQgQ3cPEsHa',emirate:'fldCWdzu5Nl1FkfE6',status:'fldpGLvEj3LJQ5mkS',notes:'fldqHiqOi3uek8Tl6',site:'fld9gjG7nvp9KQvTF',loc:'fldz9kZI1tsHBPE8T',product:'fldkIW30GkGnBgtDl',tech:'fldk0OSciZSzVquoF',done:'fld38MAopIcendWcH',inv:'fldBw0nv73gk2jaAo'}};
-const atCfg=()=>{ const c=FS().airtable; return c&&c.base&&c.table&&c.f?Object.assign({server:'Airtable'},c):AT_DEFAULT; };
+const AT_DEFAULT={server:'Airtable',mode:'page',base:'apprDoCCtkJQl0E4E',baseName:'Kohler UAE Service Ticket Manager',iface:'pbdYSC8OPffPXIXY3',page:'paghs6IWDHle1Xj3P',table:'tblPc4XGpCiDkHYsl',tableName:'Service Visits',f:{id:'fldeQqv7lHTCmVUEY',status:'fldBrRSoOS3ALf4uE',site:'fldts2oyConVvqDmh',sched:'fld3VOpNMNrwy7E2t',date:'fldQlpYIMVxZFdi8Y',emirate:'fldBAbXWQtEHmUZab',product:'fldmJb515lAik5tbn',contactedAt:'fldrVenEEAswYeLIJ',contact:'fldW97kxlOhPHNb8T',email:'fldItWS4tKxqMpNUT',loc:'fldNu75wRq85SaP2P',type:'fldV09dkwHvxVfvcr',category:'fldBCPLmttHp6OBFy',model:'fldsECcbBWn7WOaES',serial:'fld4ETvDvSpb68E4v',desc:'fldhjPID30gPkzfFi',instructions:'fldQWNzkLZTpIwCGQ',arrived:'fldV79ygiWwU5Vh9x',doneAt:'fldq6zc0sR0VCtgAk',washroom:'fldnyTAfRn2qRyb3l',findings:'fldQDk0DHtK82LOFF',work:'fldiMPrCFrpFkFCBs',nextAction:'fld1atTS7cL2GsG6V',outcome:'fldMrRIXmPWHBWh5T',returnVisit:'fldQrO3WyT2JV3Vwl',tech:'fldYitTWznnCfFgAV',feedback:'fldFLx49TnFbeULKp',inotes:'fldARE9VnNDZ2pHB8',inv:'fldP83r75NAb13cmF'}};
+const AT_OLD_BASE='appnqZO5v0DyFIpwY';
+const atCfg=()=>{ const c=FS().airtable; return c&&c.base&&c.table&&c.f&&c.base!==AT_OLD_BASE?Object.assign({server:'Airtable'},c):AT_DEFAULT; };
 const AT_KEYS=[['id','Ticket ID / number',true],['date','Service date'],['status','Status'],['emirate','Emirate'],['site','Customer site'],['loc','Location / address'],['product','Product / service'],['desc','Description / issue'],['tech','Technician'],['done','Completion date'],['inv','Invoice number'],['notes','Notes']];
 let atPick=null;
 function atAutoMap(t){ const F=t.fields||[], used=new Set(), m={}; const pick=(k,re,not)=>{ const f=F.find(x=>!used.has(x.id)&&re.test(x.name.toLowerCase())&&!(not&&not.test(x.name.toLowerCase()))); if(f){ m[k]=f.id; used.add(f.id); } };
   pick('id',/ticket\s*(id|no|number|#|ref)|^ticket$|^ref|reference/); if(!m.id&&t.primaryFieldId){ m.id=t.primaryFieldId; used.add(t.primaryFieldId); }
   pick('done',/complet|finish|closed on|closing date/); pick('date',/service date|visit date|schedul|appointment|^date$|date/,/creat|modif|due|invoice|payment/); pick('status',/service status|ticket status|job status|^status$|status/,/billing|review|payment|invoice|vat/); pick('emirate',/emirate|region|city/); pick('site',/site|project|customer name|^customer$/,/address|location/); pick('loc',/location|address|area/); pick('product',/product|item|model|unit|equipment/); pick('desc',/description|issue|problem|complaint|fault|work/); pick('tech',/technician|engineer|assigned|staff/); pick('inv',/z invoice|invoice no|invoice number|linked invoice|billing ref|invoice/,/status|date|amount|total/); pick('notes',/note|remark|comment/);
   return m; }
-let atui={st:'idle',at:null,read:0,made:0,upd:0,skip:0,err:''}, permApi=null, atTimer=null;
+let atui={st:'idle',at:null,read:0,made:0,upd:0,skip:0,err:''}, permApi=null, atTimer=null, atConflicts=[];
 const atTxt=v=>v==null?'':Array.isArray(v)?v.map(atTxt).filter(x=>x&&!/^rec[A-Za-z0-9]{14}$/.test(x)).join(', '):typeof v==='object'?String(v.name??v.value??v.text??v.label??''):String(v).trim();
 function atStatus(v){ const t=atTxt(v).toLowerCase(); if(!t) return null; if(/cancel/.test(t)) return 'cancelled'; if(/complet|done|closed|finish/.test(t)) return 'completed'; if(/review/.test(t)) return 'review'; if(/recheck|return|revisit/.test(t)) return 'recheck'; if(/new|open|schedul|pending|progress|assign/.test(t)) return 'new'; return null; }
 const AT_FIX={needs_reauth:'Reconnect Airtable in claude.ai → Settings → Connectors, then try again.',server_not_connected:'Add the Airtable connector in claude.ai → Settings → Connectors, then try again.',selection_required:'You have more than one Airtable connector — choose one when claude.ai asks, then try again.',approval_required:'This page needs your approval to read Airtable. Press the button again and choose Allow.',not_in_manifest:'Airtable is turned off for this page. Turn it on in the page’s Permissions menu.',blocked_by_policy:'Your organisation’s policy blocks Airtable for this page.',not_granted:'Connectors are not available in this view. Open the hub in claude.ai.',capability_disabled:'Connectors are not available in this view. Open the hub in claude.ai.',server_unavailable:'Airtable did not answer just now. Try again in a minute.',tool_error:'Airtable refused the request. Check that the chosen base and table still exist and are shared with your Airtable connector.'};
@@ -1115,13 +1116,22 @@ const AT_FIX={needs_reauth:'Reconnect Airtable in claude.ai → Settings → Con
 /* merge one incoming ticket (Airtable record or file row) into the hub: fill-in only, never erase, never delete */
 async function mergeTicket(tid,g,src){
   tid=String(tid||'').trim(); const m=tid.match(/(\d{1,5})\s*$/); if(!m) return 'skip'; const id=m[1].padStart(4,'0'), ex=visits[id], patch={};
-  const put=(k,v)=>{ if(v!==undefined&&v!==null&&v!=='') patch[k]=v; };
+  const blank=v=>v===undefined||v===null||v===''||(typeof v==='string'&&/^(?:[-–—\s.]*|to be updated|n\/?a|none|tbc|tbd)$/i.test(v.trim()));
+  const put=(k,v)=>{ if(!blank(v)) patch[k]=v; };
+  const dts=v=>{ const t=atTxt(v); return /^\d{4}-\d{2}-\d{2}T/.test(t)?t:''; }, same16=(a,b)=>String(a||'').slice(0,16)===String(b||'').slice(0,16);
   const iso=v=>{ const t=atTxt(v); if(/^\d{4}-\d{2}-\d{2}/.test(t)) return t.slice(0,10); const d=typeof parseDate==='function'?parseDate(t):null; return d||''; };
-  if(/\D/.test(tid)) put('ref',tid);
-  const dt=iso(g('date')); if(dt&&!(ex&&ex.scheduled&&dayKey(ex.scheduled)===dt)) put('scheduled',dt+'T04:00:00.000Z');
+  if(/[A-Za-z]/.test(tid)) put('ref',tid);
+  const sch=dts(g('sched')); if(sch){ if(!(ex&&same16(ex.scheduled,sch))) put('scheduled',sch); }
+  else { const dt=iso(g('date')); if(dt&&!(ex&&ex.scheduled&&dayKey(ex.scheduled)===dt)) put('scheduled',dt+'T04:00:00.000Z'); }
   const fin=iso(g('done')); if(fin&&!(ex&&ex.finished)) put('finished',fin+'T08:00:00.000Z');
-  const st=atStatus(g('status')); if(st) put('status',st);
-  put('region',atTxt(g('emirate'))); put('site',atTxt(g('site'))); put('address',atTxt(g('loc'))); put('product',atTxt(g('product'))); put('issue',atTxt(g('desc'))); put('technician',atTxt(g('tech'))); put('billingRef',atTxt(g('inv'))); put('airtableNotes',atTxt(g('notes')));
+  [['arrived','arrived'],['doneAt','finished'],['contactedAt','contactedAt']].forEach(([k,h])=>{ const t=dts(g(k)); if(t&&!(ex&&same16(ex[h],t))) put(h,t); });
+  const RANK={new:0,recheck:0,review:1,completed:2,cancelled:3}, st=atStatus(g('status')); if(st&&!(ex&&RANK[st]<=RANK[ex.status]&&!(st==='recheck'&&ex.status==='review'))&&!(st==='cancelled'&&ex&&(ex.billingRef||'').trim())) put('status',st);
+  [['contact','contact'],['type','type'],['category','category'],['model','model'],['serial','serial'],['instructions','instructions'],['findings','findings'],['work','work'],['nextAction','nextAction'],['outcome','outcome'],['feedback','customerFeedback'],['inotes','internalNotes']].forEach(([k,h])=>put(h,atTxt(g(k))));
+  { const e=atTxt(g('email')).replace(/^mailto:/i,''); if(/@/.test(e)) put('email',e); }
+  { const w=g('washroom'); put('washroom',Array.isArray(w)?w.map(atTxt).filter(Boolean).join('\n'):atTxt(w)); }
+  { const rv=g('returnVisit'); if(rv===true) put('returnVisit','Yes'); }
+  put('region',atTxt(g('emirate'))); put('site',atTxt(g('site'))); put('address',atTxt(g('loc'))); put('product',atTxt(g('product'))); put('issue',atTxt(g('desc'))); put('technician',atTxt(g('tech'))); put('airtableNotes',atTxt(g('notes')));
+  { const inv=atTxt(g('inv')); if(!blank(inv)){ if(!ex||!(ex.billingRef||'').trim()) put('billingRef',inv); else if(invKey(ex.billingRef)!==invKey(inv)) atConflicts.push({id,hub:ex.billingRef,at:inv}); } }
   if(!ex){ const v=Object.assign({id,ref:'EZR-KOHLER-SRV-26-'+id,status:'new',type:'Inspection',priority:'Normal',category:'',product:'',site:'',address:'',region:'',issue:'',prepared:false,contactedAt:null,arrived:null,finished:null,findings:'',work:'',nextAction:'',outcome:'',returnVisit:'No',technician:'',internalNotes:'',parts:[],evidence:[],billingRef:''},patch,{source:src.source});
     if(src.recId) v.airtableId=src.recId; v.history=[Object.assign(hist(v.status),{note:'Imported from '+src.label})]; await save(v,null); return 'new'; }
   const keys=Object.keys(patch).filter(k=>canon(ex[k]??null)!==canon(patch[k])); if(src.recId&&ex.airtableId!==src.recId) keys.push('airtableId');
@@ -1166,15 +1176,16 @@ async function airtableSync(manual){
   if(atui.st==='busy'||access()!=='admin'||demo||!loaded) return; atui={...atui,st:'busy',err:''}; if(manual) render();
   try{
     let cursor=null; const recs=[];
-    for(let i=0;i<20;i++){ const AT=atCfg(); const input={baseId:AT.base,tableId:AT.table,pageSize:1000,fieldIds:Object.values(AT.f).filter(Boolean)}; if(cursor) input.cursor=cursor;
-      const r=await mcpApi.callTool(AT.server,'list_records_for_table',input,{cache:false}); const pl=r&&r.payload||{}; recs.push(...(Array.isArray(pl.records)?pl.records:[])); cursor=pl.nextCursor||null; if(!cursor) break; }
-    let made=0, upd=0, skip=0;
+    for(let i=0;i<20;i++){ const AT=atCfg(), page=AT.mode==='page'; const input=page?{baseId:AT.base,interfaceId:AT.iface,pageId:AT.page,pageSize:1000,fieldIds:Object.values(AT.f).filter(Boolean)}:{baseId:AT.base,tableId:AT.table,pageSize:1000,fieldIds:Object.values(AT.f).filter(Boolean)}; if(cursor) input.cursor=cursor;
+      const r=await mcpApi.callTool(AT.server,page?'list_records_for_page':'list_records_for_table',input,{cache:false}); const pl=r&&r.payload||{};
+      const got=page?((pl.recordsByTableId||{})[AT.table]||Object.values(pl.recordsByTableId||{})[0]||[]):pl.records; recs.push(...(Array.isArray(got)?got:[])); cursor=pl.nextCursor||null; if(!cursor) break; }
+    let made=0, upd=0, skip=0; atConflicts=[];
     const AT=atCfg(); for(const rec of recs){ const c=rec.cellValuesByFieldId||rec.fields||{}, g=k=>AT.f[k]?c[AT.f[k]]:undefined;
       const r=await mergeTicket(atTxt(g('id')),g,{recId:rec.id,label:'Airtable',source:'airtable'}); if(r==='skip') skip++; else if(r==='new') made++; else if(r==='upd') upd++; }
-    atui={st:'ok',at:new Date().toISOString(),read:recs.length,made,upd,skip,err:''};
+    atui={st:'ok',at:new Date().toISOString(),read:recs.length,made,upd,skip,err:'',conflicts:atConflicts.length};
     if(made||upd) logAction('Synced tickets from Airtable',{detail:recs.length+' read · '+made+' new · '+upd+' updated'});
     if(manual||made||upd) toast('Airtable: '+recs.length+' ticket'+(recs.length===1?'':'s')+' read · '+made+' new · '+upd+' updated');
-    if(!atTimer) atTimer=setInterval(()=>airtableSync(false),300000);
+    if(!atTimer) atTimer=setInterval(()=>airtableSync(false),1800000);
   }catch(e){ const c=(e&&e.code)||'upstream_error'; atui={...atui,st:'err',err:AT_FIX[c]||('Airtable sync failed ('+c+'). Try again.')}; if(['needs_reauth','server_not_connected','not_in_manifest','blocked_by_policy','not_granted'].includes(c)&&atTimer){ clearInterval(atTimer); atTimer=null; } }
   if(manual||route==='integrations') render();
 }
