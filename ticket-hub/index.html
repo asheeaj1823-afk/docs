@@ -897,7 +897,7 @@ function integrationsView(){
    </div></div></div>`;
 }
 /* ---------- Backup & recovery ---------- */
-const BK_COLS=()=>({visits:Object.fromEntries(Object.entries(visits).map(([k,v])=>[k,(({id,...r})=>r)(v)])),parts,stock,assets:assetReg,inventory,invoices,bankAccounts,bankTx,partnerTx,finSettings,statements,roles});
+const BK_COLS=()=>({visits:Object.fromEntries(Object.entries(visits).map(([k,v])=>[k,(({id,...r})=>r)(v)])),parts,stock,assets:assetReg,inventory,invoices,bankAccounts,bankTx,partnerTx,finSettings,statements,journals,bills,roles});
 const stripId=o=>Object.fromEntries(Object.entries(o||{}).map(([k,v])=>[k,(({id,...r})=>r)(v||{})]));
 async function backupDownload(){
   const cols=BK_COLS(), data={app:'ziar-imaar-hub',version:1,at:new Date().toISOString(),collections:{}};
@@ -905,26 +905,28 @@ async function backupDownload(){
   const counts=Object.fromEntries(Object.entries(data.collections).map(([k,v])=>[k,Object.keys(v).length]));
   try{ await downloadsApi.save({filename:'ziar-imaar-backup-'+todayDxb()+'.json',data:new Blob([JSON.stringify(data)],{type:'application/json'})}); logAction('Downloaded full backup',{detail:Object.entries(counts).map(([k,n])=>k+' '+n).join(', ')}); toast('Backup saved'); }catch(e){ if(!(e&&e.code==='declined')) toast('Could not save the backup.'); }
 }
-const BK_STORE={visits:null,parts:()=>parts,stock:()=>stock,assets:()=>assetReg,inventory:()=>inventory,invoices:()=>invoices,bankAccounts:()=>bankAccounts,bankTx:()=>bankTx,partnerTx:()=>partnerTx,finSettings:()=>finSettings,statements:()=>statements,roles:()=>roles};
+const BK_STORE={visits:null,parts:()=>parts,stock:()=>stock,assets:()=>assetReg,inventory:()=>inventory,invoices:()=>invoices,bankAccounts:()=>bankAccounts,bankTx:()=>bankTx,partnerTx:()=>partnerTx,finSettings:()=>finSettings,statements:()=>statements,journals:()=>journals,bills:()=>bills,roles:()=>roles};
+const bkDiff=(live,id,d)=>!!live[id]&&canon((({id:_i,...r})=>r)(live[id]))!==canon(d);
 function backupView(){
-  const live=BK_COLS(); const rows=Object.keys(BK_STORE).map(k=>{ const have=Object.keys(live[k]||{}).length, f=bk&&bk.data.collections[k]?Object.keys(bk.data.collections[k]):[]; const miss=f.filter(id=>!(live[k]||{})[id]); return {k,have,file:f.length,miss:miss.length}; });
-  const totalMiss=rows.reduce((a,r)=>a+r.miss,0);
+  const live=BK_COLS(); const rows=Object.keys(BK_STORE).map(k=>{ const have=Object.keys(live[k]||{}).length, f=bk&&bk.data.collections[k]?Object.keys(bk.data.collections[k]):[]; const miss=f.filter(id=>!(live[k]||{})[id]), dif=f.filter(id=>bkDiff(live[k]||{},id,bk.data.collections[k][id])); return {k,have,file:f.length,miss:miss.length,dif:dif.length}; });
+  const totalDif=rows.reduce((a,r)=>a+r.dif,0), totalMiss=rows.reduce((a,r)=>a+r.miss,0)+(bk&&bk.upd?totalDif:0);
   return `<div class="page"><div class="phead"><div><h1>Backup &amp; recovery</h1><div class="sub">A full copy of tickets, parts, assets, invoices, bank, statements, settings and roles</div></div></div>
    <div class="card"><div class="card-h"><h3>Download a backup</h3></div><div class="card-b"><p class="sub" style="margin-top:0">Saves everything as one file. Keep it somewhere safe, for example your email or Google Drive. Sign-in PINs are never included. Photos stay in the hub; the backup keeps their links.</p>
     ${downloadsApi?'<button class="btn primary" data-act="bkdl">'+svg('doc',16)+'Download full backup</button>':'<span class="sub">Downloads are not available here.</span>'}</div></div>
    <div class="card"><div class="card-h"><h3>Restore from a backup</h3></div><div class="card-b">
-    <p class="sub" style="margin-top:0">Choose a backup file to compare it with the hub. Restoring only <b>adds records that are missing</b> — nothing in the hub is overwritten or deleted.</p>
+    <p class="sub" style="margin-top:0">Choose a backup file to compare it with the hub. Restoring <b>adds records that are missing</b>. Nothing is deleted, and nothing is overwritten unless you tick the box to replace records that differ.</p>
     <input type="file" id="bk-file" accept=".json,application/json" class="field" style="height:auto;padding:8px">
     ${bk?`<div class="sub" style="margin:12px 0 6px">Backup from <b>${esc(dmhm(bk.data.at))}</b> · ${esc(bk.name)}</div>
-     <div class="tblwrap"><table class="tbl"><thead><tr><th>Data</th><th class="amt">In the hub</th><th class="amt">In the backup</th><th class="amt">Missing from the hub</th></tr></thead><tbody>${rows.map(r=>`<tr><td>${esc(r.k)}</td><td class="amt">${r.have}</td><td class="amt">${r.file}</td><td class="amt">${r.miss?'<b>'+r.miss+'</b>':'0'}</td></tr>`).join('')}</tbody></table></div>
-     <div style="display:flex;gap:10px;margin-top:12px">${totalMiss?`<button class="btn primary" data-act="bkgo">${bk.confirm?'Confirm — add '+totalMiss+' missing records':'Restore '+totalMiss+' missing records'}</button>`:'<span class="sub">Nothing is missing. The hub already has every record in this backup.</span>'}<button class="btn" data-act="bkcancel">Cancel</button></div>`:''}
+     <div class="tblwrap"><table class="tbl"><thead><tr><th>Data</th><th class="amt">In the hub</th><th class="amt">In the backup</th><th class="amt">Missing from the hub</th><th class="amt">Different</th></tr></thead><tbody>${rows.map(r=>`<tr><td>${esc(r.k)}</td><td class="amt">${r.have}</td><td class="amt">${r.file}</td><td class="amt">${r.miss?'<b>'+r.miss+'</b>':'0'}</td><td class="amt">${r.dif||'0'}</td></tr>`).join('')}</tbody></table></div>
+     ${totalDif?`<label style="display:flex;gap:8px;align-items:flex-start;margin-top:10px"><input type="checkbox" data-act="bkupd" ${bk.upd?'checked':''}><span>Also replace the <b>${totalDif}</b> record${totalDif>1?'s':''} that differ with the backup's version. Use this when moving to a new hub from an older one.</span></label>`:''}
+     <div style="display:flex;gap:10px;margin-top:12px">${totalMiss?`<button class="btn primary" data-act="bkgo">${bk.confirm?'Confirm — restore '+totalMiss+' records':'Restore '+totalMiss+' records'}</button>`:'<span class="sub">Nothing is missing. The hub already has every record in this backup.</span>'}<button class="btn" data-act="bkcancel">Cancel</button></div>`:''}
    </div></div></div>`;
 }
 async function backupRestore(){
   if(!bk) return; let n=0;
   for(const k of Object.keys(BK_STORE)){ const f=bk.data.collections[k]||{}; const live=k==='visits'?visits:BK_STORE[k]();
-    for(const [id,d] of Object.entries(f)){ if(live[id]) continue; if(k==='visits'){ const v=Object.assign({id,history:[],parts:[],evidence:[]},d); visits[id]=v; if(db) try{ await db.doc('visits/'+id).set(d); }catch(e){} } else await saveDoc(k,id,d,live); n++; } }
-  logAction('Restored from backup',{detail:n+' missing records added from '+bk.name}); bk=null; toast(n+' records restored'); render();
+    for(const [id,d] of Object.entries(f)){ if(live[id]&&!(bk.upd&&bkDiff(live,id,d))) continue; if(k==='visits'){ const v=Object.assign({id,history:[],parts:[],evidence:[]},d); visits[id]=v; if(db) try{ await db.doc('visits/'+id).set(d); }catch(e){} } else await saveDoc(k,id,d,live); n++; } }
+  logAction('Restored from backup',{detail:n+' records restored from '+bk.name+(bk.upd?' (changed records replaced)':'')}); bk=null; toast(n+' records restored'); render();
 }
 function plannedView(){
   const why={'General Ledger':'Double-entry journals, chart of accounts and trial balance. This will be built after your main workbook is loaded, so the opening balances are right. Until then your accountant keeps the ledger; use Finance → Export for the figures.','Procurement':'Purchase requests, supplier bills and approvals. Until then, record parts received under Inventory and supplier payments under Finance → Bank.'}[plannedName]||'';
@@ -2716,6 +2718,7 @@ document.addEventListener('click',async e=>{
   if(ds.act==='xcheck'){ await xeroCheck(); return; }
   if(ds.act==='xexport'){ await xeroExport(); render(); return; }
   if(ds.act==='bkdl'){ await backupDownload(); return; }
+  if(ds.act==='bkupd'){ if(bk){ bk.upd=!bk.upd; bk.confirm=false; render(); } return; }
   if(ds.act==='bkcancel'){ bk=null; render(); return; }
   if(ds.act==='bkgo'){ if(!bk) return; if(!bk.confirm){ bk.confirm=true; render(); return; } await backupRestore(); return; }
   if(ds.act==='closemodal'){ if(b.classList.contains('overlay')&&e.target!==b) return; modal=null; render(); return; }

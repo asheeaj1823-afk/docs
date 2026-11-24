@@ -1,0 +1,11 @@
+{
+  "name": "Ziar Imaar Hub",
+  "short_name": "Ziar Hub",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#0a1f4d",
+  "theme_color": "#0a1f4d",
+  "icons": [
+    { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml" }
+  ]
+}

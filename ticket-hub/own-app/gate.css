@@ -1,0 +1,22 @@
+#hub-gate{position:fixed;inset:0;z-index:9999;display:grid;place-items:center;padding:16px;background:linear-gradient(160deg,#0a1f4d 0%,#13306b 60%,#1e4189 100%);font-family:Inter,-apple-system,BlinkMacSystemFont,sans-serif;overflow:auto}
+#hub-gate .hg-card{width:100%;max-width:380px;background:#fff;border-radius:16px;padding:28px 24px;box-shadow:0 20px 60px rgba(0,0,0,.35);display:grid;gap:14px;color:#0d1b3e}
+#hub-gate .hg-brand{display:flex;gap:12px;align-items:center}
+#hub-gate .hg-brand b{display:block;font-family:Montserrat,Inter,sans-serif;font-size:17px}
+#hub-gate .hg-brand small{color:#67728c;font-size:12px}
+#hub-gate .hg-mark{width:42px;height:42px;border-radius:10px;background:#0a1f4d;color:#c9972f;display:grid;place-items:center;font-weight:700;font-family:Montserrat,sans-serif;letter-spacing:.5px}
+#hub-gate h1{margin:4px 0 0;font-size:20px;font-family:Montserrat,Inter,sans-serif}
+#hub-gate label{display:grid;gap:6px;font-size:13px;font-weight:600;color:#36425f}
+#hub-gate input{height:44px;border:1px solid #cdd5e3;border-radius:10px;padding:0 12px;font:inherit;font-size:16px;font-weight:400;color:#0d1b3e}
+#hub-gate input:focus{outline:2px solid #c9972f;outline-offset:1px;border-color:#c9972f}
+#hub-gate .hg-btn{height:46px;border:0;border-radius:10px;background:#0a1f4d;color:#fff;font:inherit;font-weight:600;font-size:15px;cursor:pointer}
+#hub-gate .hg-btn:disabled{opacity:.6}
+#hub-gate .hg-links{display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;font-size:13px}
+#hub-gate .hg-links a{color:#1d5bb8;text-decoration:none}
+#hub-gate .hg-msg{background:#fbe7ea;color:#b22a3d;border-radius:10px;padding:10px 12px;font-size:13px}
+#hub-gate .hg-msg.ok{background:#e2f3ea;color:#11734d}
+#hub-gate .hg-note{margin:0;font-size:12px;color:#67728c}
+#hub-me{position:fixed;right:10px;bottom:10px;z-index:900;display:flex;align-items:center;gap:8px;background:rgba(10,31,77,.92);color:#c9d3ea;border-radius:999px;padding:4px 4px 4px 12px;font:12px Inter,-apple-system,sans-serif;box-shadow:0 4px 14px rgba(0,0,0,.2)}
+#hub-me span{max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#hub-me button{border:0;border-radius:999px;background:#c9972f;color:#0a1f4d;font:inherit;font-weight:600;padding:5px 10px;cursor:pointer}
+@media (max-width:760px){#hub-me{bottom:auto;top:calc(env(safe-area-inset-top,0px) + 6px);right:6px}#hub-me span{display:none}}
+@media print{#hub-me{display:none}}
