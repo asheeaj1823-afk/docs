@@ -1636,6 +1636,7 @@ function bodyHtml(v){
         <div class="kv"><span>Technicians</span><span>${esc(v.technician)||'—'}</span></div>
         <div class="kv"><span>Return visit</span><span>${esc(v.returnVisit||'No')}</span></div>
         ${v.customerFeedback?`<div class="kv"><span>Customer feedback</span><span>${esc(v.customerFeedback)}</span></div>`:''}
+        ${(()=>{ const i=invFor(v), inv=i&&!i.planned?invOf(i.no):null; return inv&&invoiceState(inv).k==='paid'?`<div class="kv"><span>Receipt No.</span><span><b style="color:#11734d">${esc(rcptNo(inv))}</b> <span class="chip" style="background:#11734d;color:#fff;font-weight:800;letter-spacing:.8px;height:20px">PAID</span></span></div>`:''; })()}
         <div class="kv"><span>Z Invoice No.</span><span>${(()=>{ const i=invFor(v); return !i||!i.no?'—':invChip(v)+(i.planned?' <span class="sub">fixed on '+esc(String(i.on).split('-').reverse().join('/'))+'</span>':''); })()}</span></div>
         ${(()=>{ const a=assetFor(v); if(!a) return ''; const w=warranty(a); return `<div class="kv"><span>Registered asset</span><span>${esc(a.serial?'S/N '+a.serial:a.model)}${w?` · <span class="chip ${w.cls}" style="height:20px">${esc(w.label)}</span>`:''}</span></div>`; })()}
         ${v.internalNotes?`<div class="kv"><span>Internal notes</span><span>${esc(v.internalNotes)}</span></div>`:''}
@@ -2164,7 +2165,7 @@ const invOf=no=>{ const k=invKey(no); return Object.values(invoices).find(x=>!is
 const invChip=v=>{ const i=invFor(v); if(!i||!i.no) return '';
   if(i.planned) return `<span class="invchip planned" title="Planned invoice — the number is fixed when the billing cycle closes (${esc(String(i.on).split('-').reverse().join('/'))})">⏳ ${esc(i.no)} · planned</span>`;
   const inv=invOf(i.no), st=inv?invoiceState(inv).k:'issued';
-  const cls=st==='paid'?'paid':st==='overdue'?'overdue':st==='draft'||st==='void'?'draft':'issued', lab={paid:'✓ '+i.no+' · PAID',overdue:'! '+i.no+' · Overdue',draft:i.no+' · '+(st==='void'?'Void':'Draft'),issued:'🧾 '+i.no}[cls];
+  const cls=st==='paid'?'paid':st==='overdue'?'overdue':st==='draft'||st==='void'?'draft':'issued', lab={paid:'✓ '+i.no+' · PAID · '+rcptNo(inv||{invoiceNo:i.no}),overdue:'! '+i.no+' · Overdue',draft:i.no+' · '+(st==='void'?'Void':'Draft'),issued:'🧾 '+i.no}[cls];
   return `<span class="invchip ${cls}" title="Z Invoice No. ${esc(i.no)}${inv&&cls==='paid'?' · Receipt '+esc(rcptNo(inv)):''}${inv?' · '+esc(invoiceState(inv).label)+(inv.dueDate?' · due '+esc(inv.dueDate.split('-').reverse().join('/')):''):''}">${esc(lab)}</span>`; };
 const INV_LEGEND=`<div class="invlegend" aria-label="Invoice colours"><span class="invchip planned" style="height:18px;font-size:11px">⏳ planned</span><span class="invchip issued" style="height:18px;font-size:11px">🧾 raised</span><span class="invchip paid" style="height:18px;font-size:11px">✓ paid</span><span class="invchip overdue" style="height:18px;font-size:11px">! overdue</span><span class="invchip draft" style="height:18px;font-size:11px">draft</span></div>`;
 const unbilled=()=>Object.values(visits).filter(v=>v.status==='completed'&&!(v.billingRef||'').trim()&&billKindOf(v)!=='none').sort((a,b)=>ticketDate(a).localeCompare(ticketDate(b))||a.id.localeCompare(b.id));
