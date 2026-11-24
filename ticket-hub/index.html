@@ -67,6 +67,7 @@ h1,h2,h3{margin:0;font-family:var(--display);letter-spacing:-.01em;text-wrap:bal
 .nav .nitems button{height:34px;padding-left:40px;font-size:13px}
 .nav .soon{margin-left:auto;font-size:10px;letter-spacing:.04em;text-transform:uppercase;opacity:.55;border:1px solid currentColor;border-radius:4px;padding:0 4px}
 .side{overflow-y:auto}
+.side>*{flex-shrink:0}
 .nav .gsbtn{display:flex;align-items:center;gap:10px;height:38px;margin:0 0 10px;padding:0 12px;border-radius:9px;background:rgba(255,255,255,.08);color:var(--navyInk);font-weight:500}
 .nav .gsbtn:hover{background:rgba(255,255,255,.14);color:#fff}
 .nav .gsbtn kbd{margin-left:auto;font-size:10.5px;opacity:.65;font-family:inherit;border:1px solid currentColor;border-radius:4px;padding:0 5px}
@@ -830,18 +831,64 @@ function companyView(){
 }
 
 /* ---------- Integrations ---------- */
-function integrationsView(){
-  const r=[['Shared live database','Connected','ok','Every phone and computer sees the same tickets and finance, instantly.'],
-   ['Phone reminders','On','ok','On the 1st and 16th at 8:32 (Dubai): invoice and statement reminder.'],
-   ['WhatsApp','Links only','plain','Ticket pages open WhatsApp with the customer number. Nothing is sent automatically.'],
-   ['Bank','Upload statements','plain','No live bank feed. Upload the Excel or CSV statement under Finance → Bank; lines are sorted automatically.'],
-   ['Accounting software (Xero, QuickBooks)','Not connected','plain','Export finance to Excel for your accountant.'],
-   ['Airtable','Off','plain','Not connected, as you asked.'],
-   ['Main Excel workbook','Waiting','warn','Send the 43-sheet workbook to load opening balances and history.']];
-  return `<div class="page"><div class="phead"><div><h1>Integrations</h1><div class="sub">What the hub is connected to</div></div></div>
-   <div class="card"><div>${r.map(([t,s,k,d])=>`<div class="ctl"><span class="ic ${k==='ok'?'ok':k==='warn'?'warn':'ok'}" style="${k==='plain'?'background:var(--surface2);color:var(--muted)':''}">${k==='ok'?'✓':k==='warn'?'!':'–'}</span><div><div style="font-weight:600">${esc(t)}</div><div class="sub">${esc(d)}</div></div><span class="chip ${k==='ok'?'completed':k==='warn'?'review':'plain'}" style="margin-left:auto">${esc(s)}</span></div>`).join('')}</div></div></div>`;
+let xui={st:'idle',org:null,count:null,err:'',onlyNew:true};
+let mcpApi=null;
+const XERO_FIX={needs_reauth:'Reconnect Xero in claude.ai → Settings → Connectors, then try again.',server_not_connected:'Add the Xero connector in claude.ai → Settings → Connectors, then try again.',selection_required:'You have more than one Xero connector — choose one when claude.ai asks, then try again.',approval_required:'This page needs your approval to use Xero. Press the button again and choose Allow.',not_in_manifest:'Xero is turned off for this page. Turn it on in the page’s Permissions menu.',blocked_by_policy:'Your organisation’s policy blocks Xero for this page.',not_granted:'Connectors are not available in this view. Open the hub in claude.ai.',capability_disabled:'Connectors are not available in this view. Open the hub in claude.ai.',server_unavailable:'Xero did not answer just now. Try again in a minute.'};
+async function xeroCheck(){
+  if(!mcpApi){ xui={...xui,st:'err',err:XERO_FIX.not_granted}; render(); return; }
+  xui={...xui,st:'busy',err:''}; render();
+  try{
+    const r=await mcpApi.callTool('Xero','get_connected_organisations',{}); const orgs=((r.payload||{}).organisations)||[];
+    if(!orgs.length){ xui={...xui,st:'err',err:'Xero is connected but no organisation is linked. Link your organisation in Xero’s connector settings.'}; render(); return; }
+    const org=orgs[0]; let count=null;
+    try{ const iv=await mcpApi.callTool('Xero','get_invoices',{organisation_id:org.organisation_id,issued_date_start:(+todayDxb().slice(0,4)-2)+'-01-01'}); count=(iv.payload||{}).total_item_count; }catch(e){}
+    xui={...xui,st:'ok',org:{name:String(org.name||''),n:orgs.length},count,at:new Date().toISOString()}; logAction('Checked Xero connection',{detail:String(org.name||'')});
+  }catch(e){ const c=(e&&e.code)||'upstream_error'; xui={...xui,st:'err',err:XERO_FIX[c]||('Xero check failed ('+c+'). Try again.')}; }
+  render();
 }
-
+function xeroRows(onlyNew){
+  const s=FS(), done=new Set(s.xeroExported||[]), acc=s.xeroAccount||'200', tax=s.xeroTax||'Standard Rated Income', c=CO(), rows=[];
+  const fd=d=>d?d.split('-').reverse().join('/'):'';
+  const list=Object.values(invoices).filter(i=>!['draft','void'].includes(i.status)&&invGross(i)&&(!onlyNew||!done.has(invKey(i.invoiceNo)))).sort((a,b)=>(a.date||'').localeCompare(b.date||'')||String(a.invoiceNo).localeCompare(String(b.invoiceNo)));
+  list.forEach(i=>{ const cr=isCredit(i); invRows(i).forEach(r=>{ rows.push({'*ContactName':i.customer||s.customer,'EmailAddress':'','POAddressLine1':c.custAddress||'','POAddressLine2':'','POAddressLine3':'','POAddressLine4':'','POCity':'','PORegion':'','POPostalCode':'','POCountry':'','*InvoiceNumber':i.invoiceNo,'Reference':cr?('Credit against '+(i.refInvoice||'')):(i.period||(i.endClient?i.endClient+' service':'')),'*InvoiceDate':fd(i.date),'*DueDate':fd(i.dueDate||i.date),'Total':'','InventoryItemCode':'','*Description':r.d,'*Quantity':r.q,'*UnitAmount':cr?-Math.abs(r2(r.u)):r2(r.u),'Discount':'','*AccountCode':acc,'*TaxType':tax,'TaxAmount':'','TrackingName1':'','TrackingOption1':'','TrackingName2':'','TrackingOption2':'','Currency':'AED','BrandingTheme':''}); }); });
+  return {rows,list};
+}
+async function xeroExport(){
+  const {rows,list}=xeroRows(xui.onlyNew); if(!rows.length){ toast(xui.onlyNew?'Every invoice has already been exported for Xero.':'No issued invoices to export.'); return; }
+  const cols=Object.keys(rows[0]), q=v=>{ const t=String(v??''); return /[",\n]/.test(t)?'"'+t.replace(/"/g,'""')+'"':t; };
+  const csv='﻿'+[cols.join(','),...rows.map(r=>cols.map(k=>q(r[k])).join(','))].join('\r\n');
+  try{ await downloadsApi.save({filename:'xero-sales-invoices-'+todayDxb()+'.csv',data:new Blob([csv],{type:'text/csv'})});
+    const d=Object.assign({},finSettings.main||{},{xeroExported:[...new Set([...(FS().xeroExported||[]),...list.map(i=>invKey(i.invoiceNo))])]}); delete d.id; await saveDoc('finSettings','main',d,finSettings);
+    logAction('Exported invoices for Xero',{detail:list.length+' invoices · '+rows.length+' lines'}); toast(list.length+' invoices exported for Xero'); }catch(e){ if(!(e&&e.code==='declined')) toast('Could not save the file.'); }
+}
+function integrationsView(){
+  const s=FS(), n=xeroRows(true).list.length, live=db&&!demo&&loaded;
+  const row=(t,st,k,d,btn)=>`<div class="ctl"><span class="ic ${k==='ok'?'ok':k==='bad'?'bad':k==='warn'?'warn':'ok'}" style="${k==='plain'?'background:var(--surface2);color:var(--muted)':''}">${k==='ok'?'✓':k==='plain'?'–':'!'}</span><div><div style="font-weight:600">${esc(t)} <span class="chip ${k==='ok'?'completed':k==='bad'?'cancelled':k==='warn'?'review':'plain'}" style="margin-left:6px">${esc(st)}</span></div><div class="sub">${d}</div></div><div style="margin-left:auto;display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end">${btn||''}</div></div>`;
+  const xs=xui.st==='ok'?row('Xero','Connected · '+xui.org.name,'ok',`Organisation <b>${esc(xui.org.name)}</b>${xui.count!=null?' · '+xui.count+' sales invoice'+(xui.count===1?'':'s')+' in Xero':''} · checked ${esc(dmhm(xui.at))}. The Xero connector can only read, so invoices go to Xero with the export file below.`,`<button class="btn" data-act="xcheck">Check again</button>`)
+   :xui.st==='busy'?row('Xero','Checking…','plain','Asking Xero through your claude.ai connector…','')
+   :xui.st==='err'?row('Xero','Not reachable','bad',esc(xui.err),`<button class="btn" data-act="xcheck">Try again</button>`)
+   :row('Xero','Not checked yet','plain',mcpApi?'Checks your Xero connection live. claude.ai asks your permission the first time.':'Open the hub in claude.ai to check Xero live.',mcpApi?`<button class="btn primary" data-act="xcheck">Check Xero connection</button>`:'');
+  return `<div class="page"><div class="phead"><div><h1>Integrations</h1><div class="sub">What the hub is connected to, and what each connection does</div></div></div>
+   <div class="card"><div class="card-h"><h3>Connections</h3></div><div>
+    ${row('Shared live database',live?'Connected':'Not connected',live?'ok':'bad',live?'Every phone and computer sees the same tickets and finance instantly.':'Showing demo data in this view — changes are not shared.')}
+    ${xs}
+    ${row('Bank (Wio, Mashreq)','Upload statements','plain','There is no live bank feed. Upload the Excel or CSV statement each month; lines are checked, sorted and matched automatically.',`<button class="btn" data-gofin="bank">Open Bank</button>`)}
+    ${row('Phone reminders','1st and 16th, 8:32','ok','Billing reminder with the invoice and statement, sent to your phone by Claude. Manage it in claude.ai → Scheduled tasks.')}
+    ${row('WhatsApp','Links','plain','Ticket pages open WhatsApp with the customer’s number. Nothing is sent automatically.')}
+    ${row('QuickBooks','Not used','plain','Your QuickBooks company is set up in US dollars, so the hub does not use it. Xero (AED) is used instead.')}
+    ${row('Airtable','Off','plain','Not connected, as you asked.')}
+   </div></div>
+   <div class="card"><div class="card-h"><div><h3>Send invoices to Xero</h3><div class="sub">${n} invoice${n===1?'':'s'} not exported yet</div></div></div><div class="card-b" style="display:grid;gap:12px">
+    <p class="sub" style="margin:0">Downloads a file in Xero’s sales-invoice import format, with the same lines as your tax invoices. In Xero go to <b>Business → Invoices → Import</b> and upload it. Credit notes are included with negative amounts.</p>
+    <form id="fxeroform" class="fgrid" style="grid-template-columns:repeat(auto-fit,minmax(200px,1fr))">
+      <label>Xero sales account code<input class="field" name="acc" value="${esc(s.xeroAccount||'200')}"></label>
+      <label>Xero tax rate name<input class="field" name="tax" value="${esc(s.xeroTax||'Standard Rated Income')}"></label>
+      <div style="display:flex;align-items:end"><button class="btn" type="submit">Save</button></div></form>
+    <div class="sub" style="font-size:12px">Use the exact names from Xero: <b>Accounting → Chart of accounts</b> (the sales account’s code) and <b>Accounting → Advanced → Tax rates</b> (the 5% output VAT rate).</div>
+    <label class="chk"><input type="checkbox" data-xonly ${xui.onlyNew?'checked':''}> Only invoices not exported before</label>
+    <div>${downloadsApi?`<button class="btn primary" data-act="xexport">${svg('doc',16)}Download Xero import file</button>`:'<span class="sub">Downloads are not available here.</span>'}</div>
+   </div></div></div>`;
+}
 /* ---------- Backup & recovery ---------- */
 const BK_COLS=()=>({visits:Object.fromEntries(Object.entries(visits).map(([k,v])=>[k,(({id,...r})=>r)(v)])),parts,stock,assets:assetReg,inventory,invoices,bankAccounts,bankTx,partnerTx,finSettings,statements,roles});
 const stripId=o=>Object.fromEntries(Object.entries(o||{}).map(([k,v])=>[k,(({id,...r})=>r)(v||{})]));
@@ -2219,6 +2266,7 @@ document.addEventListener('submit',async e=>{
     const n=Object.values(invoices).filter(x=>isCredit(x)&&invKey(x.refInvoice)===invKey(inv.invoiceNo)).length+1, no='CN-'+inv.invoiceNo.replace(/\s+/g,'')+(n>1?'-'+n:'');
     await saveDoc('invoices','cn-'+invKey(inv.invoiceNo).replace(/[^A-Z0-9]/g,'')+'-'+n,{type:'credit',invoiceNo:no,refInvoice:inv.invoiceNo,customer:inv.customer,endClient:inv.endClient||'',date:el.date.value,net:-net,vat:-r2(net*VAT_RATE),status:'issued',paidOther:0,locked:true,notes:(el.reason.value||'').trim(),at:new Date().toISOString()},invoices);
     logAction('Created credit note',{detail:no+' · '+money(net*(1+VAT_RATE))+' · '+(el.reason.value||'').trim()}); fui.cn=null; toast('Credit note '+no+' created'); return; }
+  if(id==='fxeroform'){ const el=e.target.elements; const d=Object.assign({},finSettings.main||{},{xeroAccount:(el.acc.value||'').trim()||'200',xeroTax:(el.tax.value||'').trim()||'Standard Rated Income'}); delete d.id; await saveDoc('finSettings','main',d,finSettings); toast('Xero settings saved'); return; }
   if(id==='fsetform'){ const el=e.target.elements; const d={autoInvoice:el.autoInvoice.checked,rate:Math.max(0,r2(el.rate.value)),terms:Math.min(180,Math.max(0,parseInt(el.terms.value,10)||0)),customerAliases:(()=>{ const old=FS().customer, nw=(el.customer.value||'').trim(), al=new Set(FS().customerAliases||[]); if(old&&nw&&old!==nw) al.add(old); al.delete(nw); return [...al]; })(),autoNumber:el.autoNumber.value,reviewIssue:!!(el.reviewIssue&&el.reviewIssue.checked),halfFrom:el.autoNumber.value==='half'?(FS().halfFrom||todayDxb().slice(0,7)):(FS().halfFrom||''),invPrefix:((el.nextNoTxt.value.match(/^\s*([A-Za-z]+[\s\-]?)/)||[,'ZRA '])[1].replace('-',' ').replace(/([A-Za-z])$/,'$1 ').toUpperCase()),nextNo:parseInt((el.nextNoTxt.value.match(/(\d+)\s*$/)||[,0])[1],10)||0,customer:(el.customer.value||'').trim()||'Easy Renovations LLC',endClient:(el.endClient.value||'').trim(),autoStatement:el.autoStatement.checked,stmtDay:Math.min(28,Math.max(1,parseInt(el.stmtDay.value,10)||1)),at:new Date().toISOString()};
     if(FS().rateCard) d.rateCard=FS().rateCard; if(FS().rateHistory) d.rateHistory=FS().rateHistory; await saveDoc('finSettings','main',d,finSettings); logAction('Updated finance automation',{detail:(d.autoInvoice?'auto invoices on':'auto invoices off')+' · '+money(d.rate)+' per ticket · statements day '+d.stmtDay}); toast('Automation saved'); scheduleFinAuto(); return; }
   if(id==='fptxform'){ const d={partner:g('partner'),type:g('type'),date:g('date'),amount:r2(g('amount')),note:g('note'),at:new Date().toISOString()};
@@ -2243,6 +2291,7 @@ document.addEventListener('keydown',e=>{
 });
 document.addEventListener('click',async e=>{
   const tr=e.target.closest('tr[data-aexp]'); if(tr&&!e.target.closest('button')){ aui.open=aui.open===tr.dataset.aexp?null:tr.dataset.aexp; render(); return; }
+  if(e.target.matches&&e.target.matches('[data-xonly]')){ xui.onlyNew=e.target.checked; render(); return; }
   if(e.target.matches&&e.target.matches('[data-ub]')){ const set=fui.ub||(fui.ub=new Set(unbilled().map(v=>v.id))); e.target.checked?set.add(e.target.dataset.ub):set.delete(e.target.dataset.ub); render(); return; }
   if(e.target.matches&&e.target.matches('[data-uball]')){ fui.ub=e.target.checked?new Set(unbilled().map(v=>v.id)):new Set(); render(); return; }
   const b=e.target.closest('button,[data-act]'); if(!b) return;
@@ -2258,6 +2307,8 @@ document.addEventListener('click',async e=>{
   if(ds.cui){ cui.tab=ds.cui; render(); return; }
   if(ds.coui){ coui.tab=ds.coui; render(); return; }
   if(ds.dui){ dui.kind=ds.dui; render(); return; }
+  if(ds.act==='xcheck'){ await xeroCheck(); return; }
+  if(ds.act==='xexport'){ await xeroExport(); render(); return; }
   if(ds.act==='bkdl'){ await backupDownload(); return; }
   if(ds.act==='bkcancel'){ bk=null; render(); return; }
   if(ds.act==='bkgo'){ if(!bk) return; if(!bk.confirm){ bk.confirm=true; render(); return; } await backupRestore(); return; }
@@ -2429,6 +2480,7 @@ function goDemo(){ if(loaded) return; demo=true; loaded=true; visits=demoData();
   use('assets').then(a=>{ assets=a; safeRender(); });
   use('sample').then(s=>{ sampleApi=s; safeRender(); });
   use('downloads').then(d=>{ downloadsApi=d; safeRender(); });
+  use('mcp').then(m=>{ mcpApi=m; if(route==='integrations') safeRender(); });
   if(!db) return;
   const sub=(col,store)=>db.collection(col).onSnapshot(snap=>{ for(const k in store) delete store[k]; snap.docs.forEach(d=>{ const x=d.data(); if(x) store[d.id]=Object.assign({id:d.id},x); }); if(['parts','assets','tickets','finance'].includes(route)) safeRender(); resolveNames(); },()=>{});
   sub('parts',parts); sub('stock',stock); sub('assets',assetReg); sub('inventory',inventory);
