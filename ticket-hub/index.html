@@ -103,6 +103,13 @@ h1,h2,h3{margin:0;font-family:var(--display);letter-spacing:-.01em;text-wrap:bal
 /* ---------- page scaffolding ---------- */
 .page{padding-block:26px 48px;padding-left:max(28px,env(safe-area-inset-left,0px));padding-right:max(28px,env(safe-area-inset-right,0px));max-width:1440px;width:100%;margin:0 auto;display:flex;flex-direction:column;gap:20px}
 .phead{display:flex;align-items:flex-end;justify-content:space-between;gap:16px;flex-wrap:wrap}
+.invchip{display:inline-flex;align-items:center;gap:4px;height:22px;padding:0 8px;border-radius:6px;font-size:12px;font-weight:700;letter-spacing:.2px;white-space:nowrap;font-variant-numeric:tabular-nums;border:1px solid transparent}
+.invchip.planned{background:#fffaf0;color:#7d5c12;border:1.5px dashed #c9972f}
+.invchip.issued{background:#0a1f4d;color:#fff}
+.invchip.paid{background:#11734d;color:#fff}
+.invchip.overdue{background:#b22a3d;color:#fff}
+.invchip.draft{background:#e9edf3;color:#36425f;border-color:#cdd5e3}
+.invlegend{display:flex;gap:8px;flex-wrap:wrap;align-items:center;font-size:12px;color:var(--muted);padding:6px 2px 0}
 .backbtn{display:inline-flex;align-items:center;gap:6px;height:32px;padding:0 12px 0 8px;margin:0 0 10px;border:1px solid var(--line2);border-radius:999px;background:var(--surface);color:var(--ink2);font:inherit;font-size:13px;font-weight:600;cursor:pointer}
 .backbtn:hover{border-color:var(--navy3);color:var(--navy)}
 @media print{.backbtn{display:none}}
@@ -1446,6 +1453,7 @@ function ticketsView(){
         <div class="listtools">
           <label class="search">${svg('search',16)}<input id="l-q" class="field" type="search" placeholder="Search tickets" value="${esc(list.q)}" autocomplete="off" aria-label="Search tickets"></label>
           <div class="tabs" role="group" aria-label="Filter tickets">${filtersFor().map(([k,l])=>`<button data-filter="${k}" aria-pressed="${list.status===k}">${l} <span class="c">${n[k]}</span></button>`).join('')}</div>
+          ${INV_LEGEND}
         </div>
         <div class="tlist" id="l-body">${listBody()}</div>
       </section>
@@ -1539,7 +1547,7 @@ function bodyHtml(v){
         <div class="kv"><span>Technicians</span><span>${esc(v.technician)||'—'}</span></div>
         <div class="kv"><span>Return visit</span><span>${esc(v.returnVisit||'No')}</span></div>
         ${v.customerFeedback?`<div class="kv"><span>Customer feedback</span><span>${esc(v.customerFeedback)}</span></div>`:''}
-        <div class="kv"><span>Z Invoice No.</span><span>${(()=>{ const i=invFor(v); return !i||!i.no?'—':i.planned?esc(i.no)+' <span class="sub">· planned, fixed on '+esc(String(i.on).split('-').reverse().join('/'))+'</span>':'<b>'+esc(i.no)+'</b>'; })()}</span></div>
+        <div class="kv"><span>Z Invoice No.</span><span>${(()=>{ const i=invFor(v); return !i||!i.no?'—':invChip(v)+(i.planned?' <span class="sub">fixed on '+esc(String(i.on).split('-').reverse().join('/'))+'</span>':''); })()}</span></div>
         ${(()=>{ const a=assetFor(v); if(!a) return ''; const w=warranty(a); return `<div class="kv"><span>Registered asset</span><span>${esc(a.serial?'S/N '+a.serial:a.model)}${w?` · <span class="chip ${w.cls}" style="height:20px">${esc(w.label)}</span>`:''}</span></div>`; })()}
         ${v.internalNotes?`<div class="kv"><span>Internal notes</span><span>${esc(v.internalNotes)}</span></div>`:''}
       </div></div>
@@ -2066,7 +2074,13 @@ function invFor(v){
   const p=periodOf(d,m), cur=periodOf(t,m); if(p.key>cur.key) return {no:'',planned:true,on:p.end};
   return {no:nextInvoiceNo(),planned:true,on:cur.end};
 }
-const invChip=v=>{ const i=invFor(v); if(!i||!i.no) return ''; return i.planned?`<span class="chip plain" style="height:22px;font-weight:600;opacity:.85" title="Planned — the number is fixed when the billing cycle closes (${esc(i.on)})">${esc(i.no)} · planned</span>`:`<span class="chip completed" style="height:22px;font-weight:700" title="Z Invoice No.">${esc(i.no)}</span>`; };
+const invOf=no=>{ const k=invKey(no); return Object.values(invoices).find(x=>!isCredit(x)&&invKey(x.invoiceNo)===k)||null; };
+const invChip=v=>{ const i=invFor(v); if(!i||!i.no) return '';
+  if(i.planned) return `<span class="invchip planned" title="Planned invoice — the number is fixed when the billing cycle closes (${esc(String(i.on).split('-').reverse().join('/'))})">⏳ ${esc(i.no)} · planned</span>`;
+  const inv=invOf(i.no), st=inv?invoiceState(inv).k:'issued';
+  const cls=st==='paid'?'paid':st==='overdue'?'overdue':st==='draft'||st==='void'?'draft':'issued', lab={paid:'✓ '+i.no+' · Paid',overdue:'! '+i.no+' · Overdue',draft:i.no+' · '+(st==='void'?'Void':'Draft'),issued:'🧾 '+i.no}[cls];
+  return `<span class="invchip ${cls}" title="Z Invoice No. ${esc(i.no)}${inv?' · '+esc(invoiceState(inv).label)+(inv.dueDate?' · due '+esc(inv.dueDate.split('-').reverse().join('/')):''):''}">${esc(lab)}</span>`; };
+const INV_LEGEND=`<div class="invlegend" aria-label="Invoice colours"><span class="invchip planned" style="height:18px;font-size:11px">⏳ planned</span><span class="invchip issued" style="height:18px;font-size:11px">🧾 raised</span><span class="invchip paid" style="height:18px;font-size:11px">✓ paid</span><span class="invchip overdue" style="height:18px;font-size:11px">! overdue</span><span class="invchip draft" style="height:18px;font-size:11px">draft</span></div>`;
 const unbilled=()=>Object.values(visits).filter(v=>v.status==='completed'&&!(v.billingRef||'').trim()&&billKindOf(v)!=='none').sort((a,b)=>ticketDate(a).localeCompare(ticketDate(b))||a.id.localeCompare(b.id));
 function periodOf(d,mode){
   const fd=x=>x.split('-').reverse().join('/');
