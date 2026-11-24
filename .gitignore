@@ -91,3 +91,6 @@ temp_*/
 
 # Local Netlify folder
 .netlify
+
+# customer data backups (never commit)
+ticket-hub/backups/
