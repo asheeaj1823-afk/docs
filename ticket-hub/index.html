@@ -205,6 +205,7 @@ details.tv td,details.tv th{padding:4px 8px;text-align:left;border-top:1px solid
 .ageing{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:8px;margin-bottom:12px}.ageing .ab{border:1px solid var(--line);border-radius:10px;padding:8px 10px;display:grid;gap:2px}.ageing .ab b{font-size:15px}.ageing .ab.ok{border-left:4px solid var(--ok)}.ageing .ab.warn{border-left:4px solid #d39b22}.ageing .ab.bad{border-left:4px solid var(--bad)}.fuph{margin-top:12px;display:grid;gap:6px}.futbl td,.futbl th{padding:8px 6px}.futbl td:last-child{width:1%}.futbl .btn.icobtn{min-width:40px;padding:0 6px}
 .newtix{border:1px solid #c9972f;box-shadow:0 0 0 3px rgba(201,151,47,.12)}.newdot{display:inline-block;width:9px;height:9px;border-radius:50%;background:#c9972f;margin-right:8px;vertical-align:middle;animation:npulse 1.6s infinite}@keyframes npulse{0%{box-shadow:0 0 0 0 rgba(201,151,47,.6)}70%{box-shadow:0 0 0 8px rgba(201,151,47,0)}100%{box-shadow:0 0 0 0 rgba(201,151,47,0)}}.ntrow{display:flex;gap:10px;align-items:center;width:100%;background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:10px 12px;cursor:pointer;font:inherit;color:inherit}.ntrow:hover{border-color:#c9972f}
 .devwait{display:flex;gap:12px;align-items:flex-start;background:#fbf3df;border:1px solid #ecd9a6;border-radius:12px;padding:12px}.devwait .devic{width:40px;height:40px;border-radius:10px;background:#0a1f4d;color:#c9972f;display:grid;place-items:center;flex:none}.devalert{border:1px solid #c9972f;box-shadow:0 0 0 3px rgba(201,151,47,.12)}
+.chsvg{width:100%;height:auto;display:block}.chgrid{stroke:var(--line);stroke-width:1}.chax{font-size:14px;fill:var(--muted,#67728c)}.chleg{display:flex;gap:14px;flex-wrap:wrap;font-size:12px;color:var(--muted,#67728c);margin-top:4px}.chleg i,.dleg i{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:6px;vertical-align:-1px}.donutwrap{display:flex;gap:14px;align-items:center;flex-wrap:wrap}.donut{width:140px;height:140px;flex:none}.dnum{font-size:24px;font-weight:700;fill:var(--ink,#0d1b3e)}.dleg{display:grid;gap:6px;flex:1;min-width:140px;font-size:13px}.dleg>div{display:grid;grid-template-columns:auto 1fr auto auto;gap:6px;align-items:center}.bizcard .kpi.hero b{color:#fff}
 .myjobs{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px;margin-bottom:16px}
 .myjob{background:var(--surface);border:1px solid var(--line);border-left:4px solid var(--navy3);border-radius:14px;padding:14px;display:grid;gap:8px;min-width:0}
 .myjob.late{border-left-color:var(--bad)}.myjob.done{border-left-color:var(--ok);opacity:.75}
@@ -1864,6 +1865,51 @@ function techPerf(xs){
   const m={}; xs.forEach(v=>{ const names=(v.technician||'').split(/,|&| and /).map(s=>s.trim()).filter(Boolean); names.forEach(nm=>{ const r=m[nm]||(m[nm]={name:nm,visits:0,done:0,res:0,mins:[]}); r.visits++; if(v.status==='completed') r.done++; if(v.outcome==='Resolved') r.res++; const o=onsite(v); if(o!=null) r.mins.push(o); }); });
   return Object.values(m).sort((a,b)=>b.visits-a.visits);
 }
+/* ---------- business report: money + trends (charts on screen and in the PDF) ---------- */
+const mAdd=(m,k)=>{ const [y,mo]=m.split('-').map(Number); const t=y*12+mo-1+k; return Math.floor(t/12)+'-'+String(t%12+1).padStart(2,'0'); };
+const mShort=m=>MON[+m.slice(5)-1]+' '+m.slice(2,4);
+function bizData(m){
+  const live=Object.values(invoices).filter(i=>!['draft','void'].includes(i.status));
+  const inM=(d,mm)=>(d||'').slice(0,7)===mm;
+  const netOf=mm=>r2(live.filter(i=>inM(i.date,mm)).reduce((a,i)=>a+(+i.net||0),0)); // credit notes carry negative amounts
+  const vatOf=mm=>r2(live.filter(i=>inM(i.date,mm)).reduce((a,i)=>a+(+i.vat||0),0));
+  const colOf=mm=>r2(live.filter(i=>!isCredit(i)&&+i.paidOther>0&&inM(i.paidDate||i.date,mm)).reduce((a,i)=>a+(+i.paidOther||0),0)+Object.values(bankTx).filter(t=>t.invoiceNo&&+t.amount>0&&inM(t.date,mm)).reduce((a,t)=>a+(+t.amount||0),0));
+  const months=[]; for(let k=-11;k<=0;k++) months.push(mAdd(m,k));
+  const vis=Object.values(visits).filter(v=>v.scheduled&&v.status!=='cancelled');
+  const series=months.map(mm=>({m:mm,visits:vis.filter(v=>monthKey(v.scheduled)===mm).length,done:vis.filter(v=>v.status==='completed'&&monthKey(v.scheduled)===mm).length,net:netOf(mm)})).filter((x,i,a)=>x.visits||x.net||a.slice(0,i).some(y=>y.visits||y.net));
+  const outstanding=r2(live.filter(i=>!isCredit(i)).reduce((a,i)=>a+Math.max(0,invGross(i)-invPaid(i)),0));
+  const xs=vis.filter(v=>monthKey(v.scheduled)===m);
+  const days=[]; const dim=new Date(Date.UTC(+m.slice(0,4),+m.slice(5),0)).getUTCDate(); for(let d=1;d<=dim;d++){ const k=m+'-'+String(d).padStart(2,'0'); days.push({d,n:xs.filter(v=>dayKey(v.scheduled)===k).length}); }
+  const prev=mAdd(m,-1);
+  return {net:netOf(m),vat:vatOf(m),collected:colOf(m),outstanding,prevNet:netOf(prev),prevVisits:vis.filter(v=>monthKey(v.scheduled)===prev).length,series,days,
+    emirates:counts(xs,v=>v.region||'Not set',8), status:['completed','review','new','recheck'].map(k=>({label:STATUS[k],k,n:xs.filter(v=>v.status===k).length})).filter(r=>r.n),
+    inv:live.filter(i=>!isCredit(i)&&inM(i.date,m)).sort((a,b)=>(a.date||'').localeCompare(b.date||''))};
+}
+const CH_COL=['#0a1f4d','#c9972f','#1d5bb8','#11734d','#b22a3d','#6b4fbb','#e07b2a','#67728c'];
+function svgCombo(series,showMoney){ if(!series.length) return '<div class="sub">No data yet.</div>';
+  const W=640,H=230,L=34,R=showMoney?54:12,T=14,B=34, n=series.length, bw=(W-L-R)/n, mv=Math.max(1,...series.map(x=>x.visits)), mn=Math.max(1,...series.map(x=>x.net));
+  const yv=v=>T+(H-T-B)*(1-v/mv), ym=v=>T+(H-T-B)*(1-v/mn);
+  const grid=[0,.5,1].map(f=>`<line x1="${L}" x2="${W-R}" y1="${T+(H-T-B)*(1-f)}" y2="${T+(H-T-B)*(1-f)}" class="chgrid"/><text x="${L-6}" y="${T+(H-T-B)*(1-f)+3}" text-anchor="end" class="chax">${Math.round(mv*f)}</text>${showMoney?`<text x="${W-R+6}" y="${T+(H-T-B)*(1-f)+3}" class="chax">${mn*f>=1000?(mn*f/1000).toFixed(1)+'k':Math.round(mn*f)}</text>`:''}`).join('');
+  const bars=series.map((x,i)=>{ const x0=L+i*bw+bw*.18, w=bw*.64; return `<rect x="${x0}" y="${yv(x.visits)}" width="${w}" height="${H-B-yv(x.visits)}" rx="3" fill="#0a1f4d" opacity=".85"><title>${mShort(x.m)}: ${x.visits} visits, ${x.done} completed${showMoney?', '+money(x.net)+' invoiced':''}</title></rect><rect x="${x0}" y="${yv(x.done)}" width="${w}" height="${H-B-yv(x.done)}" rx="3" fill="#1d5bb8" opacity=".55"/><text x="${x0+w/2}" y="${H-B+14}" text-anchor="middle" class="chax">${MON[+x.m.slice(5)-1]}</text>`; }).join('');
+  const line=showMoney?`<polyline fill="none" stroke="#c9972f" stroke-width="2.5" points="${series.map((x,i)=>(L+i*bw+bw/2)+','+ym(x.net)).join(' ')}"/>${series.map((x,i)=>`<circle cx="${L+i*bw+bw/2}" cy="${ym(x.net)}" r="3.5" fill="#c9972f"><title>${mShort(x.m)}: ${money(x.net)}</title></circle>`).join('')}`:'';
+  return `<svg viewBox="0 0 ${W} ${H}" class="chsvg" role="img" aria-label="Monthly trend">${grid}${bars}${line}</svg><div class="chleg"><span><i style="background:#0a1f4d"></i>Visits</span><span><i style="background:#1d5bb8;opacity:.6"></i>Completed</span>${showMoney?'<span><i style="background:#c9972f"></i>Invoiced (AED, right axis)</span>':''}</div>`; }
+function svgDonut(rows,center){ const tot=rows.reduce((a,r)=>a+r.n,0); if(!tot) return '<div class="sub">No visits.</div>';
+  let a0=-Math.PI/2; const R=62,r=40,cx=80,cy=80;
+  const arcs=rows.map((x,i)=>{ const a1=a0+2*Math.PI*x.n/tot, lg=a1-a0>Math.PI?1:0, p=(a,rr)=>[cx+rr*Math.cos(a),cy+rr*Math.sin(a)];
+    const [x1,y1]=p(a0,R),[x2,y2]=p(a1-1e-4,R),[x3,y3]=p(a1-1e-4,r),[x4,y4]=p(a0,r); const d=`M${x1} ${y1}A${R} ${R} 0 ${lg} 1 ${x2} ${y2}L${x3} ${y3}A${r} ${r} 0 ${lg} 0 ${x4} ${y4}Z`; a0=a1; return `<path d="${d}" fill="${CH_COL[i%CH_COL.length]}"><title>${esc(x.label)}: ${x.n}</title></path>`; }).join('');
+  return `<div class="donutwrap"><svg viewBox="0 0 160 160" class="donut">${arcs}<text x="80" y="78" text-anchor="middle" class="dnum">${tot}</text><text x="80" y="94" text-anchor="middle" class="chax">${esc(center||'visits')}</text></svg><div class="dleg">${rows.map((x,i)=>`<div><i style="background:${CH_COL[i%CH_COL.length]}"></i><span>${esc(x.label)}</span><b>${x.n}</b><span class="sub">${Math.round(100*x.n/tot)}%</span></div>`).join('')}</div></div>`; }
+function svgDays(days){ const W=640,H=120,L=6,B=18,T=8,bw=(W-2*L)/days.length,mx=Math.max(1,...days.map(d=>d.n));
+  return `<svg viewBox="0 0 ${W} ${H}" class="chsvg">${days.map((d,i)=>{ const h=(H-B-T)*d.n/mx; return `<rect x="${L+i*bw+1}" y="${H-B-h}" width="${Math.max(1,bw-2)}" height="${h}" rx="2" fill="${d.n?'#c9972f':'transparent'}"><title>${d.d}: ${d.n} visit${d.n===1?'':'s'}</title></rect>${d.d%5===1||d.d===days.length?`<text x="${L+i*bw+bw/2}" y="${H-4}" text-anchor="middle" class="chax">${d.d}</text>`:''}`; }).join('')}</svg>`; }
+function bizSection(m){ const b=bizData(m), adm=access()==='admin';
+  const delta=(a,p)=>p?((a>=p?'▲ ':'▼ ')+Math.abs(Math.round(100*(a-p)/p))+'% vs '+mShort(mAdd(m,-1))):'';
+  const k=(l,v,s,cls)=>`<div class="card kpi ${cls||''}"><span class="lbl">${l}</span><b>${v}</b><span class="sub">${s}</span></div>`;
+  return `<div class="card bizcard"><div class="card-h"><div><h3>Business overview · ${mlab(m)}</h3><div class="sub">${adm?'Work, money and trends for the month':'Work and trends for the month'}</div></div></div><div class="card-b" style="display:grid;gap:16px">
+    ${adm?`<div class="kpis" style="grid-template-columns:repeat(auto-fit,minmax(150px,1fr))">${k('Invoiced (net)',money(b.net),delta(b.net,b.prevNet)||'this month','hero')}${k('VAT 5%',money(b.vat),'output VAT')}${k('Collected',money(b.collected),'payments received this month')}${k('Outstanding now',money(b.outstanding),b.outstanding>0.01?'unpaid across all invoices':'everything is paid',b.outstanding>0.01?'alert':'')}</div>`:''}
+    <div><div class="sub" style="font-weight:600;margin-bottom:6px">Last 12 months</div>${svgCombo(b.series,adm)}</div>
+    <div class="charts"><div><div class="sub" style="font-weight:600;margin-bottom:6px">Visits by emirate</div>${svgDonut(b.emirates,'visits')}</div><div><div class="sub" style="font-weight:600;margin-bottom:6px">Status</div>${svgDonut(b.status.map(r=>({label:r.label,n:r.n})),'tickets')}</div></div>
+    <div><div class="sub" style="font-weight:600;margin-bottom:6px">Visits per day</div>${svgDays(b.days)}</div>
+    ${adm&&b.inv.length?`<div class="tblwrap"><table class="tbl"><thead><tr><th>Invoice</th><th>Date</th><th>Tickets</th><th style="text-align:right">Net</th><th style="text-align:right">Total</th><th>Status</th></tr></thead><tbody>${b.inv.map(i=>`<tr><td><b>${esc(i.invoiceNo)}</b></td><td>${esc(dm(i.date))}</td><td>${ticketsForInv(i).length||'—'}</td><td style="text-align:right" class="num">${money(i.net)}</td><td style="text-align:right" class="num">${money(invGross(i))}</td><td>${esc(invoiceState(i).label)}</td></tr>`).join('')}</tbody></table></div>`:''}
+  </div></div>`; }
 function reportsView(){
   const months=[...new Set(Object.values(visits).filter(v=>v.scheduled).map(v=>monthKey(v.scheduled)))].sort().reverse();
   if(!rui.month||!months.includes(rui.month)) rui.month=months.includes(thisMonth())?thisMonth():months[0];
@@ -1874,7 +1920,7 @@ function reportsView(){
   return `<div class="page">
     <div class="phead"><div><h1>Reports</h1><div class="sub">Monthly service report for Kohler UAE</div></div>
       <div class="actions"><select id="r-month" class="field" style="margin:0;width:auto;height:38px;padding:0 32px 0 12px">${months.map(m=>`<option value="${m}" ${m===rui.month?'selected':''}>${mlab(m)}</option>`).join('')}</select>
-      ${downloadsApi?'<button class="btn" data-act="rcsv">'+svg('doc',16)+'CSV</button>':''}${canPdf()?'<button class="btn primary" data-act="rpdf">'+svg('doc',16)+'Download PDF report</button>':''}</div></div>
+      ${downloadsApi?'<button class="btn" data-act="rcsv">'+svg('doc',16)+'CSV</button>':''}${canPdf()?'<button class="btn primary" data-act="rpdf">'+svg('doc',16)+'Download PDF report</button><button class="btn icobtn" data-act="rpdfwa" title="Send report on WhatsApp" aria-label="Send report on WhatsApp">'+ico('wa',18)+'</button>':''}</div></div>
     <div class="kpis">
       ${kpi('Visits',d.xs.length,'scheduled in '+mlab(rui.month))}
       ${kpi('Completed',d.done.length,d.xs.length?Math.round(100*d.done.length/d.xs.length)+'% of visits':'—')}
@@ -1883,6 +1929,7 @@ function reportsView(){
       ${kpi('Avg time on site',dur(d.avg),d.timed+' timed visits')}
       ${kpi('Invoiced',d.invoiced,'with a Z invoice no.')}
     </div>
+    ${bizSection(rui.month)}
     <div style="display:flex;flex-direction:column;gap:16px">
       <div class="card"><div class="card-h"><h3>Visits in ${mlab(rui.month)}</h3><span class="sub">${d.xs.length} tickets · ${st.map(([k,n])=>n+' '+STATUS[k].toLowerCase()).join(' · ')}</span></div>
         ${d.xs.length?`<div class="tblwrap"><table class="tbl"><thead><tr><th>Ticket</th><th>Date</th><th>Site</th><th>Product</th><th>Status</th><th>Outcome</th><th>Z Invoice</th></tr></thead><tbody>${d.xs.map(v=>`<tr><td><button class="linkbtn" data-open="${esc(v.id)}">${esc(tref(v))}</button></td><td class="num" style="white-space:nowrap">${esc(dm(v.scheduled))}</td><td>${esc(siteOf(v))}</td><td>${esc(v.product||'—')}</td><td>${chip(v)}</td><td>${esc(v.outcome||'—')}</td><td class="num" style="white-space:nowrap">${esc(v.billingRef||'—')}</td></tr>`).join('')}</tbody></table></div>`:'<div class="empty">No visits this month.</div>'}</div>
@@ -1897,8 +1944,8 @@ function reportsView(){
     </div>
   </div>`;
 }
-async function reportPdf(){
-  if(!canPdf()) return; const m=rui.month, d=monthData(m);
+async function reportPdf(asBlob){
+  if(!canPdf()) return; const m=rui.month, d=monthData(m), b=bizData(m), adm=access()==='admin';
   const {jsPDF}=window.jspdf; const doc=new jsPDF({unit:'pt',format:'a4'}); const W=595.28,H=841.89,M=42; let y;
   const ink=[13,27,62], muted=[103,114,140];
   const header=()=>{ doc.setFillColor(10,31,77); doc.rect(0,0,W,84,'F'); doc.setFillColor(201,151,47); doc.rect(0,84,W,3,'F'); doc.setTextColor(255,255,255); doc.setFont('helvetica','bold'); doc.setFontSize(19); doc.text('ZIAR  IMAAR',M,40); doc.setFont('helvetica','normal'); doc.setFontSize(7.5); doc.setTextColor(201,211,234); doc.text('T E C H N I C A L   S E R V I C E S   L . L . C .',M,55); doc.setFontSize(10); doc.setTextColor(241,210,127); doc.text('Kohler UAE  ·  Monthly service report',W-M,38,{align:'right'}); doc.setFontSize(9); doc.setTextColor(255,255,255); doc.text(mlab(m),W-M,54,{align:'right'}); y=116; };
@@ -1907,12 +1954,31 @@ async function reportPdf(){
   header(); doc.setTextColor(...ink); doc.setFont('helvetica','bold'); doc.setFontSize(16); doc.text('Service summary · '+mlab(m),M,y); y+=24;
   const k=[['Visits',d.xs.length],['Completed',d.done.length],['SLA met',d.sla==null?'—':d.sla+'%'],['Resolved',d.res==null?'—':d.res+'%'],['Avg on site',dur(d.avg)],['Invoiced',d.invoiced]];
   const cw=(W-2*M)/6; k.forEach(([l,v],i)=>{ const x=M+i*cw; doc.setFont('helvetica','normal'); doc.setFontSize(7.5); doc.setTextColor(...muted); doc.text(l.toUpperCase(),x,y); doc.setFont('helvetica','bold'); doc.setFontSize(15); doc.setTextColor(...ink); doc.text(String(v),x,y+18); }); y+=44;
+  // ---- business overview with charts ----
+  { const NAVY=[10,31,77], GOLD=[201,151,47], BLUE=[29,91,184], GRID=[227,231,239]; const hx=h=>[parseInt(h.slice(1,3),16),parseInt(h.slice(3,5),16),parseInt(h.slice(5,7),16)];
+    const T=(t,x,yy,o={})=>{ doc.setFont('helvetica',o.b?'bold':'normal'); doc.setFontSize(o.s||8); doc.setTextColor(...(o.c||ink)); doc.text(String(t),x,yy,o.a?{align:o.a}:undefined); };
+    if(adm){ const mk=[['Invoiced (net)',money(b.net)],['VAT 5%',money(b.vat)],['Collected',money(b.collected)],['Outstanding now',money(b.outstanding)]]; const w=(W-2*M)/4;
+      mk.forEach(([l,v],i)=>{ const x=M+i*w; doc.setFillColor(i===0?10:246,i===0?31:248,i===0?77:252); doc.roundedRect(x,y-4,w-8,44,5,5,'F'); T(l.toUpperCase(),x+10,y+10,{s:7,c:i===0?[201,211,234]:muted}); T(v,x+10,y+30,{b:true,s:12,c:i===0?[255,255,255]:ink}); }); y+=58; }
+    // 12-month trend
+    T('Last 12 months',M,y,{b:true,s:11}); y+=10; const ser=b.series, ch=130, cwid=W-2*M-(adm?40:0), bw=cwid/Math.max(1,ser.length), mv=Math.max(1,...ser.map(x=>x.visits)), mn=Math.max(1,...ser.map(x=>x.net)), base=y+ch;
+    doc.setDrawColor(...GRID); [0,.5,1].forEach(f=>{ doc.line(M,base-ch*f,M+cwid,base-ch*f); T(String(Math.round(mv*f)),M-4,base-ch*f+3,{s:6.5,c:muted,a:'right'}); if(adm) T((mn*f>=1000?(mn*f/1000).toFixed(1)+'k':String(Math.round(mn*f))),M+cwid+4,base-ch*f+3,{s:6.5,c:muted}); });
+    ser.forEach((x,i)=>{ const x0=M+i*bw+bw*.18, w=bw*.64, h1=ch*x.visits/mv, h2=ch*x.done/mv; doc.setFillColor(...NAVY); doc.rect(x0,base-h1,w,h1,'F'); doc.setFillColor(...BLUE); doc.rect(x0+w*.2,base-h2,w*.6,h2,'F'); T(MON[+x.m.slice(5)-1],x0+w/2,base+10,{s:6.5,c:muted,a:'center'}); if(x.visits) T(String(x.visits),x0+w/2,base-h1-3,{s:6.5,a:'center'}); });
+    if(adm&&ser.length){ doc.setDrawColor(...GOLD); doc.setLineWidth(1.6); ser.forEach((x,i)=>{ const px=M+i*bw+bw/2, py=base-ch*x.net/mn; if(i){ const p=ser[i-1]; doc.line(M+(i-1)*bw+bw/2,base-ch*p.net/mn,px,py); } }); ser.forEach((x,i)=>{ doc.setFillColor(...GOLD); doc.circle(M+i*bw+bw/2,base-ch*x.net/mn,2.4,'F'); }); doc.setLineWidth(.5); }
+    y=base+22; const lg=[[NAVY,'Visits'],[BLUE,'Completed']].concat(adm?[[GOLD,'Invoiced AED (right axis)']]:[]); let lx=M; lg.forEach(([c,t])=>{ doc.setFillColor(...c); doc.rect(lx,y-6,8,8,'F'); T(t,lx+12,y+1,{s:7.5,c:muted}); lx+=doc.getTextWidth(t)+30; }); y+=22;
+    // emirates + status as bars, side by side
+    const hb=(rows,x0,w,title)=>{ let yy=y; T(title,x0,yy,{b:true,s:11}); yy+=14; const mx=Math.max(1,...rows.map(r=>r.n)); rows.forEach((r,i)=>{ T(r.label,x0,yy+7,{s:8}); const bx=x0+90, bwid=w-130; doc.setFillColor(238,241,247); doc.roundedRect(bx,yy,bwid,9,3,3,'F'); doc.setFillColor(...hx(CH_COL[i%CH_COL.length])); doc.roundedRect(bx,yy,Math.max(3,bwid*r.n/mx),9,3,3,'F'); T(String(r.n),x0+w-30,yy+8,{b:true,s:8}); yy+=16; }); return yy; };
+    const half=(W-2*M)/2-10; const y1=hb(b.emirates.length?b.emirates:[{label:'No visits',n:0}],M,half,'Visits by emirate'), y2=hb(b.status.length?b.status:[{label:'No visits',n:0}],M+half+20,half,'Status'); y=Math.max(y1,y2)+14;
+    // visits per day
+    T('Visits per day',M,y,{b:true,s:11}); y+=8; const dh=50, dbw=(W-2*M)/b.days.length, dmx=Math.max(1,...b.days.map(x=>x.n)), dbase=y+dh; b.days.forEach((x,i)=>{ if(x.n){ const h=dh*x.n/dmx; doc.setFillColor(...GOLD); doc.rect(M+i*dbw+1,dbase-h,Math.max(1,dbw-2),h,'F'); } if(x.d%5===1||x.d===b.days.length) T(String(x.d),M+i*dbw+dbw/2,dbase+9,{s:6.5,c:muted,a:'center'}); }); y=dbase+24;
+    if(adm&&b.inv.length){ T('Invoices this month',M,y,{b:true,s:11}); y+=14; b.inv.forEach(i=>{ T(i.invoiceNo,M,y,{b:true,s:8.5}); T(dm(i.date),M+90,y,{s:8.5}); T((ticketsForInv(i).length||'—')+' tickets',M+160,y,{s:8.5}); T(money(i.net),W-M-160,y,{s:8.5,a:'right'}); T(money(invGross(i)),W-M-60,y,{b:true,s:8.5,a:'right'}); T(invoiceState(i).label,W-M,y,{s:8,c:muted,a:'right'}); y+=14; }); }
+    doc.addPage(); header(); doc.setTextColor(...ink); doc.setFont('helvetica','bold'); doc.setFontSize(13); doc.text('Visits in '+mlab(m),M,y); y+=20; }
   thead();
   d.xs.forEach(v=>{ if(y>H-60){ doc.addPage(); header(); thead(); } doc.setFont('helvetica','normal'); doc.setFontSize(8.5); doc.setTextColor(...ink);
     const row=[tref(v),dm(v.scheduled),siteOf(v),v.product||'—',STATUS[v.status],v.billingRef||'—'];
     row.forEach((t,i)=>{ const w=(cols[i+1]?cols[i+1][0]:W-M)-cols[i][0]-6; doc.text(doc.splitTextToSize(String(t),w)[0]||'',cols[i][0],y); }); y+=15; });
   const tp=techPerf(d.xs); if(tp.length){ if(y>H-120){ doc.addPage(); header(); } y+=14; doc.setFont('helvetica','bold'); doc.setFontSize(11); doc.setTextColor(...ink); doc.text('Technicians this month',M,y); y+=16; doc.setFont('helvetica','normal'); doc.setFontSize(9); tp.forEach(r=>{ doc.text(r.name+' — '+r.visits+' visits, '+r.done+' completed, avg on site '+dur(r.mins.length?r.mins.reduce((a,b)=>a+b,0)/r.mins.length:null),M,y); y+=14; }); }
   const pages=doc.getNumberOfPages(); for(let i=1;i<=pages;i++){ doc.setPage(i); doc.setFont('helvetica','normal'); doc.setFontSize(8); doc.setTextColor(...muted); doc.text('Generated '+dmhm(new Date().toISOString())+' · Ziar Imaar Technical Services L.L.C.',M,H-28); doc.text('Page '+i+' of '+pages,W-M,H-28,{align:'right'}); }
+  if(asBlob) return doc.output('blob');
   try{ await downloadsApi.save({filename:'ziar-imaar-kohler-service-report-'+m+'.pdf',data:doc.output('blob')}); toast('Report saved'); logAction('Downloaded monthly report',{detail:mlab(m)}); }catch(err){ if(!(err&&err.code==='declined')) toast('Could not save the report. Try again in a moment.'); }
 }
 
@@ -3338,6 +3404,9 @@ document.addEventListener('click',async e=>{
   if(act==='unconfirm'){ rev.confirm=null; render(); return; }
   if(act==='savedetails'){ const ov=visits[rev.id]; if(!ov||!rev.edit) return; const n=clone(ov); n.billingRef=rev.edit.inv.trim(); n.internalNotes=rev.edit.int.trim(); await save(n,'Updated office details'); toast('Details saved for #'+n.id); return; }
   if(act==='rpdf'){ await reportPdf(); return; }
+  if(act==='rpdfwa'){ const m=rui.month; let blob=null; try{ blob=await reportPdf(true); }catch(e){} if(!blob){ toast('The report could not be made. Try again.'); return; } const b=bizData(m), c=CO();
+    const txt=`Monthly service report · ${mlab(m)}\n${monthData(m).xs.length} visits, ${monthData(m).done.length} completed${access()==='admin'?'\nInvoiced: '+money(b.net)+' + VAT '+money(b.vat):''}\n\n${c.tradeName||c.legalName||'Ziar Imaar Technical Services'}`;
+    await shareWa(blob,'ziar-imaar-kohler-service-report-'+m+'.pdf',txt,''); return; }
   if(act==='rcsv'){ const m=rui.month, ids=new Set(monthData(m).xs.map(v=>v.id)); const all=visits; const keep={}; for(const k in all) if(ids.has(k)) keep[k]=all[k]; const saved=visits; visits=keep; const csv=toCsv(); visits=saved; try{ await downloadsApi.save({filename:'ziar-imaar-kohler-tickets-'+m+'.csv',data:csv}); toast('CSV saved'); }catch(err){ if(!(err&&err.code==='declined')) toast('Could not export the CSV.'); } return; }
   if(act==='csv'){ try{ await downloadsApi.save({filename:'ziar-imaar-kohler-tickets-'+dayKey(new Date().toISOString())+'.csv',data:toCsv()}); toast('CSV saved'); }catch(err){ if(!(err&&err.code==='declined')) toast('Could not export the CSV. Try again in a moment.'); } return; }
   if(act==='draftnote'){
