@@ -2459,7 +2459,7 @@ async function statementPdf(m,asBlob){
 }
 
 /* ---------- accounting: automatic double entry, reports, VAT return ---------- */
-const COA=[['1100','Accounts receivable','asset'],['1200','Input VAT recoverable','asset'],['1300','Payments received, not yet in bank','asset'],['1900','Transfers between accounts','asset'],
+const COA=[['1050','Cash in hand','asset'],['1100','Accounts receivable','asset'],['1200','Input VAT recoverable','asset'],['1300','Payments received, not yet in bank','asset'],['1900','Transfers between accounts','asset'],
  ['2100','VAT payable (output VAT)','liability'],['2300','Accounts payable','liability'],['2500','Loans','liability'],
  ['3000','Partner capital','equity'],['3100','Partner drawings','equity'],['3200','Opening balance equity','equity'],
  ['4000','Service income','income'],['4100','Other income','income'],
@@ -2467,7 +2467,8 @@ const COA=[['1100','Accounts receivable','asset'],['1200','Input VAT recoverable
  ['9999','Suspense (bank lines not sorted)','asset']];
 const CAT_ACCT={'Customer receipt':'1100','Other income':'4100','Parts & materials':'5000','Subcontractor':'5100','Salaries & wages':'5200','Transport & fuel':'5300','Rent & utilities':'5400','Telephone & internet':'5500','Government, visa & licence':'5600','Bank charges':'5700','VAT payment':'2100','Partner capital in':'3000','Partner drawings':'3100','Loan in / out':'2500','Transfer between accounts':'1900','Supplier bill payment':'2300','Other expense':'5900','Uncategorised':'9999'};
 let journals={}, gui={tab:'pl',from:'',to:'',acct:'',jf:null};
-function chart(){ const banks=Object.values(bankAccounts).sort((a,b)=>(a.name||'').localeCompare(b.name||'')).map((a,i)=>['10'+String(10+i),'Bank · '+(a.name||'Account'),'asset',a.id]); return [...banks,...COA]; }
+function chart(){ const banks=Object.values(bankAccounts).sort((a,b)=>(a.name||'').localeCompare(b.name||'')).map((a,i)=>['10'+String(10+i),'Bank · '+(a.name||'Account'),'asset',a.id]); const cu=(((finSettings.main||{}).accounts)||[]).filter(a=>a&&a.code&&a.name&&ACC_TYPES.includes(a.type)&&!COA.some(x=>x[0]===String(a.code))).map(a=>[String(a.code),String(a.name),a.type,undefined,true]); return [...banks,...COA,...cu].sort((x,y)=>x[0].localeCompare(y[0])); }
+const ACC_TYPES=['asset','liability','equity','income','expense'], ACC_TL={asset:'Assets',liability:'Liabilities',equity:'Equity',income:'Income',expense:'Expenses'};
 const acctName=c=>{ const a=chart().find(x=>x[0]===c); return a?a[1]:c; };
 const acctType=c=>{ const a=chart().find(x=>x[0]===c); return a?a[2]:'asset'; };
 function glEntries(){
@@ -2489,14 +2490,14 @@ function glBalances(E,from,to){ const m={}; E.forEach(e=>{ if((from&&e.date<from
 const natural=(c,x)=>{ const t=acctType(c); return r2(['asset','expense'].includes(t)?x.d-x.c:x.c-x.d); };
 function glPeriod(){ const y=todayDxb().slice(0,4); return {from:gui.from||y+'-01-01',to:gui.to||todayDxb()}; }
 function finGL(){
-  const E=glEntries(), {from,to}=glPeriod(), tabs=[['pl','Profit & Loss'],['bs','Balance Sheet'],['tb','Trial Balance'],['ledger','General Ledger'],['ar','Receivables & cash'],['vat201','VAT return'],['ct','Corporate tax'],['journals','Journals']];
+  const E=glEntries(), {from,to}=glPeriod(), tabs=[['pl','Profit & Loss'],['bs','Balance Sheet'],['tb','Trial Balance'],['ledger','General Ledger'],['ar','Receivables & cash'],['vat201','VAT return'],['ct','Corporate tax'],['journals','Journals'],['coa','Chart of accounts']];
   const sel=`<div class="row" style="flex-wrap:wrap;gap:10px;align-items:end"><div class="tabs">${tabs.map(([k,l])=>`<button data-gtab="${k}" aria-pressed="${gui.tab===k}">${l}</button>`).join('')}</div>
     <div class="actions" style="align-items:end">${['ct','ar'].includes(gui.tab)?'':gui.tab==='bs'?'':`<label class="sub" style="display:grid;gap:2px">From<input type="date" id="g-from" class="field" style="height:36px;width:auto" value="${from}"></label>`}${['ct','ar'].includes(gui.tab)?'':`<label class="sub" style="display:grid;gap:2px">${gui.tab==='bs'?'As at':'To'}<input type="date" id="g-to" class="field" style="height:36px;width:auto" value="${to}"></label>`}
     <select id="g-quick" class="field" style="height:36px;width:auto;margin:0;padding:0 30px 0 10px"><option value="">Quick period…</option><option value="tm">This month</option><option value="lm">Last month</option><option value="tq">This quarter</option><option value="lq">Last quarter</option><option value="ty">This year</option></select>
     ${downloadsApi?'<button class="btn" data-act="glxls">'+svg('doc',16)+'Excel</button>':''}</div></div>`;
   const susp=natural('9999',glBalances(E,'',to)['9999']||{d:0,c:0});
   const warn=Math.abs(susp)>0.004?`<div class="notice">${esc(money(Math.abs(susp)))} of bank lines are not sorted yet, so they sit in Suspense. <button class="linkbtn" data-act="autosort">Sort automatically</button> or pick a category under Bank.</div>`:'';
-  const body={pl:glPL,bs:glBS,tb:glTB,ledger:glLedger,ar:glAR,vat201:glVAT,ct:glCT,journals:glJournals}[gui.tab](E,from,to);
+  const body={pl:glPL,bs:glBS,tb:glTB,ledger:glLedger,ar:glAR,vat201:glVAT,ct:glCT,journals:glJournals,coa:glCOA}[gui.tab](E,from,to);
   return sel+warn+body+lockBar()+`<div class="sub" style="font-size:12px">Every invoice, credit note, payment and bank line posts its own double entry automatically. These are management accounts — have your accountant review them before filing.</div>`;
 }
 const amtCell=n=>`<td class="amt">${Math.abs(n)<0.005?'—':esc((n<0?'(':'')+Math.abs(r2(n)).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})+(n<0?')':''))}</td>`;
@@ -2556,14 +2557,26 @@ function glVAT(E,from,to){
 function glJournals(E,from,to){
   const f=gui.jf, ch=chart(), js=Object.values(journals).sort((a,b)=>(b.date||'').localeCompare(a.date||''));
   const opt=v=>ch.map(x=>`<option value="${esc(x[0])}"${x[0]===v?' selected':''}>${esc(x[0]+' · '+x[1])}</option>`).join('');
-  const form=f?`<form id="fjform" class="card"><div class="card-h"><h3>${f.preset==='open'?'Opening balances':'New journal'}</h3><button type="button" class="btn ghost" data-act="jcancel" aria-label="Close">${svg('x',18)}</button></div><div class="card-b" style="display:grid;gap:10px">
+  const form=f?`<form id="fjform" class="card"><div class="card-h"><h3>${f.preset==='open'?'Opening balances':f.preset==='cashout'?'Cash expense':f.preset==='cashin'?'Cash received':'New journal'}</h3><button type="button" class="btn ghost" data-act="jcancel" aria-label="Close">${svg('x',18)}</button></div><div class="card-b" style="display:grid;gap:10px">
      <div class="fgrid"><label>Date<input class="field" name="date" type="date" required value="${esc(f.date)}"></label><label>Description<input class="field" name="memo" required value="${esc(f.memo)}"></label></div>
      <div class="tblwrap"><table class="tbl"><thead><tr><th>Account</th><th class="amt">Debit</th><th class="amt">Credit</th><th></th></tr></thead><tbody>${f.lines.map((l,i)=>`<tr><td><select class="field" data-jl="${i}" data-jk="a" style="height:34px">${opt(l.a)}</select></td><td><input class="field" data-jl="${i}" data-jk="d" type="number" step="0.01" min="0" value="${l.d||''}" style="height:34px;text-align:right;width:120px;margin-left:auto;display:block"></td><td><input class="field" data-jl="${i}" data-jk="c" type="number" step="0.01" min="0" value="${l.c||''}" style="height:34px;text-align:right;width:120px;margin-left:auto;display:block"></td><td>${f.lines.length>2?`<button type="button" class="linkbtn danger" data-jdel="${i}">Remove</button>`:''}</td></tr>`).join('')}
      <tr><td><button type="button" class="linkbtn" data-act="jadd">+ Add line</button></td>${amtCell(f.lines.reduce((s,l)=>s+(+l.d||0),0))}${amtCell(f.lines.reduce((s,l)=>s+(+l.c||0),0))}<td id="j-diff" class="sub"></td></tr></tbody></table></div>
-     ${f.preset==='open'?'<div class="sub" style="font-size:12.5px">Enter what was owed to you, VAT owed and partner capital on the date you start using the hub. Opening balance equity takes the difference. Bank opening balances are already set on each bank account.</div>':''}
+     ${f.preset==='cashout'?'<div class="sub" style="font-size:12.5px">Debit the expense (before VAT) and Input VAT if you have a tax invoice, credit Cash in hand with the total paid.</div>':f.preset==='cashin'?'<div class="sub" style="font-size:12.5px">Debit Cash in hand, credit the customer receivable (or Other income).</div>':''}${f.preset==='open'?'<div class="sub" style="font-size:12.5px">Enter what was owed to you, VAT owed and partner capital on the date you start using the hub. Opening balance equity takes the difference. Bank opening balances are already set on each bank account.</div>':''}
      <div class="formfoot" style="padding:0"><button class="btn primary" type="submit">Post journal</button></div></div></form>`:'';
-  return form+`<div class="card"><div class="card-h"><h3>Manual journals</h3><div class="actions"><button class="btn" data-act="jopen">Opening balances</button><button class="btn primary" data-act="jnew">+ New journal</button></div></div>
+  return form+`<div class="card"><div class="card-h"><h3>Manual journals</h3><div class="actions"><button class="btn" data-act="jcashout">Cash expense</button><button class="btn" data-act="jcashin">Cash received</button><button class="btn" data-act="jopen">Opening balances</button><button class="btn primary" data-act="jnew">+ New journal</button></div></div>
    ${js.length?`<div class="tblwrap"><table class="tbl"><thead><tr><th>Date</th><th>No.</th><th>Description</th><th>Lines</th><th class="amt">Amount</th><th></th></tr></thead><tbody>${js.map(j=>`<tr><td class="num">${esc(fdx(j.date))}</td><td>${esc(j.no||'')}</td><td>${esc(j.memo||'')}</td><td class="sub">${(j.lines||[]).map(l=>esc(l.a)+(+l.d?' Dr '+r2(l.d):' Cr '+r2(l.c))).join(' · ')}</td>${amtCell((j.lines||[]).reduce((s,l)=>s+(+l.d||0),0))}<td><button class="linkbtn danger" data-jrm="${esc(j.id)}">${gui.jrm===j.id?'Confirm delete':'Delete'}</button></td></tr>`).join('')}</tbody></table></div>`:'<div class="card-b sub">No manual journals. Everything else posts automatically. Use a journal for opening balances, accruals or corrections your accountant gives you.</div>'}</div>`;
+}
+function glCOA(E,from,to){
+  const B=glBalances(E,'',to), used=new Set(E.flatMap(e=>e.lines.map(l=>l.a))), ch=chart();
+  const grp=t=>{ const rs=ch.filter(a=>a[2]===t); return `<tr><td colspan="4" style="font-weight:700;padding-top:14px">${ACC_TL[t]}</td></tr>`+rs.map(a=>`<tr><td class="num">${esc(a[0])}</td><td>${acctLink(a[0],a[1])}${a[3]?' <span class="chip plain">bank</span>':''}${a[4]?' <span class="chip plain">your account</span>':''}</td>${amtCell(B[a[0]]?natural(a[0],B[a[0]]):0)}<td style="text-align:right">${a[4]&&!used.has(a[0])?`<button class="linkbtn danger" data-coarm="${esc(a[0])}">${gui.coarm===a[0]?'Confirm remove':'Remove'}</button>`:''}</td></tr>`).join(''); };
+  return `<form id="fcoaform" class="card"><div class="card-h"><h3>Add an account</h3><span class="sub">Your own accounts appear in journals, the ledger and every report</span></div><div class="card-b"><div class="fgrid">
+    <label>Code<input class="field" name="code" required inputmode="numeric" pattern="[0-9]{4}" maxlength="4" placeholder="e.g. 5350"></label>
+    <label class="span2">Account name<input class="field" name="name" required maxlength="60" placeholder="e.g. Vehicle repairs"></label>
+    <label>Type<select class="field" name="type">${ACC_TYPES.map(t=>`<option value="${t}"${t==='expense'?' selected':''}>${ACC_TL[t]}</option>`).join('')}</select></label></div>
+    <div class="sub" style="font-size:12px;margin-top:8px">Use 4 digits: 1xxx assets, 2xxx liabilities, 3xxx equity, 4xxx income, 5xxx expenses. Bank accounts are added under Finance → Bank.</div>
+    <div class="formfoot" style="padding:10px 0 0;position:static"><button class="btn primary" type="submit">Add account</button></div></div></form>
+   <div class="card"><div class="card-h"><h3>Chart of accounts</h3><span class="sub">Balances as at ${esc(fdx(to))} · AED</span></div><div class="tblwrap"><table class="tbl"><thead><tr><th>Code</th><th>Account</th><th class="amt">Balance</th><th></th></tr></thead><tbody>${ACC_TYPES.map(grp).join('')}</tbody></table></div>
+   <div class="card-b sub" style="font-size:12px">Cash in hand (1050): record cash spent or received with <b>Journals → Cash expense / Cash received</b>. An account you added can be removed only while nothing is posted to it.</div></div>`;
 }
 async function glExport(){
   if(!window.XLSX){ toast('The Excel writer did not load. Try again in a moment.'); return; }
@@ -3128,6 +3141,12 @@ document.addEventListener('submit',async e=>{
     await saveDoc('invoices','cn-'+invKey(inv.invoiceNo).replace(/[^A-Z0-9]/g,'')+'-'+n,{type:'credit',invoiceNo:no,refInvoice:inv.invoiceNo,customer:inv.customer,endClient:inv.endClient||'',date:el.date.value,net:-net,vat:-r2(net*VAT_RATE),status:'issued',paidOther:0,locked:true,notes:(el.reason.value||'').trim(),at:new Date().toISOString()},invoices);
     logAction('Created credit note',{detail:no+' · '+money(net*(1+VAT_RATE))+' · '+(el.reason.value||'').trim()}); fui.cn=null; toast('Credit note '+no+' created'); return; }
   if(id==='fxeroform'){ const el=e.target.elements; const d=Object.assign({},finSettings.main||{},{xeroAccount:(el.acc.value||'').trim()||'200',xeroTax:(el.tax.value||'').trim()||'Standard Rated Income'}); delete d.id; await saveDoc('finSettings','main',d,finSettings); toast('Xero settings saved'); return; }
+  if(id==='fcoaform'){ const el=e.target.elements, code=(el.code.value||'').trim(), name=(el.name.value||'').trim().replace(/\s+/g,' '), type=el.type.value;
+    if(!/^\d{4}$/.test(code)){ toast('The code must be 4 digits.'); return; } if(!name){ toast('Enter an account name.'); return; } if(!ACC_TYPES.includes(type)) return;
+    if(chart().some(a=>a[0]===code)){ toast('Code '+code+' is already used by '+acctName(code)+'.'); return; }
+    if(chart().some(a=>a[1].toLowerCase()===name.toLowerCase())){ toast('An account with that name already exists.'); return; }
+    const d=Object.assign({},finSettings.main||{}); delete d.id; d.accounts=[...(d.accounts||[]),{code,name,type,at:new Date().toISOString()}];
+    if(await saveDoc('finSettings','main',d,finSettings)===false) return; logAction('Added account',{detail:code+' · '+name}); toast('Account '+code+' · '+name+' added'); e.target.reset(); return; }
   if(id==='fjform'){ const f=gui.jf; if(!f) return; const el=e.target.elements, lines=f.lines.map(l=>({a:l.a,d:r2(l.d),c:r2(l.c)})).filter(l=>l.d||l.c);
     if(lines.some(l=>l.d&&l.c)){ toast('Each line takes a debit or a credit, not both.'); return; } if(lines.length<2){ toast('A journal needs at least two lines.'); return; }
     const d=r2(lines.reduce((s2,l)=>s2+l.d,0)), c=r2(lines.reduce((s2,l)=>s2+l.c,0)); if(Math.abs(d-c)>0.004){ toast('Debits and credits must be equal (difference '+money(d-c)+').'); return; }
@@ -3193,6 +3212,10 @@ document.addEventListener('click',async e=>{
   if(ds.gacct){ gui.acct=ds.gacct; gui.tab='ledger'; render(); window.scrollTo(0,0); return; }
   if(ds.gsinv){ fui.tab='invoices'; fui.invStatus='all'; fui.invQ=ds.gsinv; render(); return; }
   if(ds.act==='glxls'){ await glExport(); return; }
+  if(ds.act==='jcashout'){ gui.jf={preset:'cashout',date:todayDxb(),memo:'',lines:[{a:'5900',d:'',c:''},{a:'1200',d:'',c:''},{a:'1050',d:'',c:''}]}; render(); return; }
+  if(ds.act==='jcashin'){ gui.jf={preset:'cashin',date:todayDxb(),memo:'',lines:[{a:'1050',d:'',c:''},{a:'1100',d:'',c:''}]}; render(); return; }
+  if(ds.coarm){ if(gui.coarm!==ds.coarm){ gui.coarm=ds.coarm; render(); return; } const code=ds.coarm; gui.coarm=null; if(glEntries().some(e=>e.lines.some(l=>l.a===code))){ toast('Entries are posted to '+code+', so it cannot be removed.'); render(); return; }
+    const d=Object.assign({},finSettings.main||{}); delete d.id; d.accounts=(d.accounts||[]).filter(a=>String(a.code)!==code); await saveDoc('finSettings','main',d,finSettings); logAction('Removed account',{detail:code}); toast('Account '+code+' removed'); return; }
   if(ds.act==='jnew'){ gui.jf={date:todayDxb(),memo:'',lines:[{a:'5900',d:'',c:''},{a:'9999',d:'',c:''}]}; render(); return; }
   if(ds.act==='jopen'){ gui.jf={preset:'open',date:(Object.values(invoices).map(i=>i.date).filter(Boolean).sort()[0]||todayDxb()),memo:'Opening balances',lines:[{a:'1100',d:'',c:''},{a:'2100',d:'',c:''},{a:'3000',d:'',c:''},{a:'3200',d:'',c:''}]}; render(); return; }
   if(ds.act==='jcancel'){ gui.jf=null; render(); return; }
@@ -3417,3 +3440,4 @@ function goDemo(){ if(loaded) return; demo=true; loaded=true; visits=demoData();
 })();
 })();
 </script>
+
