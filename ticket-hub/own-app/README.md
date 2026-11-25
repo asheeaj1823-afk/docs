@@ -62,7 +62,7 @@ The 223 tickets are already in Supabase. To bring over everything else (invoices
 | Feature | Own website |
 |---|---|
 | Tickets, review, parts, assets, reports, finance, invoices, PDFs, statements, backup | Same |
-| Logins | Email + password, plus the hub's own PIN and authenticator, as before |
+| Logins | Email + password, plus the hub's own PIN (no device approval needed: the email login already protects each account) |
 | Photos | Stored privately in Supabase Storage (bucket `evidence`) |
 | "Draft note with Claude" button | Hidden (needs an Anthropic API key) |
 | Airtable / Xero live connection | Not connected. Use *Import tickets from a file* (CSV/Excel) and *Send invoices to Xero* (CSV export) |

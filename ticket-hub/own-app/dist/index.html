@@ -208,6 +208,7 @@ details.tv td,details.tv th{padding:4px 8px;text-align:left;border-top:1px solid
 .addsteps{margin-top:10px;background:var(--gold-50,#fbf3df);border:1px solid #ecd9a6;border-radius:10px;padding:10px 12px;font-size:13px}.addsteps ol{margin:6px 0 6px 18px;padding:0;display:grid;gap:6px}
 .ageing{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:8px;margin-bottom:12px}.ageing .ab{border:1px solid var(--line);border-radius:10px;padding:8px 10px;display:grid;gap:2px}.ageing .ab b{font-size:15px}.ageing .ab.ok{border-left:4px solid var(--ok)}.ageing .ab.warn{border-left:4px solid #d39b22}.ageing .ab.bad{border-left:4px solid var(--bad)}.fuph{margin-top:12px;display:grid;gap:6px}.futbl td,.futbl th{padding:8px 6px}.futbl td:last-child{width:1%}.futbl .btn.icobtn{min-width:40px;padding:0 6px}
 .newtix{border:1px solid #c9972f;box-shadow:0 0 0 3px rgba(201,151,47,.12)}.newdot{display:inline-block;width:9px;height:9px;border-radius:50%;background:#c9972f;margin-right:8px;vertical-align:middle;animation:npulse 1.6s infinite}@keyframes npulse{0%{box-shadow:0 0 0 0 rgba(201,151,47,.6)}70%{box-shadow:0 0 0 8px rgba(201,151,47,0)}100%{box-shadow:0 0 0 0 rgba(201,151,47,0)}}.ntrow{display:flex;gap:10px;align-items:center;width:100%;background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:10px 12px;cursor:pointer;font:inherit;color:inherit}.ntrow:hover{border-color:#c9972f}
+.devwait{display:flex;gap:12px;align-items:flex-start;background:#fbf3df;border:1px solid #ecd9a6;border-radius:12px;padding:12px}.devwait .devic{width:40px;height:40px;border-radius:10px;background:#0a1f4d;color:#c9972f;display:grid;place-items:center;flex:none}.devalert{border:1px solid #c9972f;box-shadow:0 0 0 3px rgba(201,151,47,.12)}
 .myjobs{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px;margin-bottom:16px}
 .myjob{background:var(--surface);border:1px solid var(--line);border-left:4px solid var(--navy3);border-radius:14px;padding:14px;display:grid;gap:8px;min-width:0}
 .myjob.late{border-left-color:var(--bad)}.myjob.done{border-left-color:var(--ok);opacity:.75}
@@ -527,7 +528,7 @@ const ICON={
   search:'<circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/>',
   back:'<path d="M15 18l-6-6 6-6"/>',
   phone:'<path d="M5 4h4l2 5-2.5 1.5a11 11 0 0 0 5 5L15 13l5 2v4a2 2 0 0 1-2 2A16 16 0 0 1 3 6a2 2 0 0 1 2-2z"/>',
-  map:'<path d="M12 21s-7-6.2-7-12a7 7 0 0 1 14 0c0 5.8-7 12-7 12z"/><circle cx="12" cy="9" r="2.5"/>',atable:'<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18M9 9v11M3 14.5h18"/>',
+  map:'<path d="M12 21s-7-6.2-7-12a7 7 0 0 1 14 0c0 5.8-7 12-7 12z"/><circle cx="12" cy="9" r="2.5"/>',lock:'<rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/>',atable:'<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18M9 9v11M3 14.5h18"/>',
   doc:'<path d="M6 3h9l4 4v14H6z"/><path d="M14 3v5h5M9 13h6M9 17h6"/>',
   x:'<path d="M6 6l12 12M18 6L6 18"/>'
 };
@@ -636,13 +637,33 @@ const b64=a=>btoa(String.fromCharCode(...new Uint8Array(a)));
 const unb64=s=>Uint8Array.from(atob(s),c=>c.charCodeAt(0));
 async function pinHash(pin,salt,iter){ const key=await crypto.subtle.importKey('raw',new TextEncoder().encode(pin),'PBKDF2',false,['deriveBits']); return b64(await crypto.subtle.deriveBits({name:'PBKDF2',salt:unb64(salt),iterations:iter,hash:'SHA-256'},key,256)); }
 const signedIn=()=>!!(uid()&&unlock&&unlock.id===uid()&&unlock.until>Date.now());
-// fail closed: whenever live data is shown, a PIN and authenticator sign-in is required
+// fail closed: whenever live data is shown, a PIN sign-in on an approved device is required
 const needsSignIn=()=>!!(db&&!demo&&!['loading','none'].includes(access())&&!signedIn());
 function fails(){ try{ const f=JSON.parse(localStorage.getItem(FAIL_KEY)||'null'); return f&&f.id===uid()?f:{id:uid(),count:0,until:0}; }catch(e){ return {id:uid(),count:0,until:0}; } }
 function setFails(f){ try{ localStorage.setItem(FAIL_KEY,JSON.stringify(f)); }catch(e){} }
 async function loadPin(){ if(!uid()){ pinDoc=null; return render(); } try{ const sn=await db.doc('pins/'+uid()).get(); pinDoc=sn.exists?sn.data():null; }catch(e){ pinDoc=null; } render(); }
 function startSession(keep){ unlock={id:uid(),until:Date.now()+SESSION_MS}; lastAct=Date.now(); for(const st of stores2()){ try{ st.removeItem(UNLOCK_KEY); }catch(e){} } try{ (keep?localStorage:sessionStorage).setItem(UNLOCK_KEY,JSON.stringify(unlock)); }catch(e){} }
 function signOut(reason){ if(signedIn()) logAction('Signed out',reason?{detail:reason}:{}); unlock=null; signStep='pin'; pendSecret=''; for(const st of stores2()){ try{ st.removeItem(UNLOCK_KEY); }catch(e){} } signErr=reason||''; pinDoc=undefined; modal=null; render(); }
+/* ---------- approved devices (replaces the authenticator app) ----------
+   Each phone/computer has a random device key kept in this browser. Only its SHA-256 hash is stored:
+   approved hashes live in roles/<user id>.devices (only admins can write roles), requests in pins/<user id>.devReq. */
+const DEV_KEY='zi-device-v1';
+let devPins={}, devHashV='';
+function devKey(){ try{ let k=localStorage.getItem(DEV_KEY); if(!k){ k=b64(crypto.getRandomValues(new Uint8Array(24))).replace(/[^A-Za-z0-9]/g,''); localStorage.setItem(DEV_KEY,k); } return k; }catch(e){ if(!devKey.mem) devKey.mem=b64(crypto.getRandomValues(new Uint8Array(24))).replace(/[^A-Za-z0-9]/g,''); return devKey.mem; } }
+async function devHash(){ if(devHashV) return devHashV; const d=await crypto.subtle.digest('SHA-256',new TextEncoder().encode('zi-dev|'+devKey())); devHashV=[...new Uint8Array(d)].map(x=>x.toString(16).padStart(2,'0')).join(''); return devHashV; }
+function devName(){ const u=navigator.userAgent||''; const os=/iPhone/.test(u)?'iPhone':/iPad/.test(u)?'iPad':/Android/.test(u)?'Android phone':/Mac OS X/.test(u)?'Mac':/Windows/.test(u)?'Windows PC':/Linux/.test(u)?'Linux PC':'Device'; const br=/Edg\//.test(u)?'Edge':/CriOS|Chrome\//.test(u)?'Chrome':/FxiOS|Firefox\//.test(u)?'Firefox':/Safari\//.test(u)?'Safari':'browser'; return br+' on '+os; }
+const devsOf=id=>(roles[id]&&roles[id].devices)||{};
+const devOk=(id,h)=>!!(h&&devsOf(id)[h]);
+async function approveDevice(id,h,name){ const r=roles[id]||{}; const devices=Object.assign({},r.devices||{},{[h]:{name:name||'Device',at:new Date().toISOString(),by:me.id||''}}); await db.doc('roles/'+id).set(Object.assign({},r,{devices})); }
+async function clearDevReq(id){ const pdoc=devPins[id]; if(!pdoc||!pdoc.devReq) return; const d=Object.assign({},pdoc); delete d.devReq; delete d.id; await db.doc('pins/'+id).set(d); }
+function pendingDevices(){ return Object.entries(devPins).filter(([id,p])=>p&&p.devReq&&p.devReq.h&&!devOk(id,p.devReq.h)).map(([id,p])=>({id,...p.devReq})).sort((a,b)=>(b.at||'').localeCompare(a.at||'')); }
+async function afterPin(keep){ // called once the PIN is right
+  if(window.HUB_CONFIG){ startSession(keep); logAction('Signed in'); signStep='pin'; return; } // own website: Supabase email logins already protect each account
+  const h=await devHash(), id=uid();
+  if(devOk(id,h)){ startSession(keep); logAction('Signed in',{detail:(devsOf(id)[h]||{}).name||''}); signStep='pin'; return; }
+  const mine=Object.keys(devsOf(id)).length;
+  if(access()==='admin'&&!mine){ await approveDevice(id,h,devName()); startSession(keep); logAction('Signed in · first device approved',{detail:devName()}); signStep='pin'; return; }
+  const docv=Object.assign({},pinDoc,{devReq:{h,name:devName(),at:new Date().toISOString()}}); await db.doc('pins/'+id).set(docv); pinDoc=docv; pendKeep=keep; signStep='devwait'; logAction('Asked to approve a new device',{detail:devName()}); }
 function signinHtml(){
   if(pinDoc===undefined&&!loadPin.busy){ loadPin.busy=true; loadPin().finally(()=>{ loadPin.busy=false; }); }
   const f=fails(), lockedFor=f.until>Date.now()?Math.ceil((f.until-Date.now())/60000):0;
@@ -651,14 +672,11 @@ function signinHtml(){
   const who=`<div class="who2"><span class="avatar">${esc(initials(me.name||'?'))}</span><div style="min-width:0"><div style="font-weight:600">${esc(me.name||'Your account')}</div><div class="sub">${ROLE_NAME[a]?ROLE_NAME[a]+' · ':''}Signed in</div></div></div>`;
   let form;
   const otpName=encodeURIComponent('Ziar Imaar:'+(me.name||'user'));
-  if(signStep==='setup'&&pendSecret&&!lockedFor){ form=`<div class="steps3"><b>Step 2 of 2</b> · Set up your authenticator app</div>
-      <div class="qrbox"><div id="qr" aria-label="QR code for your authenticator app"></div><div style="flex:1;min-width:170px;display:flex;flex-direction:column;gap:8px;font-size:13px;color:var(--ink2)"><div>1. Open <b>Google Authenticator</b> or <b>Microsoft Authenticator</b> on your phone.</div><div>2. Add an account and scan this QR code.</div><div class="sub">Can't scan? Enter this key instead (time-based):</div><div class="secret">${esc(pendSecret.replace(/(.{4})/g,'$1 ').trim())}</div></div></div>
-      <form id="otpsetup" style="display:flex;flex-direction:column;gap:12px"><label class="flabel">3. Enter the 6-digit code the app shows<input class="field pin" id="otp" inputmode="numeric" autocomplete="one-time-code" maxlength="6" pattern="[0-9]{6}" required></label>
-      <div class="err" role="alert">${esc(signErr)}</div><button class="btn primary lg" type="submit" ${signBusy?'disabled':''}>${signBusy?'<span class="spin"></span>':''}Confirm and sign in</button><button class="btn ghost" type="button" data-act="signout">Cancel</button></form>`; }
-  else if(signStep==='otp'&&!lockedFor){ form=`<div class="steps3"><b>Step 2 of 2</b> · Authenticator code</div><form id="otplogin" style="display:flex;flex-direction:column;gap:12px">
-      <label class="flabel">Enter the 6-digit code from your authenticator app<input class="field pin" id="otp" inputmode="numeric" autocomplete="one-time-code" maxlength="6" pattern="[0-9]{6}" required></label>
-      <div class="err" role="alert">${esc(signErr)}</div><button class="btn primary lg" type="submit" ${signBusy?'disabled':''}>${signBusy?'<span class="spin"></span>':''}Verify and sign in</button>
-      <div class="sub">Lost your phone? Ask an administrator to reset your sign-in.</div><button class="btn ghost" type="button" data-act="signout">Start again</button></form>`; }
+  if(signStep==='devwait'&&devHashV&&devOk(uid(),devHashV)){ setTimeout(()=>{ if(signStep==='devwait'){ startSession(pendKeep); signStep='pin'; logAction('Signed in · device approved',{detail:devName()}); render(); } },0); }
+  if(signStep==='devwait'&&!lockedFor){ form=`<div style="display:flex;flex-direction:column;gap:12px"><div class="steps3"><b>Step 2 of 2</b> · Approve this device</div>
+      <div class="devwait"><div class="devic">${svg('lock',22)}</div><div><b>Waiting for approval</b><div class="sub">This is a new device for your account: <b>${esc(devName())}</b>. An administrator must approve it once in <b>Administration → Users &amp; Roles</b>. This page continues by itself as soon as it is approved.</div></div></div>
+      <div class="sub"><span class="spin"></span> Waiting… you can keep this page open.</div>
+      <button class="btn ghost" type="button" data-act="signout">Cancel</button></div>`; }
   else if(pinDoc===undefined) form='<div class="sub"><span class="spin"></span> Checking your sign-in…</div>';
   else if(lockedFor) form=`<div class="banner bad"><div><b>Too many wrong PINs</b>Sign-in is paused on this device for ${lockedFor} more minute${lockedFor>1?'s':''}. Ask an administrator to reset your PIN if you have forgotten it.</div></div>`;
   else if(creating) form=`<form id="pincreate" style="display:flex;flex-direction:column;gap:12px">
@@ -673,12 +691,12 @@ function signinHtml(){
       <label class="check"><input type="checkbox" id="keep"> Keep me signed in on this device for 8 hours</label>
       <div class="err" role="alert">${esc(signErr)}${f.count&&!signErr?esc(f.count+' wrong attempt'+(f.count>1?'s':'')+'. '+(5-f.count)+' left before a 15-minute pause.'):''}</div>
       <button class="btn primary lg" type="submit" ${signBusy?'disabled':''}>${signBusy?'<span class="spin"></span>':''}Continue</button>
-      <div class="sub">Forgot your PIN or lost your phone? Ask an administrator to reset your sign-in.</div></form>`;
+      <div class="sub">Forgot your PIN or lost your phone? Ask an administrator to reset your PIN or remove the lost device.</div></form>`;
   return `<div class="signin">
     <div class="brandpane"><div class="bigemblem"><svg viewBox="0 0 400 300" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><g fill="#c9972f"><rect x="174" y="22" width="15" height="150" rx="1.5"/><rect x="193" y="0" width="15" height="172" rx="1.5"/><rect x="212" y="12" width="15" height="160" rx="1.5"/><rect x="186" y="214" width="12" height="12"/><rect x="202" y="214" width="12" height="12"/><rect x="186" y="230" width="12" height="12"/><rect x="202" y="230" width="12" height="12"/></g><g stroke="currentColor" stroke-width="10" stroke-linejoin="miter" stroke-linecap="square"><path d="M162 200V64l14-14"/><path d="M238 200V64l-14-14"/><path d="M128 238A92 92 0 0 1 156 108"/><path d="M272 238A92 92 0 0 0 244 108"/></g><path fill="currentColor" d="M64 262 200 160l136 102-15 12L200 183 79 274z"/></svg></div><div class="bigwm" style="position:relative;z-index:1" aria-label="Ziar Imaar Technical Services"><img class="brandlogo big" src="${REPORT_LOGO}" alt="Ziar Imaar Technical Services L.L.C."></div>
       <div class="hide-sm" style="position:relative;z-index:1;max-width:420px"><div style="font-family:var(--display);font-size:22px;font-weight:600;line-height:1.3">Kohler UAE service ticket hub</div><div style="color:var(--navyInk);margin-top:8px">Visits, reviews, parts and reports for the Kohler UAE service contract, in one place for the office and the field.</div></div>
       <div class="sub hide-sm" style="color:var(--navyInk);position:relative;z-index:1">Ziar Imaar Technical Services L.L.C.</div></div>
-    <div class="formpane"><div class="signcard"><div><h1>${creating||signStep==='setup'?'Set up your sign-in':'Sign in'}</h1><div class="sub" style="margin-top:4px">${signStep==='setup'?'Link your phone so every sign-in needs a code from it.':signStep==='otp'?'Open your authenticator app for the current code.':creating?'Create a personal PIN, then link your authenticator app.':'Enter your personal PIN, then the code from your authenticator app.'}</div></div>${who}${form}
+    <div class="formpane"><div class="signcard"><div><h1>${creating?'Set up your sign-in':'Sign in'}</h1><div class="sub" style="margin-top:4px">${signStep==='devwait'?'Your PIN is right. This device now needs a one-time approval.':creating?'Create a personal PIN. Each new phone or computer is approved once by an administrator.':'Enter your personal PIN. New devices need a one-time approval by an administrator.'}</div></div></div>${who}${form}
       <div class="sub" style="border-top:1px solid var(--line);padding-top:12px">${me.name?'Signing in as <b>'+esc(me.name)+'</b>. ':''}Each person signs in with their own email login and their own PIN. Not you? Use Sign out and sign in with your own login. New staff: create a login on the sign-in page, then an administrator gives you a role.</div></div></div>
   </div>`;
 }
@@ -914,7 +932,7 @@ function companyView(){
     ${f('placeOfSupply','Place of supply','Dubai')}${f('bankName','Bank name','e.g. Wio Business')}${f('accountNo','Account no.')}${f('accountName','Account name')}${f('iban','IBAN','AE…')}${f('swift','SWIFT / BIC')}</div>
     <div class="formfoot" style="padding:12px 0 0"><button class="btn primary" type="submit">Save company profile</button></div></div></form>`;
   if(coui.tab==='system'){ const s=FS(); body=`<div class="card"><div>${[
-    ['Sign-in','PIN + authenticator code · sessions end after 8 hours, or 30 minutes idle',`<button class="btn" data-nav="7.0">Users</button>`],
+    ['Sign-in','PIN + approved devices · sessions end after 8 hours, or 30 minutes idle',`<button class="btn" data-nav="7.0">Users</button>`],
     ['Billing cycle',{off:'Invoice numbers typed on tickets',ticket:'One invoice per ticket',weekly:'Weekly',half:'Twice a month (1–15, 16–end)',monthly:'Monthly'}[s.autoNumber||'off']+' · payment terms '+s.terms+' days',`<button class="btn" data-nav="5.3">Change</button>`],
     ['Rate card',rateRows()?Object.keys(rateRows()).length+' emirates'+(FS().rateCard.effectiveFrom?' · from '+FS().rateCard.effectiveFrom:''):'Not set',`<button class="btn" data-nav="5.3">Edit</button>`],
     ['Statements',s.autoStatement?'Prepared automatically':'Off',`<button class="btn" data-nav="4.8">Open</button>`],
@@ -1520,6 +1538,7 @@ function dashView(){
       ${kpi('Resolved',res==null?'—':res+'%','of '+withOut.length+' with an outcome')}
       ${kpi('Avg time on site',dur(avg),times.length+' timed visits')}
     </div>
+    ${access()==='admin'&&pendingDevices().length?`<div class="banner gold" style="margin-bottom:14px"><div style="flex:1"><b>${pendingDevices().length} device${pendingDevices().length>1?'s':''} waiting for approval</b>${esc(pendingDevices().map(x=>(nameOf(x.id)||'Someone')+' · '+(x.name||'')).join(' · '))}</div><button class="btn primary" data-nav="7.0">Review</button></div>`:''}
     ${newTicketsHtml()}
     ${billDayHtml()}
     ${atCardsHtml()}
@@ -2733,9 +2752,10 @@ function adminView(){
   let body='';
   if(adminTab==='users') body=`<div class="pgrid">
     <div class="card"><div class="card-h"><h3>People with access</h3><span class="sub">${assigned.length} assigned</span></div>
-      <div class="banner gold" style="margin:12px 16px 4px;border-radius:9px"><div style="flex:1"><b>Admins</b>The owner and anyone given Editor access from the Share menu are admins automatically. Everyone signs in with their own PIN and authenticator app. Reset sign-in clears both, for a forgotten PIN or a lost phone; they set them up again at their next sign-in.</div><button class="btn" style="height:32px" data-resetpin="${esc(uid()||'')}">Reset my sign-in</button></div>
-      <div>${assigned.length?assigned.map(([id,r])=>personRow(id,[`<div class="sub">Assigned ${esc(dm(r.at))}${r.by?' by '+esc(nameOf(r.by)):''}</div>${r.role==='technician'?`<input class="field" data-tphone="${esc(id)}" value="${esc(r.phone||'')}" placeholder="WhatsApp number, e.g. 050 123 4567" style="margin-top:6px;max-width:260px;padding:6px 10px" inputmode="tel">`:''}`,`<span style="display:flex;gap:8px;align-items:center"><select class="field" data-setrole="${esc(id)}" style="margin:0;width:auto;padding:6px 30px 6px 10px">${['office','technician','viewer'].map(x=>`<option value="${x}" ${r.role===x?'selected':''}>${ROLE_NAME[x]}</option>`).join('')}</select><button class="linkbtn" data-resetpin="${esc(id)}">Reset sign-in</button><button class="linkbtn danger" data-unrole="${esc(id)}">Remove</button></span>`])).join(''):'<div class="empty">No Office, Technician or Viewer users yet. Add people on the right, or approve access requests.</div>'}</div></div>
+      <div class="banner gold" style="margin:12px 16px 4px;border-radius:9px"><div style="flex:1"><b>Admins</b>The owner and anyone given Editor access from the Share menu are admins automatically. Everyone signs in with their own PIN on an approved device. Approve new devices below; remove a lost phone with Remove devices. Reset sign-in clears a forgotten PIN; they create a new one at their next sign-in.</div><span style="display:flex;flex-direction:column;gap:6px"><button class="btn" style="height:32px" data-resetpin="${esc(uid()||'')}">Reset my sign-in</button>${Object.keys(devsOf(uid())).length>1?`<button class="btn" style="height:32px" data-devkeep="1" title="Keep only the device you are using now">Remove my other devices</button>`:''}</span></div>
+      <div>${assigned.length?assigned.map(([id,r])=>personRow(id,[`<div class="sub">Assigned ${esc(dm(r.at))}${r.by?' by '+esc(nameOf(r.by)):''}</div>${r.role==='technician'?`<input class="field" data-tphone="${esc(id)}" value="${esc(r.phone||'')}" placeholder="WhatsApp number, e.g. 050 123 4567" style="margin-top:6px;max-width:260px;padding:6px 10px" inputmode="tel">`:''}`,`<span style="display:flex;gap:8px;align-items:center"><select class="field" data-setrole="${esc(id)}" style="margin:0;width:auto;padding:6px 30px 6px 10px">${['office','technician','viewer'].map(x=>`<option value="${x}" ${r.role===x?'selected':''}>${ROLE_NAME[x]}</option>`).join('')}</select><button class="linkbtn" data-resetpin="${esc(id)}">Reset sign-in</button>${Object.keys(devsOf(id)).length?`<button class="linkbtn" data-devclear="${esc(id)}" title="${esc(Object.values(devsOf(id)).map(d=>d.name).join(', '))}">Remove devices (${Object.keys(devsOf(id)).length})</button>`:''}<button class="linkbtn danger" data-unrole="${esc(id)}">Remove</button></span>`])).join(''):'<div class="empty">No Office, Technician or Viewer users yet. Add people on the right, or approve access requests.</div>'}</div></div>
     <div style="display:flex;flex-direction:column;gap:16px">
+      ${devApprovalsCard()}
       <div class="card"><div class="card-h"><h3>Add a person</h3><span class="sub">From your organization</span></div><div class="card-b">
         <label class="search" style="max-width:none">${svg('search',16)}<input id="p-q" class="field" type="search" placeholder="Search by name" value="${esc(psearch.q)}" autocomplete="off" aria-label="Search people"></label>
         <div id="p-res">${resultsHtml()}</div></div></div>
@@ -2756,6 +2776,9 @@ function adminView(){
   return `<div class="page"><div class="phead"><div><h1>Administration</h1><div class="sub">Users, roles and the audit trail for the Kohler UAE ticket hub.</div></div>
     <div class="tabs" role="group" aria-label="Administration sections">${tabs.map(([k,l])=>`<button data-atab="${k}" aria-pressed="${adminTab===k}">${l}</button>`).join('')}</div></div>${body}</div>`;
 }
+function devApprovalsCard(){ if(window.HUB_CONFIG) return ''; const pd=pendingDevices();
+  return `<div class="card${pd.length?' devalert':''}"><div class="card-h"><h3>Device approvals</h3><span class="sub">${pd.length} waiting</span></div>
+    <div>${pd.length?pd.map(x=>personRow(x.id,[`<div class="sub">${esc(x.name||'Device')} · asked ${esc(dmhm(x.at))}</div>`,`<span style="display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end"><button class="btn primary" style="height:32px" data-devok="${esc(x.id)}">Approve</button><button class="linkbtn danger" data-devno="${esc(x.id)}">Decline</button></span>`])).join(''):'<div class="empty">No devices waiting. When someone signs in on a new phone or computer, it appears here to approve.</div>'}</div></div>`; }
 function resultsHtml(){
   if(!psearch.q.trim()) return '<div class="addsteps"><b>To add a new person</b><ol><li>Tap <b>Share</b> at the top right of this hub page (the claude.ai Share menu), enter their email and give them access. They need a free claude.ai account.</li><li>Send them the hub link: <button class="btn" style="height:32px" data-act="copyhub">Copy hub link</button></li><li>They open the link and tap <b>Request access</b>.</li><li>Their name appears below under <b>Access requests</b>. Choose <b>Office</b>, <b>Technician</b> or <b>Viewer</b>.</li></ol><div class="sub">Give someone <b>Editor</b> in the Share menu only if they should be an admin.</div></div>';
   if(!psearch.res.length) return '<div class="sub" style="margin-top:8px">No one found. The search only finds people who already share your claude.ai organization.</div><div class="addsteps"><b>To add a new person</b><ol><li>Tap <b>Share</b> at the top right of this hub page (the claude.ai Share menu), enter their email and give them access. They need a free claude.ai account.</li><li>Send them the hub link: <button class="btn" style="height:32px" data-act="copyhub">Copy hub link</button></li><li>They open the link and tap <b>Request access</b>.</li><li>Their name appears below under <b>Access requests</b>. Choose <b>Office</b>, <b>Technician</b> or <b>Viewer</b>.</li></ol><div class="sub">Give someone <b>Editor</b> in the Share menu only if they should be an admin.</div></div>';
@@ -2764,7 +2787,7 @@ function resultsHtml(){
 async function setRole(id,role,label){
   if(!db) return;
   try{
-    if(role){ await db.doc('roles/'+id).set({role,at:new Date().toISOString(),by:me.id||'',phone:(roles[id]&&roles[id].phone)||''}); }
+    if(role){ await db.doc('roles/'+id).set({role,at:new Date().toISOString(),by:me.id||'',phone:(roles[id]&&roles[id].phone)||'',devices:(roles[id]&&roles[id].devices)||{}}); }
     else await db.doc('roles/'+id).delete();
     if(requests[id]) db.doc('requests/'+id).delete().catch(()=>{});
     logAction(role?'Assigned role':'Removed access',{detail:(label||nameOf(id)||'Person')+(role?' → '+ROLE_NAME[role]:'')});
@@ -3066,14 +3089,14 @@ document.addEventListener('submit',async e=>{
       if(/^(\d)\1+$/.test(a1)||'0123456789'.includes(a1)||'9876543210'.includes(a1)){ signErr='That PIN is too easy to guess. Avoid repeated or sequential digits.'; render(); return; }
       if(a1!==a2){ signErr='The two PINs do not match.'; render(); return; }
       signBusy=true; render();
-      try{ const salt=b64(crypto.getRandomValues(new Uint8Array(16))), iter=150000; const hash=await pinHash(a1,salt,iter); await db.doc('pins/'+uid()).set({salt,hash,iter,alg:'PBKDF2-SHA256',at:new Date().toISOString()}); pinDoc={salt,hash,iter}; signErr=''; setFails({id:uid(),count:0,until:0}); logAction('Created PIN'); pendKeep=keep; pendSecret=b32enc(crypto.getRandomValues(new Uint8Array(20))); signStep='setup'; }
+      try{ const salt=b64(crypto.getRandomValues(new Uint8Array(16))), iter=150000; const hash=await pinHash(a1,salt,iter); await db.doc('pins/'+uid()).set({salt,hash,iter,alg:'PBKDF2-SHA256',at:new Date().toISOString()}); pinDoc={salt,hash,iter}; signErr=''; setFails({id:uid(),count:0,until:0}); logAction('Created PIN'); await afterPin(keep); }
       catch(e){ signErr='Could not save your PIN. Check your connection and try again.'; }
       signBusy=false; render(); return; }
     const f=fails(); if(f.until>Date.now()){ render(); return; }
     const pin=document.getElementById('pin').value; if(!pin) return;
     signBusy=true; render();
     try{ const h=await pinHash(pin,pinDoc.salt,pinDoc.iter||150000);
-      if(h===pinDoc.hash){ signErr=''; pendKeep=keep; if(pinDoc.totp&&pinDoc.totp.secret){ signStep='otp'; } else { pendSecret=b32enc(crypto.getRandomValues(new Uint8Array(20))); signStep='setup'; } }
+      if(h===pinDoc.hash){ signErr=''; setFails({id:uid(),count:0,until:0}); await afterPin(keep); }
       else{ f.count++; if(f.count>=5){ f.until=Date.now()+15*60000; f.count=0; logAction('Sign-in paused after 5 wrong PINs'); } else logAction('Failed sign-in'); setFails(f); signErr=f.until>Date.now()?'':'Wrong PIN.'; }
     }catch(e){ signErr='Could not check your PIN. Try again.'; }
     signBusy=false; render(); return; }
@@ -3249,6 +3272,10 @@ document.addEventListener('click',async e=>{
     logAction('Created invoices from tickets',{detail:list.length+' invoices'}); toast(list.length+' invoices created — enter their amounts'); return; }
   if(ds.atab){ adminTab=ds.atab; render(); return; }
   if(ds.grant){ if(ds.nm) names[ds.grant]=ds.nm; await setRole(ds.grant,ds.r,ds.nm); return; }
+  if(ds.devok){ const id=ds.devok, q=devPins[id]&&devPins[id].devReq; if(!q) return; try{ await approveDevice(id,q.h,q.name); await clearDevReq(id); logAction('Approved device',{detail:nameOf(id)+' · '+(q.name||'')}); toast('Device approved. They are signed in now.'); }catch(e){ toast('Could not approve. Try again.'); } return; }
+  if(ds.devno){ const id=ds.devno; try{ await clearDevReq(id); logAction('Declined device',{detail:nameOf(id)}); toast('Device declined'); }catch(e){ toast('Could not decline. Try again.'); } return; }
+  if(ds.devclear){ const id=ds.devclear, r=roles[id]; if(!r) return; if(!confirm('Remove all approved devices for '+(nameOf(id)||'this person')+'? They will need a new approval to sign in.')) return; try{ await db.doc('roles/'+id).set(Object.assign({},r,{devices:{}})); logAction('Removed devices',{detail:nameOf(id)}); toast('Devices removed'); }catch(e){ toast('Could not remove. Try again.'); } return; }
+  if(ds.devkeep){ const id=uid(), h=await devHash(), r=roles[id]; if(!r||!devOk(id,h)) return; if(!confirm('Keep only this device and remove your other approved devices?')) return; try{ await db.doc('roles/'+id).set(Object.assign({},r,{devices:{[h]:devsOf(id)[h]}})); logAction('Removed my other devices'); toast('Other devices removed'); }catch(e){ toast('Could not remove. Try again.'); } return; }
   if(ds.resetpin){ try{ await db.doc('pins/'+ds.resetpin).delete(); logAction('Reset sign-in (PIN and authenticator)',{detail:ds.resetpin===uid()?'Own sign-in':nameOf(ds.resetpin)||'Person'}); if(ds.resetpin===uid()){ toast('Your sign-in was reset. Set it up again now.'); signOut(); } else toast('Sign-in reset. '+(nameOf(ds.resetpin)||'They')+' will set up a new PIN and authenticator at next sign-in.'); }catch(e){ toast('Only admins can reset PINs.'); } return; }
   if(ds.unrole){ await setRole(ds.unrole,null); return; }
   if(ds.dismiss){ try{ await db.doc('requests/'+ds.dismiss).delete(); }catch(e){ toast('Could not dismiss the request.'); } return; }
@@ -3372,6 +3399,7 @@ function goDemo(){ if(loaded) return; demo=true; loaded=true; visits=demoData();
   const fsub=(col,store)=>db.collection(col).onSnapshot(snap=>{ for(const k in store) delete store[k]; snap.docs.forEach(d=>{ const x=d.data(); if(x) store[d.id]=Object.assign({id:d.id},x); }); overlayQ(col,store); lastSync=Date.now(); finSeen.add(col); scheduleFinAuto(); if(route==='finance'||route==='dashboard') safeRender(); },()=>{});
   fsub('bankAccounts',bankAccounts); fsub('bankTx',bankTx); fsub('invoices',invoices); fsub('partnerTx',partnerTx); fsub('finSettings',finSettings); fsub('statements',statements); fsub('journals',journals); fsub('bills',bills);
   db.collection('roles').onSnapshot(snap=>{ roles={}; snap.docs.forEach(d=>{ const x=d.data(); if(x) roles[d.id]=x; }); rolesLoaded=true; render(); resolveNames(); },()=>{ rolesLoaded=true; render(); });
+  db.collection('pins').onSnapshot(snap=>{ devPins={}; snap.docs.forEach(d=>{ const x=d.data(); if(x) devPins[d.id]=x; }); if(route==='admin'||route==='dashboard') safeRender(); },()=>{});
   db.collection('requests').onSnapshot(snap=>{ requests={}; snap.docs.forEach(d=>{ const x=d.data(); if(x) requests[d.id]=x; }); if(route==='admin'||access()==='none') safeRender(); resolveNames(); },()=>{});
   db.collection('atlog').onSnapshot(snap=>{ atLog=snap.docs.flatMap(d=>((d.data()||{}).entries)||[]).sort((a,b)=>(b.at||'').localeCompare(a.at||'')).slice(0,300); if(route==='dashboard') safeRender(); },()=>{});
   db.collection('audit').onSnapshot(snap=>{ audit=snap.docs.flatMap(d=>(((d.data()||{}).entries)||[]).map(x=>Object.assign({by:d.id},x))).sort((a,b)=>(b.at||'').localeCompare(a.at||'')).slice(0,300); if(route==='admin') safeRender(); resolveNames(); },()=>{});
