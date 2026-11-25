@@ -657,7 +657,7 @@ function signinHtml(){
   const otpName=encodeURIComponent('Ziar Imaar:'+(me.name||'user'));
   if(signStep==='devwait'&&devHashV&&devOk(uid(),devHashV)){ setTimeout(()=>{ if(signStep==='devwait'){ startSession(pendKeep); signStep='pin'; logAction('Signed in · device approved',{detail:devName()}); render(); } },0); }
   if(signStep==='devwait'&&!lockedFor){ form=`<div style="display:flex;flex-direction:column;gap:12px"><div class="steps3"><b>Step 2 of 2</b> · Approve this device</div>
-      <div class="devwait"><div class="devic">${svg('lock',22)}</div><div><b>Waiting for approval</b><div class="sub">This is a new device for your account: <b>${esc(devName())}</b>. An administrator must approve it once in <b>Administration → Users &amp; Roles</b>. This page continues by itself as soon as it is approved.</div></div></div>
+      <div class="devwait"><div class="devic">${svg('lock',22)}</div><div><b>Waiting for approval</b><div class="sub">This is a new device for your account: <b>${esc(devName())}</b>. An administrator must approve it once in <b>Administration → Users &amp; Roles</b>${access()==='admin'&&Object.keys(devsOf(uid())).length?` — you can do it yourself from your approved device: <b>${esc(Object.values(devsOf(uid())).map(d=>d.name).join(', '))}</b>`:''}. This page continues by itself as soon as it is approved.</div></div></div>
       <div class="sub"><span class="spin"></span> Waiting… you can keep this page open.</div>
       <button class="btn ghost" type="button" data-act="signout">Cancel</button></div>`; }
   else if(pinDoc===undefined) form='<div class="sub"><span class="spin"></span> Checking your sign-in…</div>';
