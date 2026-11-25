@@ -620,10 +620,12 @@ const b64=a=>btoa(String.fromCharCode(...new Uint8Array(a)));
 const unb64=s=>Uint8Array.from(atob(s),c=>c.charCodeAt(0));
 async function pinHash(pin,salt,iter){ const key=await crypto.subtle.importKey('raw',new TextEncoder().encode(pin),'PBKDF2',false,['deriveBits']); return b64(await crypto.subtle.deriveBits({name:'PBKDF2',salt:unb64(salt),iterations:iter,hash:'SHA-256'},key,256)); }
 const signedIn=()=>!!(uid()&&unlock&&unlock.id===uid()&&unlock.until>Date.now());
-// fail closed: whenever live data is shown, a PIN sign-in on an approved device is required
+// fail closed: whenever live data is shown, a PIN sign-in is required
 const needsSignIn=()=>!!(db&&!demo&&!['loading','none'].includes(access())&&!signedIn());
-function fails(){ try{ const f=JSON.parse(localStorage.getItem(FAIL_KEY)||'null'); return f&&f.id===uid()?f:{id:uid(),count:0,until:0}; }catch(e){ return {id:uid(),count:0,until:0}; } }
-function setFails(f){ try{ localStorage.setItem(FAIL_KEY,JSON.stringify(f)); }catch(e){} }
+function fails(){ let f={id:uid(),count:0,until:0}; try{ const x=JSON.parse(localStorage.getItem(FAIL_KEY)||'null'); if(x&&x.id===uid()) f=x; }catch(e){}
+  const sv=pinDoc&&pinDoc.fails; if(sv&&((+sv.until||0)>(+f.until||0)||(+sv.count||0)>(+f.count||0))) f={id:uid(),count:+sv.count||0,until:+sv.until||0}; return f; }
+function setFails(f){ try{ localStorage.setItem(FAIL_KEY,JSON.stringify(f)); }catch(e){}
+  if(db&&uid()&&pinDoc&&pinDoc.hash){ const cur=pinDoc.fails||{}; if((+cur.count||0)===(+f.count||0)&&(+cur.until||0)===(+f.until||0)) return; pinDoc=Object.assign({},pinDoc,{fails:{count:f.count,until:f.until}}); db.doc('pins/'+uid()).set(pinDoc).catch(()=>{}); } }
 async function loadPin(){ if(!uid()){ pinDoc=null; return render(); } try{ const sn=await db.doc('pins/'+uid()).get(); pinDoc=sn.exists?sn.data():null; }catch(e){ pinDoc=null; } render(); }
 function startSession(keep){ unlock={id:uid(),until:Date.now()+SESSION_MS}; lastAct=Date.now(); for(const st of stores2()){ try{ st.removeItem(UNLOCK_KEY); }catch(e){} } try{ (keep?localStorage:sessionStorage).setItem(UNLOCK_KEY,JSON.stringify(unlock)); }catch(e){} }
 function signOut(reason){ if(signedIn()) logAction('Signed out',reason?{detail:reason}:{}); unlock=null; signStep='pin'; pendSecret=''; for(const st of stores2()){ try{ st.removeItem(UNLOCK_KEY); }catch(e){} } signErr=reason||''; pinDoc=undefined; modal=null; render(); }
@@ -635,13 +637,14 @@ let devPins={}, devHashV='';
 function devKey(){ try{ let k=localStorage.getItem(DEV_KEY); if(!k){ k=b64(crypto.getRandomValues(new Uint8Array(24))).replace(/[^A-Za-z0-9]/g,''); localStorage.setItem(DEV_KEY,k); } return k; }catch(e){ if(!devKey.mem) devKey.mem=b64(crypto.getRandomValues(new Uint8Array(24))).replace(/[^A-Za-z0-9]/g,''); return devKey.mem; } }
 async function devHash(){ if(devHashV) return devHashV; const d=await crypto.subtle.digest('SHA-256',new TextEncoder().encode('zi-dev|'+devKey())); devHashV=[...new Uint8Array(d)].map(x=>x.toString(16).padStart(2,'0')).join(''); return devHashV; }
 function devName(){ const u=navigator.userAgent||''; const os=/iPhone/.test(u)?'iPhone':/iPad/.test(u)?'iPad':/Android/.test(u)?'Android phone':/Mac OS X/.test(u)?'Mac':/Windows/.test(u)?'Windows PC':/Linux/.test(u)?'Linux PC':'Device'; const br=/Edg\//.test(u)?'Edge':/CriOS|Chrome\//.test(u)?'Chrome':/FxiOS|Firefox\//.test(u)?'Firefox':/Safari\//.test(u)?'Safari':'browser'; return br+' on '+os; }
+const devOn=()=>FS().deviceApproval===true;
 const devsOf=id=>(roles[id]&&roles[id].devices)||{};
 const devOk=(id,h)=>!!(h&&devsOf(id)[h]);
 async function approveDevice(id,h,name){ const r=roles[id]||{}; const devices=Object.assign({},r.devices||{},{[h]:{name:name||'Device',at:new Date().toISOString(),by:me.id||''}}); await db.doc('roles/'+id).set(Object.assign({},r,{devices})); }
 async function clearDevReq(id){ const pdoc=devPins[id]; if(!pdoc||!pdoc.devReq) return; const d=Object.assign({},pdoc); delete d.devReq; delete d.id; await db.doc('pins/'+id).set(d); }
 function pendingDevices(){ return Object.entries(devPins).filter(([id,p])=>p&&p.devReq&&p.devReq.h&&!devOk(id,p.devReq.h)).map(([id,p])=>({id,...p.devReq})).sort((a,b)=>(b.at||'').localeCompare(a.at||'')); }
 async function afterPin(keep){ // called once the PIN is right
-  if(window.HUB_CONFIG){ startSession(keep); logAction('Signed in'); signStep='pin'; return; } // own website: Supabase email logins already protect each account
+  if(window.HUB_CONFIG||!devOn()){ if(pinDoc&&pinDoc.devReq){ const d=Object.assign({},pinDoc); delete d.devReq; pinDoc=d; db.doc('pins/'+uid()).set(d).catch(()=>{}); } startSession(keep); logAction('Signed in'); signStep='pin'; return; } // own website: Supabase email logins already protect each account
   const h=await devHash(), id=uid();
   if(devOk(id,h)){ startSession(keep); logAction('Signed in',{detail:(devsOf(id)[h]||{}).name||''}); signStep='pin'; return; }
   const mine=Object.keys(devsOf(id)).length;
@@ -674,12 +677,12 @@ function signinHtml(){
       <label class="check"><input type="checkbox" id="keep"> Keep me signed in on this device for 8 hours</label>
       <div class="err" role="alert">${esc(signErr)}${f.count&&!signErr?esc(f.count+' wrong attempt'+(f.count>1?'s':'')+'. '+(5-f.count)+' left before a 15-minute pause.'):''}</div>
       <button class="btn primary lg" type="submit" ${signBusy?'disabled':''}>${signBusy?'<span class="spin"></span>':''}Continue</button>
-      <div class="sub">Forgot your PIN or lost your phone? Ask an administrator to reset your PIN or remove the lost device.</div></form>`;
+      <div class="sub">Forgot your PIN? Ask an administrator to reset your sign-in.</div></form>`;
   return `<div class="signin">
     <div class="brandpane"><div class="bigemblem"><svg viewBox="0 0 400 300" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><g fill="#c9972f"><rect x="174" y="22" width="15" height="150" rx="1.5"/><rect x="193" y="0" width="15" height="172" rx="1.5"/><rect x="212" y="12" width="15" height="160" rx="1.5"/><rect x="186" y="214" width="12" height="12"/><rect x="202" y="214" width="12" height="12"/><rect x="186" y="230" width="12" height="12"/><rect x="202" y="230" width="12" height="12"/></g><g stroke="currentColor" stroke-width="10" stroke-linejoin="miter" stroke-linecap="square"><path d="M162 200V64l14-14"/><path d="M238 200V64l-14-14"/><path d="M128 238A92 92 0 0 1 156 108"/><path d="M272 238A92 92 0 0 0 244 108"/></g><path fill="currentColor" d="M64 262 200 160l136 102-15 12L200 183 79 274z"/></svg></div><div class="bigwm" style="position:relative;z-index:1" aria-label="Ziar Imaar Technical Services"><img class="brandlogo big" src="${REPORT_LOGO}" alt="Ziar Imaar Technical Services L.L.C."></div>
       <div class="hide-sm" style="position:relative;z-index:1;max-width:420px"><div style="font-family:var(--display);font-size:22px;font-weight:600;line-height:1.3">Kohler UAE service ticket hub</div><div style="color:var(--navyInk);margin-top:8px">Visits, reviews, parts and reports for the Kohler UAE service contract, in one place for the office and the field.</div></div>
       <div class="sub hide-sm" style="color:var(--navyInk);position:relative;z-index:1">Ziar Imaar Technical Services L.L.C.</div></div>
-    <div class="formpane"><div class="signcard"><div><h1>${creating?'Set up your sign-in':'Sign in'}</h1><div class="sub" style="margin-top:4px">${signStep==='devwait'?'Your PIN is right. This device now needs a one-time approval.':creating?'Create a personal PIN. Each new phone or computer is approved once by an administrator.':'Enter your personal PIN. New devices need a one-time approval by an administrator.'}</div></div></div>${who}${form}
+    <div class="formpane"><div class="signcard"><div><h1>${creating?'Set up your sign-in':'Sign in'}</h1><div class="sub" style="margin-top:4px">${signStep==='devwait'?'Your PIN is right. This device now needs a one-time approval.':creating?'Create a personal PIN. Keep it private; 5 wrong tries pause sign-in for 15 minutes.':'Enter your personal PIN.'}</div></div></div>${who}${form}
       <div class="sub" style="border-top:1px solid var(--line);padding-top:12px">${me.name?'Signing in as <b>'+esc(me.name)+'</b> (your Claude account). ':''}Each person signs in with their own Claude account and their own PIN. Not you? Sign in to Claude with your own account, then open this link again. New staff: ask the owner to share the hub with your Claude account and give you a role.</div></div></div>
   </div>`;
 }
@@ -915,7 +918,7 @@ function companyView(){
     ${f('placeOfSupply','Place of supply','Dubai')}${f('bankName','Bank name','e.g. Wio Business')}${f('accountNo','Account no.')}${f('accountName','Account name')}${f('iban','IBAN','AE…')}${f('swift','SWIFT / BIC')}</div>
     <div class="formfoot" style="padding:12px 0 0"><button class="btn primary" type="submit">Save company profile</button></div></div></form>`;
   if(coui.tab==='system'){ const s=FS(); body=`<div class="card"><div>${[
-    ['Sign-in','PIN + approved devices · sessions end after 8 hours, or 30 minutes idle',`<button class="btn" data-nav="7.0">Users</button>`],
+    ['Sign-in','Claude account + personal PIN · 5 wrong PINs pause sign-in for 15 minutes · sessions end after 8 hours, or 30 minutes idle',`<button class="btn" data-nav="7.0">Users</button>`],
     ['Billing cycle',{off:'Invoice numbers typed on tickets',ticket:'One invoice per ticket',weekly:'Weekly',half:'Twice a month (1–15, 16–end)',monthly:'Monthly'}[s.autoNumber||'off']+' · payment terms '+s.terms+' days',`<button class="btn" data-nav="5.3">Change</button>`],
     ['Rate card',rateRows()?Object.keys(rateRows()).length+' emirates'+(FS().rateCard.effectiveFrom?' · from '+FS().rateCard.effectiveFrom:''):'Not set',`<button class="btn" data-nav="5.3">Edit</button>`],
     ['Statements',s.autoStatement?'Prepared automatically':'Off',`<button class="btn" data-nav="4.8">Open</button>`],
@@ -1521,7 +1524,7 @@ function dashView(){
       ${kpi('Resolved',res==null?'—':res+'%','of '+withOut.length+' with an outcome')}
       ${kpi('Avg time on site',dur(avg),times.length+' timed visits')}
     </div>
-    ${access()==='admin'&&pendingDevices().length?`<div class="banner gold" style="margin-bottom:14px"><div style="flex:1"><b>${pendingDevices().length} device${pendingDevices().length>1?'s':''} waiting for approval</b>${esc(pendingDevices().map(x=>(nameOf(x.id)||'Someone')+' · '+(x.name||'')).join(' · '))}</div><button class="btn primary" data-nav="7.0">Review</button></div>`:''}
+    ${access()==='admin'&&devOn()&&pendingDevices().length?`<div class="banner gold" style="margin-bottom:14px"><div style="flex:1"><b>${pendingDevices().length} device${pendingDevices().length>1?'s':''} waiting for approval</b>${esc(pendingDevices().map(x=>(nameOf(x.id)||'Someone')+' · '+(x.name||'')).join(' · '))}</div><button class="btn primary" data-nav="7.0">Review</button></div>`:''}
     ${newTicketsHtml()}
     ${billDayHtml()}
     ${atCardsHtml()}
@@ -2735,8 +2738,8 @@ function adminView(){
   let body='';
   if(adminTab==='users') body=`<div class="pgrid">
     <div class="card"><div class="card-h"><h3>People with access</h3><span class="sub">${assigned.length} assigned</span></div>
-      <div class="banner gold" style="margin:12px 16px 4px;border-radius:9px"><div style="flex:1"><b>Admins</b>The owner and anyone given Editor access from the Share menu are admins automatically. Everyone signs in with their own PIN on an approved device. Approve new devices below; remove a lost phone with Remove devices. Reset sign-in clears a forgotten PIN; they create a new one at their next sign-in.</div><span style="display:flex;flex-direction:column;gap:6px"><button class="btn" style="height:32px" data-resetpin="${esc(uid()||'')}">Reset my sign-in</button>${Object.keys(devsOf(uid())).length>1?`<button class="btn" style="height:32px" data-devkeep="1" title="Keep only the device you are using now">Remove my other devices</button>`:''}</span></div>
-      <div>${assigned.length?assigned.map(([id,r])=>personRow(id,[`<div class="sub">Assigned ${esc(dm(r.at))}${r.by?' by '+esc(nameOf(r.by)):''}</div>${r.role==='technician'?`<input class="field" data-tphone="${esc(id)}" value="${esc(r.phone||'')}" placeholder="WhatsApp number, e.g. 050 123 4567" style="margin-top:6px;max-width:260px;padding:6px 10px" inputmode="tel">`:''}`,`<span style="display:flex;gap:8px;align-items:center"><select class="field" data-setrole="${esc(id)}" style="margin:0;width:auto;padding:6px 30px 6px 10px">${['office','technician','viewer'].map(x=>`<option value="${x}" ${r.role===x?'selected':''}>${ROLE_NAME[x]}</option>`).join('')}</select><button class="linkbtn" data-resetpin="${esc(id)}">Reset sign-in</button>${Object.keys(devsOf(id)).length?`<button class="linkbtn" data-devclear="${esc(id)}" title="${esc(Object.values(devsOf(id)).map(d=>d.name).join(', '))}">Remove devices (${Object.keys(devsOf(id)).length})</button>`:''}<button class="linkbtn danger" data-unrole="${esc(id)}">Remove</button></span>`])).join(''):'<div class="empty">No Office, Technician or Viewer users yet. Add people on the right, or approve access requests.</div>'}</div></div>
+      <div class="banner gold" style="margin:12px 16px 4px;border-radius:9px"><div style="flex:1"><b>Admins</b>The owner and anyone given Editor access from the Share menu are admins automatically. Everyone signs in with their own Claude account and personal PIN. Five wrong PINs pause sign-in for 15 minutes. Reset sign-in clears a forgotten PIN; they create a new one at their next sign-in. If a phone is lost, remove that person's access in the Share menu or here, or have them sign out of Claude on it.</div><span style="display:flex;flex-direction:column;gap:6px"><button class="btn" style="height:32px" data-resetpin="${esc(uid()||'')}">Reset my sign-in</button>${devOn()&&Object.keys(devsOf(uid())).length>1?`<button class="btn" style="height:32px" data-devkeep="1" title="Keep only the device you are using now">Remove my other devices</button>`:''}</span></div>
+      <div>${assigned.length?assigned.map(([id,r])=>personRow(id,[`<div class="sub">Assigned ${esc(dm(r.at))}${r.by?' by '+esc(nameOf(r.by)):''}</div>${r.role==='technician'?`<input class="field" data-tphone="${esc(id)}" value="${esc(r.phone||'')}" placeholder="WhatsApp number, e.g. 050 123 4567" style="margin-top:6px;max-width:260px;padding:6px 10px" inputmode="tel">`:''}`,`<span style="display:flex;gap:8px;align-items:center"><select class="field" data-setrole="${esc(id)}" style="margin:0;width:auto;padding:6px 30px 6px 10px">${['office','technician','viewer'].map(x=>`<option value="${x}" ${r.role===x?'selected':''}>${ROLE_NAME[x]}</option>`).join('')}</select><button class="linkbtn" data-resetpin="${esc(id)}">Reset sign-in</button>${devOn()&&Object.keys(devsOf(id)).length?`<button class="linkbtn" data-devclear="${esc(id)}" title="${esc(Object.values(devsOf(id)).map(d=>d.name).join(', '))}">Remove devices (${Object.keys(devsOf(id)).length})</button>`:''}<button class="linkbtn danger" data-unrole="${esc(id)}">Remove</button></span>`])).join(''):'<div class="empty">No Office, Technician or Viewer users yet. Add people on the right, or approve access requests.</div>'}</div></div>
     <div style="display:flex;flex-direction:column;gap:16px">
       ${devApprovalsCard()}
       <div class="card"><div class="card-h"><h3>Add a person</h3><span class="sub">From your organization</span></div><div class="card-b">
@@ -2759,7 +2762,7 @@ function adminView(){
   return `<div class="page"><div class="phead"><div><h1>Administration</h1><div class="sub">Users, roles and the audit trail for the Kohler UAE ticket hub.</div></div>
     <div class="tabs" role="group" aria-label="Administration sections">${tabs.map(([k,l])=>`<button data-atab="${k}" aria-pressed="${adminTab===k}">${l}</button>`).join('')}</div></div>${body}</div>`;
 }
-function devApprovalsCard(){ if(window.HUB_CONFIG) return ''; const pd=pendingDevices();
+function devApprovalsCard(){ if(window.HUB_CONFIG||!devOn()) return ''; const pd=pendingDevices();
   return `<div class="card${pd.length?' devalert':''}"><div class="card-h"><h3>Device approvals</h3><span class="sub">${pd.length} waiting</span></div>
     <div>${pd.length?pd.map(x=>personRow(x.id,[`<div class="sub">${esc(x.name||'Device')} · asked ${esc(dmhm(x.at))}</div>`,`<span style="display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end"><button class="btn primary" style="height:32px" data-devok="${esc(x.id)}">Approve</button><button class="linkbtn danger" data-devno="${esc(x.id)}">Decline</button></span>`])).join(''):'<div class="empty">No devices waiting. When someone signs in on a new phone or computer, it appears here to approve.</div>'}</div></div>`; }
 function resultsHtml(){
