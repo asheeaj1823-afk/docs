@@ -202,6 +202,7 @@ details.tv td,details.tv th{padding:4px 8px;text-align:left;border-top:1px solid
 .attn button:first-child{border-top:0}
 .ico{display:inline-grid;place-items:center;width:24px;height:24px;border-radius:7px;flex:none;color:#fff}.ico svg{width:15px;height:15px}.ico-phone{background:#1d5bb8}.ico-wa{background:#25d366}.ico-map{background:#e5483d}.ico-atable{background:#c9972f}.btn.icobtn{padding:0 10px;min-width:48px;gap:4px}.btn.icobtn .ico{width:30px;height:30px;border-radius:9px}.btn.icobtn .ico svg{width:18px;height:18px}.icotag{font-size:11px;font-weight:700;color:var(--muted)}.myjob .acts>.icobtn{flex:1 1 0}.myjob .acts>.btn.primary{flex:2 1 100%}
 .addsteps{margin-top:10px;background:var(--gold-50,#fbf3df);border:1px solid #ecd9a6;border-radius:10px;padding:10px 12px;font-size:13px}.addsteps ol{margin:6px 0 6px 18px;padding:0;display:grid;gap:6px}
+.ageing{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:8px;margin-bottom:12px}.ageing .ab{border:1px solid var(--line);border-radius:10px;padding:8px 10px;display:grid;gap:2px}.ageing .ab b{font-size:15px}.ageing .ab.ok{border-left:4px solid var(--ok)}.ageing .ab.warn{border-left:4px solid #d39b22}.ageing .ab.bad{border-left:4px solid var(--bad)}.fuph{margin-top:12px;display:grid;gap:6px}.futbl td,.futbl th{padding:8px 6px}.futbl td:last-child{width:1%}.futbl .btn.icobtn{min-width:40px;padding:0 6px}
 .myjobs{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px;margin-bottom:16px}
 .myjob{background:var(--surface);border:1px solid var(--line);border-left:4px solid var(--navy3);border-radius:14px;padding:14px;display:grid;gap:8px;min-width:0}
 .myjob.late{border-left-color:var(--bad)}.myjob.done{border-left-color:var(--ok);opacity:.75}
@@ -1597,7 +1598,7 @@ function headCard(v,opts={}){
       ${opts.back!==false?`<button class="btn ghost backlink" data-act="back" style="align-self:flex-start;padding:0;height:28px">${svg('back',16)} All tickets</button>`:''}
       <div class="row" style="align-items:flex-start;flex-wrap:wrap">
         <div style="min-width:0"><div class="mono" style="font-weight:700;display:flex;gap:8px;align-items:center;flex-wrap:wrap">${esc(tref(v))}${invChip(v)}</div><h2 style="margin-top:2px">${esc(siteOf(v))}</h2>${v.issue?`<div style="color:var(--ink2);margin-top:2px">${esc(v.issue)}</div>`:''}</div>
-        <div class="actions">${canPdf()?`<button class="btn" data-pdf="${esc(v.id)}">${svg('doc',16)}Service report</button>`:''}</div>
+        <div class="actions">${canPdf()?`<button class="btn" data-pdf="${esc(v.id)}">${svg('doc',16)}Service report</button><button class="btn icobtn" data-repwa="${esc(v.id)}" title="Send report on WhatsApp" aria-label="Send report on WhatsApp">${ico('wa',18)}</button>`:''}</div>
       </div>
       <div class="chips">${chip(v)}${slaChip(v)}<span class="prio ${esc(v.priority||'Normal')}">${esc(v.priority||'Normal')} priority</span></div>
     </div>
@@ -1958,6 +1959,24 @@ function finTodo(){
   if(T.vat>0) todo.push(['plain','VAT to pay for '+T.vatQ.replace('-',' '),money(T.vat)+' so far this quarter.',`<button class="btn" data-gofin="vat">See VAT</button>`]);
   return todo;
 }
+/* payment follow-up: ageing + WhatsApp reminders */
+const daysBetween=(a,b)=>Math.round((Date.parse(b+'T00:00:00Z')-Date.parse(a+'T00:00:00Z'))/86400000);
+function followUpData(){ const t=todayDxb();
+  const open=Object.values(invoices).filter(i=>!isCredit(i)&&!['draft','void'].includes(i.status)&&invGross(i)-invPaid(i)>0.01).map(i=>{ const due=(i.dueDate||i.date||'').slice(0,10); return {i,bal:r2(invGross(i)-invPaid(i)),due,late:due?daysBetween(due,t):0}; }).sort((a,b)=>b.late-a.late);
+  const B=[['Not due yet',x=>x.late<=0],['1–30 days',x=>x.late>=1&&x.late<=30],['31–60 days',x=>x.late>=31&&x.late<=60],['61–90 days',x=>x.late>=61&&x.late<=90],['Over 90 days',x=>x.late>90]].map(([l,f])=>{ const xs=open.filter(f); return {l,n:xs.length,amt:r2(xs.reduce((a,x)=>a+x.bal,0))}; });
+  return {open,over:open.filter(x=>x.late>0),B}; }
+function payMsg(list){ const c=CO(), cust=FS().customer||'Sir/Madam', fd=d=>d?d.split('-').reverse().join('/'):'';
+  const bank=[c.bankName&&('Bank: '+c.bankName),c.accountName&&('Account name: '+c.accountName),c.iban&&('IBAN: '+c.iban)].filter(Boolean).join('\n');
+  const lines=list.map(x=>`• ${x.i.invoiceNo} dated ${fd(x.i.date)} — ${money(x.bal)}${x.late>0?' (due '+fd(x.due)+', '+x.late+' days overdue)':''}`).join('\n');
+  const tot=r2(list.reduce((a,x)=>a+x.bal,0));
+  return `Dear ${cust},\n\nThis is a kind reminder that the following ${list.length>1?'invoices are':'invoice is'} pending payment:\n${lines}${list.length>1?'\nTotal: '+money(tot):''}\n\nKindly arrange the payment at your earliest convenience.${bank?'\n\n'+bank:''}\n\nThank you,\n${c.tradeName||c.legalName||'Ziar Imaar Technical Services'}`; }
+function payWa(list){ const n=waNum(FS().custPhone||''), txt=encodeURIComponent(payMsg(list)); return n?'https://wa.me/'+n+'?text='+txt:'https://wa.me/?text='+txt; }
+function followUpCard(){ const {open,over,B}=followUpData(); if(!open.length) return '';
+  const totOver=r2(over.reduce((a,x)=>a+x.bal,0)), ph=FS().custPhone||'';
+  return `<div class="card"><div class="card-h"><div><h3>Payment follow-up</h3><div class="sub">${over.length?over.length+' overdue · '+money(totOver):'Nothing overdue'} · ${open.length} unpaid in total</div></div>${over.length?`<a class="btn primary" target="_blank" rel="noopener" href="${esc(payWa(over))}">${ico('wa',16)}Remind all overdue</a>`:''}</div>
+    <div class="card-b"><div class="ageing">${B.map((b,k)=>`<div class="ab${!b.n?'':k===0?' ok':k>=3?' bad':' warn'}"><span class="lbl">${b.l}</span><b>${money(b.amt)}</b><span class="sub">${b.n} invoice${b.n===1?'':'s'}</span></div>`).join('')}</div>
+    ${over.length?`<div class="tblwrap"><table class="tbl futbl"><thead><tr><th>Invoice</th><th style="text-align:right">Balance</th></tr></thead><tbody>${over.map(x=>`<tr><td><b style="white-space:nowrap">${esc(x.i.invoiceNo)}</b><div class="sub" style="white-space:nowrap"><span class="chip ${x.late>60?'sla-late':'review'}">${x.late} days late</span> due ${esc(dm(x.due))}</div></td><td style="text-align:right;white-space:nowrap" class="num">${money(x.bal)}<div style="display:flex;gap:6px;justify-content:flex-end;margin-top:6px"><button class="btn icobtn" title="Invoice PDF" aria-label="Invoice PDF" data-invpdf="${esc(x.i.id)}">${svg('doc',16)}</button> <a class="btn icobtn" title="WhatsApp reminder" aria-label="WhatsApp reminder" target="_blank" rel="noopener" href="${esc(payWa([x]))}">${ico('wa',18)}</a></div></td></tr>`).join('')}</tbody></table></div>`:''}
+    <form id="custphone" class="fuph"><label class="sub" for="cp-in">${esc(FS().customer||'Customer')} WhatsApp number</label><div style="display:flex;gap:8px"><input class="field" id="cp-in" name="ph" inputmode="tel" placeholder="e.g. 050 123 4567" value="${esc(ph)}" style="margin:0;flex:1"><button class="btn" type="submit">Save</button></div>${ph?'':'<div class="sub">Without a number, WhatsApp opens and you choose the chat.</div>'}</form></div></div>`; }
 function finOverview(){
   const T=finTotals(), todo=finTodo(), inv=Object.values(invoices).filter(i=>!['draft','void'].includes(i.status));
   const overdue=r2(inv.filter(i=>invoiceState(i).k==='overdue').reduce((a,i)=>a+invGross(i)-invPaid(i),0));
@@ -1971,6 +1990,7 @@ function finOverview(){
   return `<div class="kpis" style="grid-template-columns:repeat(auto-fit,minmax(160px,1fr))">${big('Money in the bank',money(T.cash),Object.keys(bankAccounts).length?Object.keys(bankAccounts).length+' account'+(Object.keys(bankAccounts).length>1?'s':''):'add your bank account','hero')}${big(esc(FS().customer)+' owes you',money(T.recv),overdue?money(overdue)+' overdue':'nothing overdue',overdue?'alert':'')}${big('Profit this year',money(T.profit),'invoiced minus spent, before VAT',T.profit<0?'alert':'')}${big('VAT to pay',money(T.vat),T.vatQ.replace('-',' ')+' so far')}</div>
     <div class="card"><div class="card-h"><h3>To do</h3><span class="sub">${todo.filter(t=>t[0]!=='ok'&&t[0]!=='plain').length?'Work through these from the top':'All up to date'}</span></div>
     <div>${todo.length?todo.map(([k,t,d,btn])=>`<div class="ctl"><span class="ic ${k==='ok'?'ok':k==='bad'?'bad':k==='plain'?'ok':'warn'}">${k==='ok'||k==='plain'?'✓':'!'}</span><div><div style="font-weight:600">${esc(t)}</div><div class="sub">${esc(d)}</div></div><div style="margin-left:auto">${btn}</div></div>`).join(''):'<div class="empty">Nothing to do. Invoices are raised from tickets and statements are prepared automatically.</div>'}</div></div>
+    ${followUpCard()}
     <div class="dgrid">
       <div class="card"><div class="card-h"><div><h3>Cash in and out</h3><div class="sub">Bank receipts and payments per month, transfers excluded</div></div><div class="legend"><span><i style="background:var(--s-completed)"></i>In</span><span><i style="background:var(--bar)"></i>Out</span></div></div><div class="card-b">${rows.length?rows.map(r=>`<div class="cashrow" data-tip="${esc(mlab(r.m))}: in ${esc(money(r.inn))} · out ${esc(money(r.out))}"><span class="sub">${esc(mlab(r.m))}</span><span class="bars"><i style="width:${(r.inn/mx*100).toFixed(1)}%;background:var(--s-completed)"></i><i style="width:${(r.out/mx*100).toFixed(1)}%;background:var(--bar)"></i></span><span class="amt in">${esc(money(r.inn))}</span><span class="amt">${esc(money(-r.out))}</span></div>`).join(''):'<div class="empty">Import a bank statement to see cash movements.</div>'}</div></div>
       <div class="card"><div class="card-h"><div><h3>Expenses by category</h3><div class="sub">All bank payments, excluding capital, transfers and VAT</div></div></div><div class="card-b">${catRows.length?hbars(catRows).replace(/ticket(s)?/g,'AED'):'<div class="empty">No categorised payments yet.</div>'}</div></div>
@@ -2750,6 +2770,17 @@ function modalHtml(){
 
 /* ---------- service report PDF ---------- */
 const canPdf=()=>!!(downloadsApi&&window.jspdf);
+async function sendReportWa(v){
+  const inv=invFor(v), name=tref(v)+'-service-report.pdf', c=CO();
+  const txt=`Dear ${FS().customer||'Sir/Madam'},\n\nPlease find the service report for ticket ${tref(v)}${(v.site||'')?' · '+(v.site||'').split('|')[0].trim():''}${v.finished?' (visit on '+dm(v.finished)+')':''}.${inv&&inv.invoiceNo?'\nInvoice: '+inv.invoiceNo:''}\n\nThank you,\n${c.tradeName||c.legalName||'Ziar Imaar Technical Services'}`;
+  let blob=null; try{ blob=await downloadReport(v,true); }catch(e){}
+  if(!blob){ toast('The report could not be made. Try again.'); return; }
+  const file=new File([blob],name,{type:'application/pdf'});
+  try{ if(navigator.canShare&&navigator.canShare({files:[file]})){ await navigator.share({files:[file],text:txt,title:name}); return; } }catch(e){ if(e&&e.name==='AbortError') return; }
+  // fallback: save the PDF, then open WhatsApp with the message ready
+  let saved=false; try{ if(downloadsApi){ await downloadsApi.save({filename:name,data:blob}); saved=true; } }catch(e){ if(e&&e.code==='declined') return; }
+  const n=waNum(phoneOf(v))||waNum(FS().custPhone||''); window.open(n?'https://wa.me/'+n+'?text='+encodeURIComponent(txt):'https://wa.me/?text='+encodeURIComponent(txt),'_blank','noopener');
+  toast(saved?'Report saved. In WhatsApp, tap 📎 and attach '+name:'WhatsApp opened. Download the report and attach it.'); }
 async function downloadReport(v,asBlob){
   if(!window.jspdf){ if(!asBlob) toast('Report download is not available in this view.'); return; }
   if(!asBlob&&!downloadsApi){ toast('Report download is not available in this view.'); return; }
@@ -2963,6 +2994,8 @@ document.addEventListener('change',async e=>{
   if(draft===ref){ uploading=0; render(); }
 });
 document.addEventListener('submit',async e=>{
+  if(e.target&&e.target.id==='custphone'){ e.preventDefault(); const ph=String(e.target.elements.ph.value||'').trim(); if(ph&&!waNum(ph)){ toast('Enter a valid phone number'); return; }
+    try{ const d=Object.assign({},finSettings.main||{},{custPhone:ph}); delete d.id; await saveDoc('finSettings','main',d,finSettings); toast(ph?'WhatsApp number saved':'Number removed'); }catch(err){ toast('Could not save. Try again.'); } return; }
   e.preventDefault(); const id=e.target.getAttribute('id'), fd=new FormData(e.target), g=k=>(fd.get(k)||'').toString().trim();
   if(id==='partform'){ const n=g('')||document.getElementById('f-part').value.trim(); if(!n) return;
     const it=Object.values(inventory).find(i=>(i.partNo+' · '+i.description).toLowerCase()===n.toLowerCase()||(i.partNo||'').toLowerCase()===n.toLowerCase());
@@ -3124,6 +3157,7 @@ document.addEventListener('click',async e=>{
   if(ds.review&&!can('review')) return;
   if(ds.review){ rev.id=ds.review; rev.note=''; rev.confirm=null; go('review'); return; }
   if(ds.filter){ list.status=ds.filter; list.limit=60; render(); return; }
+  if(ds.repwa){ const v=visits[ds.repwa]; if(!v) return; await sendReportWa(v); return; }
   if(ds.pdf){ const pv=visits[ds.pdf]; if(pv) await downloadReport(pv); return; }
   if(ds.rsel){ rev.id=ds.rsel; rev.note=''; rev.confirm=null; render(); return; }
   if(ds.unassigned){ list.status='unassigned'; go('tickets'); return; }
