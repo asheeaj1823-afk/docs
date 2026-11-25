@@ -207,6 +207,7 @@ details.tv td,details.tv th{padding:4px 8px;text-align:left;border-top:1px solid
 .ico{display:inline-grid;place-items:center;width:24px;height:24px;border-radius:7px;flex:none;color:#fff}.ico svg{width:15px;height:15px}.ico-phone{background:#1d5bb8}.ico-wa{background:#25d366}.ico-map{background:#e5483d}.ico-atable{background:#c9972f}.btn.icobtn{padding:0 10px;min-width:48px;gap:4px}.btn.icobtn .ico{width:30px;height:30px;border-radius:9px}.btn.icobtn .ico svg{width:18px;height:18px}.icotag{font-size:11px;font-weight:700;color:var(--muted)}.myjob .acts>.icobtn{flex:1 1 0}.myjob .acts>.btn.primary{flex:2 1 100%}
 .addsteps{margin-top:10px;background:var(--gold-50,#fbf3df);border:1px solid #ecd9a6;border-radius:10px;padding:10px 12px;font-size:13px}.addsteps ol{margin:6px 0 6px 18px;padding:0;display:grid;gap:6px}
 .ageing{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:8px;margin-bottom:12px}.ageing .ab{border:1px solid var(--line);border-radius:10px;padding:8px 10px;display:grid;gap:2px}.ageing .ab b{font-size:15px}.ageing .ab.ok{border-left:4px solid var(--ok)}.ageing .ab.warn{border-left:4px solid #d39b22}.ageing .ab.bad{border-left:4px solid var(--bad)}.fuph{margin-top:12px;display:grid;gap:6px}.futbl td,.futbl th{padding:8px 6px}.futbl td:last-child{width:1%}.futbl .btn.icobtn{min-width:40px;padding:0 6px}
+.newtix{border:1px solid #c9972f;box-shadow:0 0 0 3px rgba(201,151,47,.12)}.newdot{display:inline-block;width:9px;height:9px;border-radius:50%;background:#c9972f;margin-right:8px;vertical-align:middle;animation:npulse 1.6s infinite}@keyframes npulse{0%{box-shadow:0 0 0 0 rgba(201,151,47,.6)}70%{box-shadow:0 0 0 8px rgba(201,151,47,0)}100%{box-shadow:0 0 0 0 rgba(201,151,47,0)}}.ntrow{display:flex;gap:10px;align-items:center;width:100%;background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:10px 12px;cursor:pointer;font:inherit;color:inherit}.ntrow:hover{border-color:#c9972f}
 .myjobs{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px;margin-bottom:16px}
 .myjob{background:var(--surface);border:1px solid var(--line);border-left:4px solid var(--navy3);border-radius:14px;padding:14px;display:grid;gap:8px;min-width:0}
 .myjob.late{border-left-color:var(--bad)}.myjob.done{border-left-color:var(--ok);opacity:.75}
@@ -1270,7 +1271,7 @@ async function mergeTicket(tid,g,src){
   put('region',atTxt(g('emirate'))); put('site',atTxt(g('site'))); put('address',atTxt(g('loc'))); put('product',atTxt(g('product'))); put('issue',atTxt(g('desc'))); put('technician',atTxt(g('tech'))); put('airtableNotes',atTxt(g('notes')));
   { const inv=atTxt(g('inv')); if(!blank(inv)){ if(ex&&(ex.billingRef||'').trim()&&invKey(ex.billingRef)!==invKey(inv)) atConflicts.push({id,hub:ex.billingRef,at:inv}); put('billingRef',inv); } }
   if(!ex){ const v=Object.assign({id,ref:'EZR-KOHLER-SRV-26-'+id,status:'new',type:'Inspection',priority:'Normal',category:'',product:'',site:'',address:'',region:'',issue:'',prepared:false,contactedAt:null,arrived:null,finished:null,findings:'',work:'',nextAction:'',outcome:'',returnVisit:'No',technician:'',internalNotes:'',parts:[],evidence:[],billingRef:''},patch,{source:src.source});
-    if(src.recId) v.airtableId=src.recId; v.history=[Object.assign(hist(v.status),{note:'Imported from '+src.label})]; await save(v,null); if(src.source==='airtable') atChanges.push({id,kind:'new',f:[]}); return 'new'; }
+    if(src.recId) v.airtableId=src.recId; v.history=[Object.assign(hist(v.status),{note:'Imported from '+src.label})]; v.receivedAt=new Date().toISOString(); await save(v,null); if(src.source==='airtable') atChanges.push({id,kind:'new',f:[]}); return 'new'; }
   const keys=Object.keys(patch).filter(k=>canon(ex[k]??null)!==canon(patch[k])); if(src.recId&&ex.airtableId!==src.recId) keys.push('airtableId');
   if(!keys.length) return 'same';
   const n=clone(ex); keys.forEach(k=>{ if(k!=='airtableId') n[k]=patch[k]; }); if(src.recId) n.airtableId=src.recId; n.source=n.source||('hub+'+src.source);
@@ -1519,6 +1520,7 @@ function dashView(){
       ${kpi('Resolved',res==null?'—':res+'%','of '+withOut.length+' with an outcome')}
       ${kpi('Avg time on site',dur(avg),times.length+' timed visits')}
     </div>
+    ${newTicketsHtml()}
     ${billDayHtml()}
     ${atCardsHtml()}
     <div class="card"><div class="card-b" style="display:flex;flex-direction:column;gap:10px">
@@ -1574,6 +1576,18 @@ function listBody(){
   return rows.slice(0,list.limit).map(itemHtml).join('')+(rows.length>list.limit?`<div class="more"><button class="btn block" data-act="more">Show ${Math.min(60,rows.length-list.limit)} more of ${rows.length-list.limit}</button></div>`:'');
 }
 /* technician field view: today's and overdue jobs with call and map buttons */
+/* new tickets received: shown on the dashboard for 48 hours after they arrive */
+const NEW_WINDOW_H=48;
+function receivedAt(v){ if(v.receivedAt) return v.receivedAt; const h=(v.history||[])[0]; return h&&h.at||''; }
+function newTicketsList(){ const all=Object.values(visits); if(!all.length) return [];
+  // the first bulk import is not "new": ignore the day most tickets were first loaded
+  const days={}; all.forEach(v=>{ if(!v.receivedAt){ const d=(receivedAt(v)||'').slice(0,10); if(d) days[d]=(days[d]||0)+1; } });
+  const bulk=new Set(Object.entries(days).filter(([,n])=>n>=10).map(([d])=>d));
+  const cut=Date.now()-NEW_WINDOW_H*3600e3;
+  return all.filter(v=>{ const r=receivedAt(v); if(!r||Date.parse(r)<cut) return false; return !!v.receivedAt||!bulk.has(r.slice(0,10)); }).sort((a,b)=>receivedAt(b).localeCompare(receivedAt(a))); }
+function agoTxt(iso){ const m=Math.max(0,Math.round((Date.now()-Date.parse(iso))/60000)); return m<1?'just now':m<60?m+' min ago':m<1440?Math.round(m/60)+' h ago':Math.round(m/1440)+' d ago'; }
+function newTicketsHtml(){ const xs=newTicketsList(); if(!xs.length) return '';
+  return `<div class="card newtix"><div class="card-h"><div><h3><span class="newdot"></span>New tickets received</h3><div class="sub">${xs.length} in the last ${NEW_WINDOW_H} hours · from Airtable</div></div></div><div class="card-b" style="display:grid;gap:8px">${xs.map(v=>`<button class="ntrow" data-open="${esc(v.id)}"><div style="min-width:0;flex:1;text-align:left"><div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap"><b class="mono">${esc(tref(v))}</b>${invChip(v)}${chip(v)}</div><div class="sub" style="white-space:normal">${esc([(v.site||'').split('|')[0].trim(),v.region,v.scheduled?'Visit '+dm(v.scheduled)+' '+hm(v.scheduled):'No visit time yet',v.product].filter(Boolean).join(' · '))}</div></div><span class="sub" style="white-space:nowrap">${esc(agoTxt(receivedAt(v)))}</span></button>`).join('')}</div></div>`; }
 function myJobsHtml(){
   if(access()!=='technician'||!me.id) return '';
   const t=todayDxb(), mine=Object.values(visits).filter(v=>isMine(v)&&v.status!=='cancelled');
