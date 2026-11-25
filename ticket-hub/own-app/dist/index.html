@@ -1454,7 +1454,7 @@ function billDayHtml(){
   const parts=[b.inv.length?`${b.inv.length} invoice${b.inv.length>1?'s':''} · ${money(b.net)} incl. VAT`:'No invoices in this cycle',b.drafts.length?`${b.drafts.length} draft${b.drafts.length>1?'s':''} to issue`:'',b.over.length?`${b.over.length} overdue · ${money(b.overAmt)} to collect`:''].filter(Boolean);
   return `<div class="card billday" style="margin-bottom:16px;border-left:4px solid var(--gold)"><div class="card-b" style="display:flex;gap:14px;align-items:center;flex-wrap:wrap">
     <div style="flex:1 1 260px;min-width:0"><div style="font-weight:700">Billing day · cycle ${esc(b.label)} is closed</div><div class="sub">${esc(parts.join(' · '))}. ${b.st?'The statement is ready to send to '+esc(FS().customer||'the customer')+'.':'The statement is being prepared.'}</div></div>
-    <div style="display:flex;gap:8px;flex-wrap:wrap">${b.st&&canPdf()?`<button class="btn primary" data-stmtpdf="${esc(b.m)}">${svg('doc',14)}Statement PDF</button>`:''}<button class="btn" data-gofin="${b.drafts.length?'invoices:draft':b.over.length?'invoices:overdue':'invoices'}">Open invoices</button><button class="btn ghost" data-act="bdseen" data-m="${esc(b.m)}">Done</button></div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap">${b.st&&canPdf()?`<button class="btn primary" data-stmtpdf="${esc(b.m)}">${svg('doc',14)}Statement PDF</button><button class="btn icobtn" data-stmtwa="${esc(b.m)}" title="Send statement on WhatsApp" aria-label="Send statement on WhatsApp">${ico('wa',18)}</button>`:''}<button class="btn" data-gofin="${b.drafts.length?'invoices:draft':b.over.length?'invoices:overdue':'invoices'}">Open invoices</button><button class="btn ghost" data-act="bdseen" data-m="${esc(b.m)}">Done</button></div>
   </div></div>`;
 }
 function todayHtml(all){
@@ -1963,7 +1963,7 @@ function finTodo(){
   const lastSt=Object.values(statements).sort((a,b)=>b.month.localeCompare(a.month))[0];
   const noRate=Object.values(visits).filter(v=>v.billingRef&&rateRows()&&ticketCharge(v).missing);
   const todo=[];
-  if(lastSt) todo.push(['ok','Statement ready · '+stLabel(lastSt.month),'Easy to send: balance due '+money(lastSt.closing),canPdf()?`<button class="btn" data-stmtpdf="${lastSt.month}">${svg('doc',14)}Download PDF</button>`:'']);
+  if(lastSt) todo.push(['ok','Statement ready · '+stLabel(lastSt.month),'Easy to send: balance due '+money(lastSt.closing),canPdf()?`<span style="display:inline-flex;gap:6px"><button class="btn" data-stmtpdf="${lastSt.month}">${svg('doc',14)}Download PDF</button><button class="btn icobtn" data-stmtwa="${lastSt.month}" title="Send statement on WhatsApp" aria-label="Send statement on WhatsApp">${ico('wa',18)}</button></span>`:'']);
   if(over.length) todo.push(['bad',over.length+' invoice'+(over.length>1?'s':'')+' overdue',money(over.reduce((a,[i])=>a+invGross(i)-invPaid(i),0))+' to collect. When money arrives, press Mark paid.',`<button class="btn" data-gofin="invoices:overdue">See them</button>`]);
   const drafts=Object.values(invoices).filter(i=>i.status==='draft'&&!isCredit(i)); if(drafts.length) todo.push(['warn',drafts.length+' draft invoice'+(drafts.length>1?'s':'')+' to check',drafts.slice(0,4).map(i=>i.invoiceNo+' '+money(invGross(i))).join(' · ')+'. Press Issue when it is right.',`<button class="btn primary" data-gofin="invoices:draft">Check &amp; issue</button>`]);
   const bd=openBills().filter(b=>(b.dueDate||'')<=addDays(todayDxb(),7)); if(bd.length) todo.push([bd.some(b=>billState(b).k==='overdue')?'bad':'warn',bd.length+' supplier bill'+(bd.length>1?'s':'')+' due within 7 days',money(bd.reduce((s,b)=>s+billTotal(b)-billPaid(b),0))+' to pay.',`<button class="btn" data-gofin="bills">See bills</button>`]);
@@ -2365,7 +2365,7 @@ function finStatements(){
    ${missing.length?`<div class="notice" style="margin:0 16px 12px">${missing.length} statement${missing.length>1?'s are':' is'} due (${esc(missing.map(stLabel).join(', '))}). <button class="linkbtn" data-act="stmtgen">Generate now</button></div>`:''}
    ${list.length?`<div class="tblwrap"><table class="tbl"><thead><tr><th>Month</th><th class="amt">Opening</th><th class="amt">Invoiced</th><th class="amt">Received</th><th class="amt">Closing due</th><th class="amt">Profit</th><th>Generated</th><th></th></tr></thead><tbody>${list.map(x=>{ const inv=x.lines.filter(l=>l.type==='Invoice').reduce((a,l)=>a+l.debit,0), rc=x.lines.reduce((a,l)=>a+l.credit,0);
      return `<tr><td style="white-space:nowrap"><b>${esc(stLabel(x.month))}</b>${x.auto?' <span class="pill plain" style="font-size:11px">auto</span>':''}</td><td class="amt">${esc(money(x.opening))}</td><td class="amt">${esc(money(inv))}</td><td class="amt">${esc(money(rc))}</td><td class="amt"><b>${esc(money(x.closing))}</b></td><td class="amt">${esc(money(x.pl.profit))}</td><td class="num">${esc(dmhm(x.generatedAt))}</td>
-     <td style="white-space:nowrap">${canPdf()?`<button class="btn" data-stmtpdf="${x.month}">${svg('doc',14)}PDF</button> `:''}<button class="linkbtn" data-stmtre="${x.month}">Refresh</button></td></tr>`; }).join('')}</tbody></table></div>`
+     <td style="white-space:nowrap">${canPdf()?`<button class="btn" data-stmtpdf="${x.month}">${svg('doc',14)}PDF</button> <button class="btn icobtn" data-stmtwa="${x.month}" title="Send statement on WhatsApp" aria-label="Send statement on WhatsApp">${ico('wa',18)}</button> `:''}<button class="linkbtn" data-stmtre="${x.month}">Refresh</button></td></tr>`; }).join('')}</tbody></table></div>`
    :`<div class="card-b sub">No statements yet. ${due.length?'':'They appear once the hub has invoices, bank lines or tickets from a finished month.'}</div>`}
    <div class="card-b sub" style="font-size:12.5px">Each statement holds the customer statement of account (opening balance, invoices, payments, closing balance and ageing) and the month's finance summary (profit, cash in and out, bank balances, VAT and service activity). Statements update themselves when invoices, payments or bank lines for that month change.</div></div>
   <form id="fsetform" class="card"><div class="card-h"><h3>Automation</h3></div><div class="card-b" style="display:grid;gap:12px">
@@ -2393,7 +2393,7 @@ function rateCardForm(){
    <div class="sub" style="font-size:12px">Paid and locked invoices never change. Each ticket is charged by its emirate: a service job, a spare-part collection, or both, plus waiting time per started 30 minutes. Set the charge type and waiting time on the ticket's invoice step.</div>
    <button class="btn primary" type="submit">Save rate card</button></div></form>`;
 }
-async function statementPdf(m){
+async function statementPdf(m,asBlob){
   const x=statements[m]; if(!x||!canPdf()) return;
   const {jsPDF}=window.jspdf; const doc=new jsPDF({unit:'pt',format:'a4'}); const W=595.28,H=841.89,M=42; let y; const ink=[13,27,62], muted=[103,114,140];
   const fd=d=>d?d.split('-').reverse().join('/'):'—', amt=n=>(n<0?'-':'')+Math.abs(r2(n)).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});
@@ -2418,6 +2418,7 @@ async function statementPdf(m){
   if(x.uncategorised) kv('Bank lines still uncategorised',String(x.uncategorised));
   { const c=CO(); if(c.iban||c.trn||c.bankName){ y+=6; h2('Payment details'); if(c.legalName) kv('Pay to',c.legalName); if(c.bankName) kv('Bank',c.bankName); if(c.accountName) kv('Account name',c.accountName); if(c.iban) kv('IBAN',c.iban.replace(/(.{4})/g,'$1 ').trim()); if(c.swift) kv('SWIFT',c.swift); if(c.trn) kv('Our TRN',c.trn); } }
   const pages=doc.getNumberOfPages(); for(let i=1;i<=pages;i++){ doc.setPage(i); doc.setFont('helvetica','normal'); doc.setFontSize(8); doc.setTextColor(...muted); doc.text('Prepared '+dmhm(x.generatedAt)+(x.auto?' (automatic)':'')+' · Ziar Imaar Technical Services L.L.C. · management figures, not audited',M,H-28); doc.text('Page '+i+' of '+pages,W-M,H-28,{align:'right'}); }
+  if(asBlob) return doc.output('blob');
   try{ await downloadsApi.save({filename:'ziar-imaar-statement-'+m+'.pdf',data:doc.output('blob')}); toast('Statement saved'); logAction('Downloaded statement',{detail:stLabel(m)}); }catch(err){ if(!(err&&err.code==='declined')) toast('Could not save the statement.'); }
 }
 
@@ -2787,17 +2788,25 @@ function modalHtml(){
 
 /* ---------- service report PDF ---------- */
 const canPdf=()=>!!(downloadsApi&&window.jspdf);
+async function shareWa(blob,name,txt,num){
+  const file=new File([blob],name,{type:'application/pdf'});
+  try{ if(navigator.canShare&&navigator.canShare({files:[file]})){ await navigator.share({files:[file],text:txt,title:name}); return; } }catch(e){ if(e&&e.name==='AbortError') return; }
+  let saved=false; try{ if(downloadsApi){ await downloadsApi.save({filename:name,data:blob}); saved=true; } }catch(e){ if(e&&e.code==='declined') return; }
+  const n=waNum(num||''); window.open(n?'https://wa.me/'+n+'?text='+encodeURIComponent(txt):'https://wa.me/?text='+encodeURIComponent(txt),'_blank','noopener');
+  toast(saved?'PDF saved. In WhatsApp, tap 📎 and attach '+name:'WhatsApp opened. Download the PDF and attach it.'); }
+async function sendStmtWa(m){ const x=statements[m]; if(!x) return; const c=CO();
+  let blob=null; try{ blob=await statementPdf(m,true); }catch(e){} if(!blob){ toast('The statement could not be made. Try again.'); return; }
+  const bank=[c.bankName&&('Bank: '+c.bankName),c.accountName&&('Account name: '+c.accountName),c.iban&&('IBAN: '+c.iban)].filter(Boolean).join('\n');
+  const nowBal=r2(Object.values(invoices).filter(i=>!isCredit(i)&&!['draft','void'].includes(i.status)).reduce((a,i)=>a+invGross(i)-invPaid(i),0)), endD=(x.end||'').split('-').reverse().join('/'), differs=x.closing!=null&&Math.abs(nowBal-(+x.closing||0))>0.01;
+  const txt=`Dear ${FS().customer||'Sir/Madam'},\n\nPlease find attached the statement of account for ${stLabel(m)}.${x.closing!=null?'\nBalance as of '+endD+': '+money(x.closing):''}${differs?'\nBalance today, after payments received: '+money(nowBal)+(nowBal<=0.01?' (fully settled, thank you)':''):''}${(differs?nowBal:+x.closing)>0.01&&bank?'\n\nPayment details:\n'+bank:''}\n\nThank you,\n${c.tradeName||c.legalName||'Ziar Imaar Technical Services'}`;
+  await shareWa(blob,'ziar-imaar-statement-'+m+'.pdf',txt,FS().custPhone||''); logAction('Sent statement on WhatsApp',{detail:stLabel(m)}); }
 async function sendReportWa(v){
   const inv=invFor(v), name=tref(v)+'-service-report.pdf', c=CO();
   const txt=`Dear ${FS().customer||'Sir/Madam'},\n\nPlease find the service report for ticket ${tref(v)}${(v.site||'')?' · '+(v.site||'').split('|')[0].trim():''}${v.finished?' (visit on '+dm(v.finished)+')':''}.${inv&&inv.invoiceNo?'\nInvoice: '+inv.invoiceNo:''}\n\nThank you,\n${c.tradeName||c.legalName||'Ziar Imaar Technical Services'}`;
   let blob=null; try{ blob=await downloadReport(v,true); }catch(e){}
   if(!blob){ toast('The report could not be made. Try again.'); return; }
-  const file=new File([blob],name,{type:'application/pdf'});
-  try{ if(navigator.canShare&&navigator.canShare({files:[file]})){ await navigator.share({files:[file],text:txt,title:name}); return; } }catch(e){ if(e&&e.name==='AbortError') return; }
-  // fallback: save the PDF, then open WhatsApp with the message ready
-  let saved=false; try{ if(downloadsApi){ await downloadsApi.save({filename:name,data:blob}); saved=true; } }catch(e){ if(e&&e.code==='declined') return; }
-  const n=waNum(phoneOf(v))||waNum(FS().custPhone||''); window.open(n?'https://wa.me/'+n+'?text='+encodeURIComponent(txt):'https://wa.me/?text='+encodeURIComponent(txt),'_blank','noopener');
-  toast(saved?'Report saved. In WhatsApp, tap 📎 and attach '+name:'WhatsApp opened. Download the report and attach it.'); }
+  await shareWa(blob,name,txt,phoneOf(v)||FS().custPhone||''); }
+
 async function downloadReport(v,asBlob){
   if(!window.jspdf){ if(!asBlob) toast('Report download is not available in this view.'); return; }
   if(!asBlob&&!downloadsApi){ toast('Report download is not available in this view.'); return; }
@@ -3215,6 +3224,7 @@ document.addEventListener('click',async e=>{
   if(ds.invpaid){ const i=invoices[ds.invpaid]; if(!i) return; const due=r2(invGross(i)-invPaid(i)); if(due<=0) return; const d=Object.assign({},i,{paidOther:r2((+i.paidOther||0)+due),locked:true,paidDate:todayDxb(),notes:((i.notes||'')+' · Marked paid '+todayDxb()).replace(/^ · /,'')}); delete d.id; await saveDoc('invoices',i.id,d,invoices); logAction('Marked invoice paid',{detail:i.invoiceNo+' · '+money(due)}); toast(i.invoiceNo+' marked paid ('+money(due)+')'); return; }
   if(ds.act==='stmtgen'){ await finAuto(true); render(); return; }
   if(ds.stmtpdf){ await statementPdf(ds.stmtpdf); return; }
+  if(ds.stmtwa){ await sendStmtWa(ds.stmtwa); return; }
   if(ds.stmtre){ const m=ds.stmtre; await saveDoc('statements',m,Object.assign(buildStatement(m),{auto:false}),statements); logAction('Refreshed statement',{detail:stLabel(m)}); toast('Statement refreshed: '+stLabel(m)); return; }
   if(ds.act==='impcancel'){ fui.imp=null; render(); return; }
   if(ds.act==='impgo'){ const im=fui.imp; if(!im||!im.rows) return; const key=t=>t.date+'|'+r2(t.amount)+'|'+t.desc.toLowerCase().slice(0,40); const add=im.rows.filter(t=>!im.have.has(key(t))); fui.imp={busy:true}; render(); let n=0; for(const t of add){ const inc=t.amount>0; const base=Object.assign({account:im.acct,category:'Uncategorised',vat:0,invoiceNo:'',source:im.name,at:new Date().toISOString()},t); const tid=newId('t'); await saveDoc('bankTx',tid,Object.assign(base,guessTx(Object.assign({id:tid},base))),bankTx); n++; }
