@@ -565,6 +565,17 @@ const initials=n=>(n||'?').split(/\s+/).filter(Boolean).map(w=>w[0]).slice(0,2).
 const isDM=v=>(v&&v.site||'').trim().toLowerCase()==='dubai mall';
 const siteOf=v=>v.site||'Site not recorded';
 const chip=v=>`<span class="chip ${v.status}">${STATUS[v.status]}</span>`;
+/* ---------- alert sound + phone vibration ---------- */
+const SND={on:(()=>{ try{ return localStorage.getItem('zi-sound')!=='off'; }catch(e){ return true; } })()};
+let sndCtx=null;
+function sndUnlock(){ try{ if(!sndCtx){ const A=window.AudioContext||window.webkitAudioContext; if(A) sndCtx=new A(); } if(sndCtx&&sndCtx.state==='suspended') sndCtx.resume(); }catch(e){} }
+['pointerdown','keydown','touchstart'].forEach(ev=>document.addEventListener(ev,sndUnlock,{passive:true}));
+function alertChime(test){ if(!SND.on&&!test) return;
+  try{ if(navigator.vibrate) navigator.vibrate([220,120,220]); }catch(e){}
+  try{ sndUnlock(); const c=sndCtx; if(!c) return; const t0=c.currentTime+0.02;
+    [[880,0],[1318.5,0.18]].forEach(([f,d])=>{ const o=c.createOscillator(), g=c.createGain(); o.type='sine'; o.frequency.value=f;
+      g.gain.setValueAtTime(0.0001,t0+d); g.gain.exponentialRampToValueAtTime(0.35,t0+d+0.02); g.gain.exponentialRampToValueAtTime(0.0001,t0+d+0.5);
+      o.connect(g); g.connect(c.destination); o.start(t0+d); o.stop(t0+d+0.55); }); }catch(e){} }
 function toast(msg){ if(typeof navigator!=='undefined'&&!navigator.onLine&&db&&!demo&&/^(saved|.* saved)$|^saved/i.test(String(msg))&&!/device/.test(msg)) msg='Saved on this device — it will sync when the connection is back'; if(window.__lockAt&&Date.now()-window.__lockAt<1500&&!/books are closed/i.test(msg)) return; const t=document.getElementById('toast'); t.textContent=msg; t.hidden=false; clearTimeout(toast.t); toast.t=setTimeout(()=>t.hidden=true,2800); }
 
 /* ---------- authenticator codes (TOTP, RFC 6238: SHA-1, 6 digits, 30 s) ---------- */
@@ -781,7 +792,7 @@ function tasksView(){
   const notes=can('admin')?audit.slice(0,40):[];
   const row=([k,t,d,btn])=>`<div class="ctl"><span class="ic ${k==='ok'?'ok':k==='bad'?'bad':'warn'}">${k==='ok'?'✓':'!'}</span><div><div style="font-weight:600">${esc(t)}</div><div class="sub">${esc(d)}</div></div><div style="margin-left:auto">${btn||''}</div></div>`;
   return `<div class="page"><div class="phead"><div><h1>${tui.tab==='notes'?'Notifications':'My tasks'}</h1><div class="sub">${tui.tab==='notes'?'Latest activity across the hub':'Everything waiting for you, most urgent first'}</div></div>
-    <div class="tabs" role="group"><button data-tui="mine" aria-pressed="${tui.tab==='mine'}">My tasks</button><button data-tui="notes" aria-pressed="${tui.tab==='notes'}">Notifications</button></div></div>
+    <div class="tabs" role="group"><button data-tui="mine" aria-pressed="${tui.tab==='mine'}">My tasks</button><button data-tui="notes" aria-pressed="${tui.tab==='notes'}">Notifications</button></div><button class="btn" data-sound="1" title="Chime and vibration when a new ticket arrives" style="margin-left:8px">${SND.on?'🔔 Sound on':'🔕 Sound off'}</button></div>
     ${tui.tab==='mine'?`<div class="card"><div>${items.length?items.map(row).join(''):'<div class="empty">Nothing waiting for you. 🎉</div>'}</div></div>`
     :`<div class="card">${notes.length?`<div class="tblwrap"><table class="tbl"><thead><tr><th>When</th><th>Who</th><th>What</th><th>Ticket</th><th>Detail</th></tr></thead><tbody>${notes.map(e=>`<tr><td class="num" style="white-space:nowrap">${esc(dmy(e.at))} · ${esc(hm(e.at))}</td><td>${esc(nameOf(e.by)||'')}</td><td>${esc(e.action||'')}</td><td>${e.ticket?`<button class="linkbtn" data-open="${esc(e.ticket)}">${esc(tref(e.ticket))}</button>`:''}</td><td class="sub">${esc(e.detail||'')}</td></tr>`).join('')}</tbody></table></div>`:`<div class="empty">${can('admin')?'No activity yet.':'Notifications show here for administrators. Your tasks are under “My tasks”.'}</div>`}</div>`}</div>`;
 }
@@ -1269,7 +1280,7 @@ async function airtableSync(manual){
       const r=await mergeTicket(atTxt(g('id')),g,{recId:rec.id,label:'Airtable',source:'airtable',inout:!!(AT.f.arrived&&AT.f.doneAt),files:!!AT.f.photos}); if(r==='skip') skip++; else if(r==='new') made++; else if(r==='upd') upd++; }
     atui={st:'ok',at:new Date().toISOString(),read:recs.length,made,upd,skip,err:'',conflicts:atConflicts.length};
     if(atChanges.length) await atLogSave(atChanges);
-    { const nw=atChanges.filter(c=>c.kind==='new'); if(nw.length&&atui.at){ const msg=nw.length===1?'New ticket from Airtable: '+tref(nw[0].id)+(visits[nw[0].id]&&visits[nw[0].id].site?' · '+visits[nw[0].id].site:''):nw.length+' new tickets from Airtable'; setTimeout(()=>toast(msg),1200);
+    { const nw=atChanges.filter(c=>c.kind==='new'); if(nw.length&&atui.at){ const msg=nw.length===1?'New ticket from Airtable: '+tref(nw[0].id)+(visits[nw[0].id]&&visits[nw[0].id].site?' · '+visits[nw[0].id].site:''):nw.length+' new tickets from Airtable'; setTimeout(()=>{ toast(msg); alertChime(); },1200);
       try{ if(window.Notification&&Notification.permission==='granted') new Notification('Ziar Imaar Hub',{body:msg}); }catch(e){} } }
     if(made||upd) logAction('Synced tickets from Airtable',{detail:recs.length+' read · '+made+' new · '+upd+' updated'});
     if(manual||made||upd) toast('Airtable: '+recs.length+' ticket'+(recs.length===1?'':'s')+' read · '+made+' new · '+upd+' updated');
@@ -3039,6 +3050,7 @@ document.addEventListener('click',async e=>{
   if(ds.act==='mnavclose'){ mnavShow(false); return; }
   if(ds.nav){ mnavShow(false); openNav(ds.nav); return; }
   if(ds.tui){ tui.tab=ds.tui; render(); return; }
+  if(ds.sound){ SND.on=!SND.on; try{ localStorage.setItem('zi-sound',SND.on?'on':'off'); }catch(e){} if(SND.on) alertChime(true); toast(SND.on?'Sound on: you will hear a chime and the phone will vibrate for new tickets':'Sound off'); render(); return; }
   if(ds.cui){ cui.tab=ds.cui; render(); return; }
   if(ds.coui){ coui.tab=ds.coui; render(); return; }
   if(ds.dui){ dui.kind=ds.dui; render(); return; }
